@@ -126,6 +126,13 @@ jobs:
           MERCADOPAGO_MODE: fake
         run: bash tests/smoke_account.sh
 
+      - name: Smoke test -- painel da loja (Fase 7.3 + 11.1: fila de Pix e KDS)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_panel.sh
+
       - name: Instalar Node 22
         uses: actions/setup-node@v4
         with:

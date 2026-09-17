@@ -62,10 +62,19 @@ api/v1/restaurants/         catálogo, descoberta (público, exceto orders.php
                                 da cidade, distância real por Haversine se lat/lng vierem
   search_products.php          GET  ?city_ibge_code=&q= — busca de produto por
                                 nome (índice GIN trigram), min. 2 caracteres
-  orders.php                   GET  ?id= — fila do KDS (só restaurant_staff da própria loja)
+  orders.php                   GET  ?id=&scope=kds|recent — fila do KDS (comanda,
+                                cronômetro do status, entregador) ou "pedidos
+                                recentes"; só restaurant_staff da própria loja
   approve_pix.php               POST — Fase 7.3: validação humana do Pix
                                  manual, SELECT...FOR UPDATE trava aprovação
                                  dupla, aprova/recusa chama advance_order()
+  pending_proofs.php            GET  — fila de validação: comprovantes pendentes
+                                 da loja com itens, endereço, nº de pedidos do
+                                 cliente e se a imagem já apareceu antes
+  proof_image.php               GET  ?id= — transmite o arquivo do comprovante
+                                 (MIME real, private/no-store, só a dona dele)
+  stats.php                     GET  — "visão geral de hoje": faturado, pedidos,
+                                 Pix validados e recusados, calculados no banco
 api/v1/addresses/           endereços do cliente autenticado (Fase 6.1)
   create.php                   POST — cadastra endereço
   list.php                     GET  — lista os do usuário logado
@@ -180,6 +189,11 @@ tests/
                                  de apagar endereço em uso) e cartões salvos
                                  (mp_customer_id reaproveitado entre
                                  cartões, troca de padrão, remoção)
+  smoke_panel.sh                painel da loja: fila de validação de Pix,
+                                 imagem do comprovante com autorização,
+                                 resumo do dia, KDS e as transições da loja
+                                 (aceitar, pronto, entregue ao motoboy),
+                                 mais o isolamento entre lojas
   support/random_cnpj.php       CNPJ aleatório com dígito verificador válido,
                                  pra seed de teste não colidir entre scripts
 db/
@@ -607,7 +621,8 @@ biblioteca clássica, a mesma API `swal()` que o mock usa). Fase 1 (splash,
 seleção de estado, cidade+bairro), Fase 2 (home, busca, fidelidade,
 pedidos, perfil), Fase 3 (loja, item, carrinho), Fase 4 (pagamento), Fase 5
 (pós-pedido) e Fase 6 (conta, endereços, cartões, configurações) estão
-portadas; as outras 9 fases ainda não têm componente.
+portadas, mais o painel da loja (Fase 7.3 e 11.1, em `painel.html`, com
+seção própria acima); as outras fases ainda não têm componente.
 
 ```
 web/
@@ -659,9 +674,19 @@ web/
                                          padrão, bloqueio de apagar em uso
         PaymentMethods.svelte           6.2 — cartões salvos via Mercado Pago
         SettingsScreen.svelte           6.3 — notificações por tipo (localStorage)
+        panel/                        painel da loja (entrada painel.html)
+          StaffLogin.svelte             10.7 — CNPJ + senha, 2FA por aparelho
+          ProofQueue.svelte             7.3 — fila de validação, mais urgente no topo
+          ProofReviewModal.svelte       7.3 — comprovante à esquerda (zoom/rotação),
+                                         pedido à direita, aprovar ou recusar
+          KdsBoard.svelte               11.1 — três colunas, cronômetro por pedido,
+                                         fila de Pix fixa no canto
+          PanelOverview.svelte          7.3 — visão geral de hoje + pedidos recentes
     App.svelte                  orquestra Fase 1 -> Fase 2 (abas, e Fase 6
                                  como pseudo-abas dentro do mesmo shell) ->
                                  Fase 3/4/5 (tela cheia por cima das abas)
+    Panel.svelte                raiz do painel da loja: login, abas
+                                 Cozinha/Visão geral, atualização periódica
 ```
 
 - **`toastr` sem jQuery.** O pacote npm `toastr` declara "jQuery is
@@ -951,6 +976,86 @@ web/
   bandeira) → trocar padrão → configurações com os três toggles reais,
   incluindo o de promoções ligado manualmente e persistido.
 
+## Painel da loja (`web/painel.html`) — Fase 7.3 e 11.1
+
+O tablet do balcão. Até aqui `restaurants/approve_pix.php` existia e passava
+no smoke test, mas não tinha tela nenhuma: na prática, um pedido em Pix
+manual ficava preso em `pending_verification` pra sempre. Este módulo fecha
+esse buraco e junta o KDS, que é a outra metade do mesmo trabalho.
+
+- **É uma página separada, não uma aba do app do cliente.** `vite.config.js`
+  passou a ter duas entradas (`index.html` e `painel.html`): quem pede pizza
+  não baixa a fila de validação de Pix, e o tablet da cozinha não baixa o
+  carrinho. A sessão da loja também é separada — outra chave no
+  `localStorage` (`fuu_staff_token`) —, então dá pra ter o app aberto numa
+  aba e o painel noutra sem um login derrubar o outro.
+- **Quatro endpoints novos, todos escopados pelo `restaurant_id` do
+  token.** `pending_proofs.php` devolve numa consulta só tudo que o modal
+  mostra (itens agregados em JSON, quantos pedidos o cliente já fez nesta
+  loja, se aquela imagem já apareceu antes) — nada de N+1 numa tela que
+  fica aberta o dia inteiro atualizando. `proof_image.php` transmite o
+  arquivo com o MIME real e `Cache-Control: private, no-store`.
+  `stats.php` é o "VISÃO GERAL DE HOJE" calculado no banco.
+  `orders.php` ganhou `scope=kds|recent`. O smoke test prova o isolamento:
+  a loja rival recebe fila vazia, `proof_not_found` na imagem e na
+  aprovação, `restaurant_not_found` na fila de pedidos.
+- **A imagem do comprovante é buscada com `fetch` + `Authorization` e virada
+  em blob URL**, não posta direto num `<img src>`. Foi a forma de não abrir
+  a exceção de token por query string (que só a rota de SSE tem, porque
+  `EventSource` não manda header) numa rota que serve arquivo.
+- **O cronômetro do KDS conta desde a entrada no status atual**, não desde a
+  criação do pedido: "em preparo há 6 min" é o que a cozinha lê. Vem de
+  `max(order_events.created_at)` para o status corrente, na mesma consulta.
+- **`ready → delivering` virou transição pedível pela loja.** O mock 11.1
+  desenha o botão "Entregue ao motoboy" na terceira coluna, e quem entrega a
+  sacola em mãos é a loja. O botão só aparece quando existe entregador
+  designado (`orders.courier_id`); sem ele o cartão diz "Aguardando
+  entregador ser designado", como no mock. Quando a Fase 8 existir, o app do
+  entregador ganha o mesmo alvo — são duas pessoas que podem registrar a
+  mesma passagem de bastão.
+- **O painel atualiza por polling (5 s), não por SSE — decisão consciente.**
+  `advance_order()` já publica em `pg_notify` e a rota de SSE do cliente
+  existe (`orders/track.php`), mas `php -S` atende uma requisição por vez:
+  uma conexão SSE aberta no painel travaria as outras chamadas da própria
+  tela (aprovar, avançar pedido, estatísticas). Sob `php-fpm` isso deixa de
+  ser verdade e a troca é local, num `setInterval` só. O cabeçalho mostra a
+  hora da última atualização e avisa quando o ciclo falha, em vez de fingir
+  "conectado".
+- **Desvio assumido do mock: o modal de validação é Svelte, não SweetAlert.**
+  O mock diz "SweetAlert em tela cheia", mas a tela tem imagem com
+  zoom/rotação e duas colunas de conteúdo — o `swal()` recebe um nó de
+  conteúdo, não um componente. Mesma decisão já tomada no `ItemModal` (3.2).
+  E a classe não se chama `.modal`: o Bootstrap reserva esse nome com
+  `display:none` (ver "Módulo de carrinho").
+- **Girar + ampliar exigiu conta, não CSS esperto.** `transform` não muda a
+  caixa de layout, então uma foto em pé girada 90° desenha fora da moldura
+  enquanto a rolagem continua achando que ela está em pé — o atendente rola
+  e vê faixa branca (foi o que o Playwright mostrou na primeira versão). A
+  moldura passou a ter um "calço" do tamanho *visual* da imagem já girada e
+  ampliada, com a imagem centrada nele; a rolagem passeia pelo comprovante
+  de verdade, e ampliar recentraliza em vez de jogar pro canto.
+- **O que o mock mostra e esta tela não tem**: o botão de imprimir comanda
+  (ESC/POS) e o indicador "impressora ok" ficaram de fora em vez de virarem
+  botão morto — não existe integração com impressora neste repositório
+  (item 4 de "Próximos passos"). Pausar loja, cardápio e horário (11.2 a
+  11.4) também não foram construídos.
+- **Validado de ponta a ponta com Postgres e navegador reais.**
+  `tests/smoke_panel.sh` cobre os quatro endpoints, o isolamento entre
+  lojas, a aprovação levando o pedido pra `paid` e as transições
+  `paid → preparing → ready → delivering` (inclusive a ilegal, barrada pelo
+  banco com 409). No Playwright, num tablet 1280×800: login da loja →
+  aceitar → pronto → entregue ao motoboy → validar Pix pelo atalho do KDS →
+  girar/ampliar o comprovante → recusa sem motivo barrada → aprovar com
+  valor conferido → aba "Visão geral" → recusar o segundo comprovante com
+  motivo → recarregar (sessão mantida) → sair. Zero erros de console
+  (fora as fontes do Google, bloqueadas pelo proxy deste ambiente).
+- **O 2FA por aparelho apareceu na prática durante o teste:** a segunda
+  execução do Playwright, num navegador novo, levou `device_mismatch` e a
+  tela mostrou "Este login está vinculado a outro aparelho" — que é
+  exatamente o comportamento desenhado (`partner_accounts` faz confiança no
+  primeiro uso). Liberar troca de tablet depende do suporte (Fase 14), que
+  ainda não existe.
+
 ## Como rodar localmente
 
 ```bash
@@ -968,10 +1073,19 @@ JWT_SECRET=dev-secret bash tests/smoke_cart.sh        # carrinho incremental (se
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_payments.sh   # pagamentos (semeia sozinho)
 JWT_SECRET=dev-secret bash tests/smoke_tracking.sh    # timeline, SSE, avaliação (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_account.sh    # endereços e cartões (semeia sozinho)
+JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_panel.sh      # painel da loja: fila de Pix e KDS (semeia sozinho)
 
 php -S localhost:8080                  # API, num terminal
-cd web && npm install && npm run dev   # front-end Svelte, noutro terminal — http://localhost:5173
+cd web && npm install && npm run dev   # front-end Svelte, noutro terminal
+                                       #   app do cliente:  http://localhost:5173
+                                       #   painel da loja:  http://localhost:5173/painel.html
 ```
+
+Os smoke tests semeiam dados próprios a cada execução, mas contam com um
+banco recém-migrado: rodar a suíte várias vezes no mesmo banco acumula
+lojas de teste e faz as asserções de contagem (ex.: "filtro de categoria
+trouxe 1 loja") falharem por dado velho, não por regressão. `bash
+db/migrate.sh down 12 && bash db/migrate.sh up` devolve o banco ao zero.
 
 `MERCADOPAGO_MODE=fake` é o padrão quando `MERCADOPAGO_ACCESS_TOKEN` não
 está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
@@ -1049,6 +1163,12 @@ bloqueio de apagar em uso (409, não 500), dois cartões salvos com o mesmo
 troca de padrão e remoção. `tests/smoke_account.sh` roda tudo isso a cada
 push, no mesmo CI, em `MERCADOPAGO_MODE=fake`.
 
+E o painel da loja: a fila de validação com itens, endereço e contagem de
+imagem repetida; o comprovante servido com autorização (401 sem token) e
+negado pra loja rival nos quatro caminhos; a aprovação levando o pedido pra
+`paid`; e as transições da cozinha até `delivering`, incluindo a ilegal
+barrada pelo banco. `tests/smoke_panel.sh` roda tudo isso a cada push.
+
 O front-end validou o mesmo jeito, não só compilado, nas seis fases com
 Playwright + Chromium numa janela de 430px: Fase 1 (fade do splash,
 seleção de estado com destaque, SweetAlert real antes da Geolocation API,
@@ -1075,9 +1195,11 @@ checando `boundingBox()` via Playwright, não só lendo o código.
 ## Próximos passos (ordem sugerida pela especificação, Parte I §10)
 
 1. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
-   para Svelte + Bootstrap — Fases 1 a 6 prontas, faltam as outras 9
-   (PWA/painel da loja, app do entregador, fechamento de caixa, login
-   completo, KDS, painel da plataforma, caminho do erro, suporte, dispatch).
+   para Svelte + Bootstrap — Fases 1 a 6 prontas, mais o painel da loja
+   (7.3 e 11.1); faltam PWA/offline e push (7.1 e 7.2), app do entregador
+   (8), fechamento de caixa (9), login e cadastro completos (10), o resto do
+   app do restaurante (11.2 a 11.4: pausar loja, cardápio, horário), painel
+   da plataforma (12), caminho do erro (13), suporte (14) e dispatch (15).
 2. **Cálculo de frete no servidor.** `orders/checkout.php` (e
    `orders/create.php`, desde antes) recebem `delivery_fee` no corpo da
    requisição em vez de calcular — é a única parte do dinheiro que ainda

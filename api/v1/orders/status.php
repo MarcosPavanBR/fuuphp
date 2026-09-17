@@ -29,7 +29,11 @@ $role = $claims['role'];
 // continua só na função do banco; isto aqui é só "quem tem permissão de pedir".
 $allowedTargetsByRole = [
     'customer' => ['cancelled'],
-    'restaurant_staff' => ['preparing', 'ready', 'cancelled', 'rejected'],
+    // 'delivering' está aqui porque quem entrega a sacola em mãos é a loja:
+    // o botão "Entregue ao motoboy" da tela 11.1 é dela, não do entregador.
+    // Quando o app do entregador existir, ele ganha o mesmo alvo -- são duas
+    // pessoas que podem registrar a mesma passagem de bastão.
+    'restaurant_staff' => ['preparing', 'ready', 'delivering', 'cancelled', 'rejected'],
 ];
 $allowed = $allowedTargetsByRole[$role] ?? [];
 if (!in_array($to, $allowed, true)) {
