@@ -1,5 +1,4 @@
 <script>
-  import swal from 'sweetalert';
   import { api, ApiError } from '../api.js';
   import { toastr } from '../toastr.js';
   import { cartState, clearCartState } from '../cart.svelte.js';
@@ -22,7 +21,7 @@
   // Igual a RestaurantPage/CartDrawer: cada tela carrega o que precisa. O
   // carrinho vem do mesmo módulo reativo que CartDrawer já usa (não é
   // prop-drilling vindo do App.svelte); a loja é carregada aqui mesmo.
-  let { restaurantId, location, onBack, onDone } = $props();
+  let { restaurantId, location, onBack, onOrderReady } = $props();
 
   let restaurant = $state(null);
   // `restaurantId` é prop fixa pro tempo de vida deste componente -- App.svelte
@@ -122,8 +121,8 @@
 
   async function onCardSubmit(fields) {
     try {
-      const data = await checkoutAndPay(fields);
-      await showResult(data.order.status, data);
+      await checkoutAndPay(fields);
+      showResult();
     } catch {
       // erro genuinamente recuperável (ex.: checkout ainda não aconteceu e
       // a loja fechou, ou o card_token ficou mal formado) -- fica na tela
@@ -133,8 +132,8 @@
 
   async function onCashSubmit(fields) {
     try {
-      const data = await checkoutAndPay(fields);
-      await showResult(data.order.status, data);
+      await checkoutAndPay(fields);
+      showResult();
     } catch {
       // fica na tela pra corrigir e tentar de novo
     }
@@ -142,8 +141,8 @@
 
   async function onMachineSubmit(fields) {
     try {
-      const data = await checkoutAndPay(fields);
-      await showResult(data.order.status, data);
+      await checkoutAndPay(fields);
+      showResult();
     } catch {
       // fica na tela pra corrigir e tentar de novo
     }
@@ -151,50 +150,17 @@
 
   function onProofUploaded(data) {
     order = data.order;
-    showResult(data.order.status, data);
+    showResult();
   }
 
-  // Fase 5 (pós-pedido) ainda não tem tela própria -- o feedback aqui é um
-  // SweetAlert com o essencial de 5.1/5.2/5.4, não a tela de tracking
-  // completa (mapa, timeline, avaliação).
-  async function showResult(status, data) {
-    // Limpar o carrinho DEPOIS do SweetAlert fechar, não antes: o estado
-    // reativo do carrinho (cart.svelte.js) é o mesmo módulo que a tela por
-    // baixo do modal ainda lê (ex.: CashPayment mostra "Total do pedido") --
-    // zerar antes faria esse total virar R$0,00 por trás do modal.
-    if (status === 'paid') {
-      await swal({
-        title: 'Pagamento aprovado',
-        text: `Pedido #${order.public_code} confirmado. A cozinha já foi avisada.`,
-        icon: 'success',
-        button: 'Voltar ao início',
-      });
-    } else if (status === 'pending_verification') {
-      await swal({
-        title: 'Comprovante em análise',
-        text: `A loja confirma em até 15 minutos. Pedido #${order.public_code}.`,
-        icon: undefined,
-        button: 'Voltar ao início',
-      });
-    } else if (status === 'rejected') {
-      // O pedido rejeitado é terminal (advance_order não deixa voltar pra
-      // pending_payment) e o carrinho que ele consumiu já não existe mais
-      // -- não dá pra "tentar de novo" dentro deste mesmo fluxo. Volta pro
-      // início; um novo item adicionado cria um carrinho novo sozinho
-      // (find_or_create_cart, o mesmo caminho da Fase 3).
-      await swal({
-        title: 'Pagamento recusado',
-        text:
-          (data?.payment?.status_detail ?? order.reject_reason ?? 'Não foi possível aprovar esse pagamento.') +
-          '. Monte o pedido de novo pra tentar com outro método.',
-        icon: 'error',
-        button: 'Voltar ao início',
-      });
-    } else {
-      await swal({ title: 'Pedido em andamento', text: `Status atual: ${status}.`, button: 'Voltar ao início' });
-    }
+  // Entrega pro OrderTracking.svelte (Fase 5.1/5.2/5.3/5.4, uma tela só
+  // reagindo ao status ao vivo por SSE) em vez de mostrar um SweetAlert e
+  // voltar pro início -- o pedido rejeitado também abre lá (o hero de 5.4
+  // é a mesma tela, só que outro status), não precisa de tratamento
+  // especial aqui.
+  function showResult() {
     clearCartState();
-    onDone();
+    onOrderReady(order.id);
   }
 
   // Simplificação assumida: se o checkout já aconteceu (order !== null,

@@ -37,9 +37,9 @@ Pago, Pix automático e manual, dinheiro, maquininha, validação humana do
 Pix) e **acompanhamento pós-pedido** (linha do tempo, tracking em tempo
 real por SSE, avaliação) em PHP sobre ela, e o **front-end em Svelte**
 (`web/`) cobrindo a Fase 1 (onboarding), a Fase 2 (home, busca, fidelidade,
-pedidos, perfil), a Fase 3 (loja, item, carrinho) e a Fase 4 (pagamento) —
-4 das 15 fases / 64 telas; a Fase 5 (pós-pedido) tem backend completo mas
-ainda não tem tela. Ledger, dispatch e o resto ainda não foram portados.
+pedidos, perfil), a Fase 3 (loja, item, carrinho), a Fase 4 (pagamento) e a
+Fase 5 (pós-pedido: linha do tempo, tracking ao vivo, avaliação) — 5 das
+15 fases / 64 telas. Ledger, dispatch e o resto ainda não foram portados.
 Segue a ordem sugerida pela especificação (12 semanas, Parte I §10) —
 catálogo/pedido vem antes de
 pagamentos porque `POST /v1/orders/:id/pay` pressupõe que o pedido já
@@ -534,14 +534,14 @@ A Fase 5 no front (as 5 telas de verdade) ainda não foi portada — ver
   antes da conexão fechar — prova que o `LISTEN/NOTIFY` está entregando de
   verdade entre processos, não só que a rota responde 200.
 
-## Front-end (`web/`) — Fase 1 a Fase 4, decisões de implementação
+## Front-end (`web/`) — Fase 1 a Fase 5, decisões de implementação
 
 Svelte 5 + Vite, Bootstrap 5, Bootstrap Icons, `sweetalert` (não
 `sweetalert2` — o pacote `sweetalert` na versão 2.x do npm *é* a
 biblioteca clássica, a mesma API `swal()` que o mock usa). Fase 1 (splash,
 seleção de estado, cidade+bairro), Fase 2 (home, busca, fidelidade,
-pedidos, perfil), Fase 3 (loja, item, carrinho) e Fase 4 (pagamento) estão
-portadas; as outras 11 fases ainda não têm componente.
+pedidos, perfil), Fase 3 (loja, item, carrinho), Fase 4 (pagamento) e Fase
+5 (pós-pedido) estão portadas; as outras 10 fases ainda não têm componente.
 
 ```
 web/
@@ -556,6 +556,9 @@ web/
       cart.svelte.js                estado do carrinho, espelha a resposta da API
                                      a cada ação (não um store que finge sincronizar)
       toastr.js                    toastr sem jQuery (ver abaixo)
+      datetime.js                   parsePgTimestamp() -- normaliza timestamptz
+                                     do PDO (offset de 2 dígitos, sem T) pra
+                                     algo que Date() sempre entende
       data/states.js                UFs, cidades e coordenadas de exemplo (estático)
       components/
         PhoneStatusBar.svelte          barra "9:41" que aparece em toda tela
@@ -583,7 +586,10 @@ web/
         ProofUploader.svelte            4.4 — compressão via canvas, progresso real (XHR)
         CashPayment.svelte              4.5 — troco, valida contra o total
         MachinePayment.svelte           4.6 — débito/crédito, bandeiras aceitas
-    App.svelte                  orquestra Fase 1 -> Fase 2 (abas) -> Fase 3/4
+        OrderTracking.svelte            5.1/5.2/5.3/5.4 numa tela só, reagindo
+                                         ao status ao vivo por SSE (ver abaixo)
+        ReviewScreen.svelte             5.5 — nota, tags, gorjeta, comentário
+    App.svelte                  orquestra Fase 1 -> Fase 2 (abas) -> Fase 3/4/5
                                  (tela cheia por cima das abas, com volta)
 ```
 
@@ -725,10 +731,10 @@ web/
   de domínio.** `checkoutAndPay()` distingue os dois: um 402 cujo corpo já
   traz `order`/`payment` (a forma que `payments/pay.php` sempre devolve
   numa recusa) é tratado como resultado normal, não repassado como
-  exceção — vira a tela "Pagamento recusado" (SweetAlert, como a Fase 5.4
-  pede) e volta pro início, porque um pedido `rejected` é estado terminal
-  no banco (`advance_order()` não tem transição saindo dele) — não dá pra
-  "tentar de novo" no mesmo pedido.
+  exceção — entrega pro `OrderTracking.svelte` (Fase 5) igual a um
+  sucesso, que mostra o hero de "Pagamento recusado" (5.4) porque um
+  pedido `rejected` é estado terminal no banco (`advance_order()` não tem
+  transição saindo dele) — não dá pra "tentar de novo" no mesmo pedido.
 - **Tokenização real do MercadoPago.js não está integrada** — este
   ambiente não tem uma Public Key de sandbox do Mercado Pago. `CardForm.svelte`
   tem os mesmos campos do mock (4.2), mas manda um token placeholder (os
@@ -768,18 +774,75 @@ web/
   registrados; cartão recusado (interceptado com a resposta 402 exata que
   o backend manda, já que o formulário real só aceita dígitos e a
   convenção de recusa do modo fake do backend é alfanumérica) →
-  "Pagamento recusado", volta pro início; Pix manual → QR real exibido →
-  upload de um JPEG de teste gerado on-the-fly → "Comprovante em
-  análise" → aprovado pela loja via `restaurants/approve_pix.php` (login
-  de loja real) → pedido confirmado `paid`. Um bug real de reatividade
-  apareceu nesta fase e foi corrigido: `payments/pay.php` devolve
-  `pix_copy_paste` na raiz do corpo, não dentro de `payment` — o primeiro
-  código guardava só `payment`, então o código Pix aparecia em branco na
-  tela; achado comparando o texto renderizado com o esperado via
-  Playwright, não só lendo o código. Outro: limpar o carrinho (`clearCartState()`)
-  acontecia ANTES do SweetAlert de resultado, então a tela por trás do
-  modal (ex.: "Total do pedido") mostrava R$0,00 por uma fração de
-  segundo — corrigido movendo a limpeza pra depois do modal fechar.
+  hero "Pagamento recusado"; Pix manual → QR real exibido → upload de um
+  JPEG de teste gerado on-the-fly → "Comprovante em análise" → aprovado
+  pela loja via `restaurants/approve_pix.php` (login de loja real) →
+  pedido confirmado `paid`. Dois bugs reais apareceram e foram corrigidos
+  nesta validação: `payments/pay.php` devolve `pix_copy_paste` na raiz do
+  corpo, não dentro de `payment` — o primeiro código guardava só
+  `payment`, então o código Pix aparecia em branco na tela; achado
+  comparando o texto renderizado com o esperado via Playwright, não só
+  lendo o código. E: limpar o carrinho (`clearCartState()`) acontecia
+  ANTES da tela de resultado assumir, então por uma fração de segundo o
+  que estava por trás (ex.: "Total do pedido") mostrava R$0,00 — corrigido
+  movendo a limpeza pra depois.
+
+**Fase 5 — decisões adicionais:**
+
+- **Uma tela só (`OrderTracking.svelte`) cobre 5.1, 5.2, 5.3 e 5.4** — no
+  mock as quatro já são a mesma ideia ("o aviso chega por SSE"), só o
+  conteúdo do "hero" muda com `order.status`; separar em 4 arquivos
+  duplicaria a conexão SSE e a busca do pedido sem ganhar nada. 5.5
+  (`ReviewScreen.svelte`) é tela própria de verdade, porque é a única que
+  tem uma ação distinta (enviar formulário) em vez de só refletir status.
+- **SSE de verdade no navegador**: `EventSource` nativo (sem lib) contra
+  `orders/track.php`; reconecta sozinho quando a conexão de 25s do
+  backend fecha (comportamento padrão do protocolo, documentado na seção
+  "Módulo de acompanhamento pós-pedido" acima) — o front não tem nenhuma
+  lógica de retry escrita à mão.
+- **Token na URL, não no header, só nesta chamada** — `EventSource` não
+  deixa configurar headers customizados, então a Authorization normal não
+  serve aqui. `require_auth_header_or_query()` no backend é o que torna
+  isso seguro sem abrir a exceção pra mais nenhuma rota.
+- **Mapa e localização do entregador são um placeholder explícito**, não
+  Leaflet nem coordenadas fingidas — a Fase 8 (app do entregador, que é
+  quem geraria posição de verdade) não foi construída. Mesma decisão do
+  `courier_positions` (migração 009): existe no banco, não tem quem
+  escreva nele ainda.
+- **Previsão de entrega é uma janela fixa a partir de `created_at`** (25 a
+  45 min depois), igual à mesma simplificação já assumida em
+  `PaymentSelector.svelte` (Fase 4.1) — sem motor de logística real
+  (Fase 8/9), não tem outra fonte pra esse número.
+- **Bug real de datas, achado nesta fase e corrigido em três lugares.**
+  `new Date(timestamp.replace(' ', 'T'))` parece inofensivo, mas quebra
+  silenciosamente ("Invalid Date", sem lançar exceção) quando o
+  `timestamptz` do Postgres termina em offset de 2 dígitos sem os
+  dois-pontos (`+00`, não `+00:00`) — a combinação exata que
+  `ATTR_EMULATE_PREPARES` e o driver `pgsql` produzem. Achado com
+  Playwright comparando o texto renderizado ("Invalid Date" na tela, não
+  só no console). `web/src/lib/datetime.js` (`parsePgTimestamp()`) resolve
+  isso normalizando pra ISO 8601 de verdade antes de entregar pro `Date`;
+  usado em `OrderTracking.svelte` (novo) e em `Orders.svelte` (Fase 2.4,
+  que já tinha o mesmo bug desde antes desta fase — `minutesLeft()` também
+  corrigido).
+- **`orders/show.php` ganhou `review`** (a avaliação já feita, ou `null`)
+  pro botão "Avaliar pedido" não aparecer de novo pra quem já avaliou —
+  em vez de deixar o clique acontecer e só então devolver 409.
+- **Gorjeta da avaliação some no "R$ Outro"** se o campo numérico for
+  preenchido, e os chips fixos (R$2/R$5/R$10) se desmarcam sozinhos —
+  são mutuamente exclusivos por design (`effectiveTip`), igual ao rádio
+  de parcelas do cartão.
+- **Validado com Playwright de ponta a ponta, incluindo o SSE de
+  verdade entre processos diferentes** (não só a forma da resposta):
+  pedido pago → hero "Pagamento aprovado" → `advance_order()` disparado
+  via `psql` num processo separado, 1,5s depois → a tela reage sozinha
+  pra "Em preparo na cozinha" sem nenhum reload, comprovando o
+  `LISTEN/NOTIFY` entregando entre processos de verdade → avança até
+  `delivered` → "Avaliar pedido" → 5 estrelas + 2 tags + gorjeta de R$5 +
+  comentário → envia → volta pra lista de pedidos → reabre o mesmo pedido
+  pela aba "Histórico" → mostra "Você já avaliou esse pedido com 5
+  estrelas" em vez do botão de novo. Zero erros de console do início ao
+  fim, nas duas passadas completas.
 
 ## Como rodar localmente
 
@@ -865,7 +928,14 @@ o pedido, aprovação e recusa humana do Pix com aprovação dupla barrada por
 mesmo CI, em `MERCADOPAGO_MODE=fake` (ver seção "Módulo de pagamentos"
 acima pro porquê).
 
-O front-end validou o mesmo jeito, não só compilado, nas quatro fases com
+O módulo de acompanhamento pós-pedido também: `orders/show.php` com a
+linha do tempo, o SSE de `orders/track.php` recebendo evento ao vivo
+disparado por outro processo (não só a forma da resposta), e
+`reviews/create.php` barrando avaliação antes de `delivered` e avaliação
+duplicada. `tests/smoke_tracking.sh` roda tudo isso a cada push, no mesmo
+CI.
+
+O front-end validou o mesmo jeito, não só compilado, nas cinco fases com
 Playwright + Chromium numa janela de 430px: Fase 1 (fade do splash,
 seleção de estado com destaque, SweetAlert real antes da Geolocation API,
 toast sem jQuery), Fase 2 (lojas ordenadas por distância de verdade,
@@ -874,32 +944,35 @@ OTP destravando as abas autenticadas, perfil com estatísticas reais,
 navegação Perfil → Pedidos → volta), Fase 3 (cardápio com item esgotado
 visível, modal de variação com preço ao vivo, login embutido no modal
 preservando seleção, carrinho persistente com recálculo real de
-quantidade) e Fase 4 (os cinco métodos de pagamento contra o backend real,
+quantidade), Fase 4 (os cinco métodos de pagamento contra o backend real,
 incluindo o ciclo completo de Pix manual com aprovação humana pelo painel
 da loja — ver seção "Fase 4 — decisões adicionais" acima pros dois bugs
-reais que apareceram e foram corrigidos nesta validação). Um bug real de
-CSS apareceu na Fase 3 e está documentado na seção "Módulo de carrinho"
-acima — a classe `.modal` colidindo com o Bootstrap, achada checando
-`boundingBox()` via Playwright, não só lendo o código.
+reais que apareceram e foram corrigidos nesta validação) e Fase 5
+(acompanhamento ao vivo por SSE entre processos diferentes, avaliação
+completa, reabertura pela lista de pedidos mostrando "já avaliado" — ver
+seção "Fase 5 — decisões adicionais" acima pro bug real de datas achado e
+corrigido em três lugares nesta validação). Um bug real de CSS apareceu na
+Fase 3 e está documentado na seção "Módulo de carrinho" acima — a classe
+`.modal` colidindo com o Bootstrap, achada checando `boundingBox()` via
+Playwright, não só lendo o código.
 
 ## Próximos passos (ordem sugerida pela especificação, Parte I §10)
 
-1. **Fase 5 no front (pós-pedido e acompanhamento)** — hoje o resultado do
-   pagamento é um SweetAlert simples (`PaymentFlow.svelte`, `showResult()`),
-   com só o essencial de 5.1/5.2/5.4. Faltam a tela de tracking em tempo
-   real (5.3, SSE/LISTEN-NOTIFY + mapa), aprovado/em análise como telas
-   próprias (5.1/5.2) e avaliação do pedido (5.5).
-2. **Fase 6 no front (endereços, cartões salvos, configurações).**
+1. **Fase 6 no front (endereços, cartões salvos, configurações).**
    `QuickAddress.svelte` cobre o mínimo pra Fase 4 funcionar (listar/criar
    endereço); falta o CRUD completo (editar, apagar, rótulo, padrão) e
    cartões salvos via Mercado Pago (nunca guardar PAN, só bandeira/4
    últimos dígitos/id do cartão salvo).
-3. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
-   para Svelte + Bootstrap — Fases 1 a 4 prontas, faltam as outras 10.
-4. **Fase 7.2 (push) e impressão ESC/POS** — `restaurants/approve_pix.php`
+2. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
+   para Svelte + Bootstrap — Fases 1 a 5 prontas, faltam as outras 9.
+3. **Fase 7.2 (push) e impressão ESC/POS** — `restaurants/approve_pix.php`
    já grava o evento e avança o pedido, mas notificar o cliente e imprimir
    a comanda dependem de uma fila de push (outbox + worker) e de conexão
    com impressora térmica que ainda não existem neste repositório.
+4. **Mapa e posição do entregador (Fase 5.3 e Fase 8).**
+   `OrderTracking.svelte` já mostra a linha do tempo real, mas o mapa é um
+   placeholder explícito — depende do app do entregador (Fase 8) existir
+   pra ter posição de verdade pra mostrar.
 5. **Reembolso (Fase 13) e reconciliação de maquininha (Fase 9).**
    `refunds` e `card_transactions` existem no esquema (migração `005`) sem
    endpoint — os dois dependem de telas/fluxos (disputa, entregador
@@ -923,6 +996,11 @@ acima — a classe `.modal` colidindo com o Bootstrap, achada checando
    `pending_payment` que não existe ainda. Registrado como simplificação
    em `PaymentFlow.svelte`; não é o caminho comum (a maioria das voltas
    acontece antes do checkout, quando o retry já funciona certo).
+10. **Gorjeta da avaliação (Fase 5.5) é registrada, não cobrada.** O mock
+    diz "cobrada no mesmo cartão do pedido" — exigiria uma segunda
+    transação no Mercado Pago associada ao pagamento original, que este
+    módulo não implementa (mesma simplificação de dinheiro/maquininha no
+    módulo de pagamentos).
 
 ## Origem
 

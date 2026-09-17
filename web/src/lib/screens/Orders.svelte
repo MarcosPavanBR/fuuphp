@@ -1,16 +1,16 @@
 <script>
   import { api } from '../api.js';
   import { toastr } from '../toastr.js';
+  import { parsePgTimestamp } from '../datetime.js';
 
   // Tela 2.4 — Pedidos. "O status 'analisando comprovante' é uma etapa de
   // primeira classe, não um 'em preparo' mentiroso." (orders.status, SSE,
   // order_events)
   //
-  // SSE real (tempo real via LISTEN/NOTIFY, Especificação Parte I §5) não
-  // está portado ainda -- esta tela busca uma vez ao entrar, sem
-  // atualização automática. "Acompanhar"/"Repetir" do mock não têm tela de
-  // destino ainda (rastreio ao vivo é dispatch, Fase 8; repetir pedido não
-  // foi construído); os dois avisam em vez de fingir.
+  // Esta lista busca uma vez ao entrar, sem atualização automática -- quem
+  // atualiza ao vivo é OrderTracking.svelte (Fase 5, SSE de verdade via
+  // orders/track.php), aberta ao tocar o card. "Repetir" pedido não foi
+  // construído; avisa em vez de fingir.
   let { onOpenOrder, onBack } = $props();
 
   const LABELS = {
@@ -66,7 +66,7 @@
 
   function minutesLeft(deadline) {
     if (!deadline) return null;
-    const ms = new Date(deadline.replace(' ', 'T')).getTime() - Date.now();
+    const ms = parsePgTimestamp(deadline).getTime() - Date.now();
     return Math.max(0, Math.round(ms / 60000));
   }
 </script>
@@ -111,15 +111,6 @@
           </p>
           {#if o.status === 'pending_verification' && minutesLeft(o.verification_deadline) !== null}
             <p class="deadline">A loja tem {minutesLeft(o.verification_deadline)} min para validar</p>
-          {/if}
-          {#if o.status === 'delivering'}
-            <button
-              type="button"
-              class="action"
-              onclick={(e) => { e.stopPropagation(); toastr.info('Rastreio ao vivo é Fase 8 (dispatch) — ainda não portada.'); }}
-            >
-              Acompanhar
-            </button>
           {/if}
           {#if tab === 'history'}
             <button

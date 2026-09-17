@@ -20,8 +20,17 @@ if ($order === null) {
 
 authorize_order_access($order, $claims);
 
+$reviewStmt = $pdo->prepare('SELECT * FROM reviews WHERE order_id = :id');
+$reviewStmt->execute(['id' => $orderId]);
+$review = $reviewStmt->fetch();
+
 json_response(200, [
     'order' => $order,
     'items' => fetch_order_items($pdo, $orderId),
     'events' => fetch_order_events($pdo, $orderId),
+    // null se ainda não avaliado -- a Fase 5.5 usa isto pra não oferecer
+    // "Avaliar pedido" de novo (reviews.order_id é UNIQUE, uma tentativa
+    // repetida já dá 409 no backend, mas não faz sentido nem mostrar o
+    // botão quando já existe).
+    'review' => $review === false ? null : $review,
 ]);

@@ -10,10 +10,10 @@
   import RestaurantPage from './lib/screens/RestaurantPage.svelte';
   import CartDrawer from './lib/screens/CartDrawer.svelte';
   import PaymentFlow from './lib/screens/PaymentFlow.svelte';
+  import OrderTracking from './lib/screens/OrderTracking.svelte';
   import BottomNav from './lib/components/BottomNav.svelte';
   import QuickLogin from './lib/components/QuickLogin.svelte';
   import { isAuthenticated, loadProfile } from './lib/session.svelte.js';
-  import { toastr } from './lib/toastr.js';
 
   // Fase 1 (onboarding) -> Fase 2 (navegação principal, abas) -> Fase 3
   // (loja/item/carrinho, tela cheia por cima das abas -- o mock não mostra
@@ -25,6 +25,7 @@
   let restaurantId = $state(null);
   let cartOpen = $state(false);
   let paymentOpen = $state(false);
+  let trackingOrderId = $state(null);
 
   if (isAuthenticated()) {
     loadProfile().catch(() => {});
@@ -58,15 +59,19 @@
     cartOpen = false;
     paymentOpen = false;
   }
-  function finishPayment() {
+  function openTracking(orderId) {
     restaurantId = null;
     cartOpen = false;
     paymentOpen = false;
+    trackingOrderId = orderId;
+  }
+  function closeTracking() {
+    trackingOrderId = null;
     tab = 'home';
   }
 
-  function openOrder() {
-    toastr.info('Detalhe de pedido ainda não foi construído nesta passada.');
+  function openOrder(order) {
+    openTracking(order.id);
   }
 
   const AUTH_REQUIRED_TABS = new Set(['loyalty', 'orders', 'profile']);
@@ -78,9 +83,13 @@
   <StateSelector onContinue={goToCity} />
 {:else if step === 'city'}
   <CityPicker {uf} onDone={finishOnboarding} />
+{:else if trackingOrderId}
+  <div class="page-shell">
+    <OrderTracking orderId={trackingOrderId} onBack={closeTracking} onDone={closeTracking} />
+  </div>
 {:else if restaurantId && paymentOpen}
   <div class="page-shell">
-    <PaymentFlow {restaurantId} {location} onBack={() => (paymentOpen = false)} onDone={finishPayment} />
+    <PaymentFlow {restaurantId} {location} onBack={() => (paymentOpen = false)} onOrderReady={openTracking} />
   </div>
 {:else if restaurantId && cartOpen}
   <div class="page-shell">
