@@ -1,7 +1,7 @@
 name: ci
 
 # ADR-002 (Especificacao FUUDelivery, Parte I): migracoes versionadas rodam
-# no CI, nunca no cPanel. Este workflow aplica as nove migracoes do zero,
+# no CI, nunca no cPanel. Este workflow aplica as dez migracoes do zero,
 # reverte tudo e aplica de novo contra um PostgreSQL 16 real com pg_cron, e
 # depois roda o smoke test de cada modulo PHP sobre esse banco migrado.
 
@@ -49,7 +49,7 @@ jobs:
             sleep 2
           done
 
-      - name: Aplicar as 9 migracoes (up)
+      - name: Aplicar as 10 migracoes (up)
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
         run: |
@@ -76,7 +76,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: "8.4"
-          extensions: pdo_pgsql, pgsql
+          extensions: pdo_pgsql, pgsql, gd, fileinfo, curl
 
       - name: Lint de sintaxe em todos os arquivos PHP
         run: |
@@ -105,6 +105,13 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
           JWT_SECRET: ci-test-secret
         run: bash tests/smoke_cart.sh
+
+      - name: Smoke test -- pagamentos (Fase 4 + validação humana do Pix, Fase 7.3)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_payments.sh
 
       - name: Instalar Node 22
         uses: actions/setup-node@v4

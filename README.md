@@ -32,13 +32,16 @@ trás de cada item.
 
 A **fundação de banco** (dez migrações SQL), os módulos **identity**,
 **catálogo + pedido + checkout**, **descoberta** (busca de loja e
-produto) e **carrinho incremental** em PHP sobre ela, e o **front-end em
-Svelte** (`web/`) cobrindo a Fase 1 (onboarding), a Fase 2 (home, busca,
-fidelidade, pedidos, perfil) e a Fase 3 (loja, item, carrinho) — 3 das 15
-fases / 64 telas. Pagamentos, ledger, dispatch e o resto ainda não foram
-portados. Segue a ordem sugerida pela especificação (12 semanas, Parte I
-§10) — catálogo/pedido vem antes de pagamentos porque `POST
-/v1/orders/:id/pay` pressupõe que o pedido já existe.
+produto), **carrinho incremental** e **pagamentos** (cartão via Mercado
+Pago, Pix automático e manual, dinheiro, maquininha, validação humana do
+Pix) em PHP sobre ela, e o **front-end em Svelte** (`web/`) cobrindo a
+Fase 1 (onboarding), a Fase 2 (home, busca, fidelidade, pedidos, perfil) e
+a Fase 3 (loja, item, carrinho) — 3 das 15 fases / 64 telas; a Fase 4
+(pagamento) tem backend completo mas ainda não tem tela. Ledger, dispatch
+e o resto ainda não foram portados. Segue a ordem sugerida pela
+especificação (12 semanas, Parte I §10) — catálogo/pedido vem antes de
+pagamentos porque `POST /v1/orders/:id/pay` pressupõe que o pedido já
+existe.
 
 ```
 api/v1/auth/                módulo identity (endpoints, um arquivo por rota)
@@ -47,7 +50,8 @@ api/v1/auth/                módulo identity (endpoints, um arquivo por rota)
   refresh.php                  POST — rotaciona refresh, detecta reuso
   partner_login.php            POST — loja (CNPJ+senha) / entregador (CPF+código)
   consent.php                  POST — registra aceite de termo (LGPD), autenticado
-api/v1/restaurants/         catálogo e descoberta (público, exceto orders.php)
+api/v1/restaurants/         catálogo, descoberta (público, exceto orders.php
+                             e approve_pix.php) e painel da loja
   show.php                     GET  ?id= — dados da loja + horário de funcionamento
   menu.php                     GET  ?id= — cardápio completo, disponível ou não
                                 (item esgotado vem marcado, não escondido — Fase 3)
@@ -56,6 +60,9 @@ api/v1/restaurants/         catálogo e descoberta (público, exceto orders.php)
   search_products.php          GET  ?city_ibge_code=&q= — busca de produto por
                                 nome (índice GIN trigram), min. 2 caracteres
   orders.php                   GET  ?id= — fila do KDS (só restaurant_staff da própria loja)
+  approve_pix.php               POST — Fase 7.3: validação humana do Pix
+                                 manual, SELECT...FOR UPDATE trava aprovação
+                                 dupla, aprova/recusa chama advance_order()
 api/v1/addresses/           endereços do cliente autenticado
   create.php                   POST — cadastra endereço
   list.php                     GET  — lista os do usuário logado
@@ -70,12 +77,28 @@ api/v1/orders/               pedido e checkout
   create.php                   POST — checkout de um passo só: valida
                                 política/preço/loja aberta, cria o pedido,
                                 avança cart → pending_payment
+  checkout.php                  POST — checkout do carrinho incremental
+                                 (Fase 3 → Fase 4): valida endereço/método/
+                                 política, avança cart → pending_payment
+                                 SEM criar um segundo pedido
   show.php                     GET  ?id= — detalhe (dono ou loja do pedido, só)
   list.php                     GET  — pedidos do cliente autenticado, com nome
                                 da loja e contagem de itens
   status.php                   POST — única porta pra mudar status, por cima de
                                 advance_order(); autorização por papel aqui,
                                 legalidade da transição só no banco
+api/v1/payments/              módulo de pagamentos (Fase 4 + validação humana
+                               do Pix, Fase 7.3) — ver seção própria abaixo
+  pay.php                        POST — cobra o método já escolhido no
+                                  checkout; X-Idempotency-Key obrigatório
+                                  pros 5 métodos, não só cartão
+  upload_proof.php               POST multipart — comprovante de Pix manual:
+                                  MIME real (finfo), sha256, aHash, marca
+                                  d'água; avança pending_payment →
+                                  pending_verification
+  webhook_mercadopago.php        POST — webhook assíncrono (cartão em
+                                  reanálise, Pix automático) — fonte da
+                                  verdade, não a resposta síncrona de pay.php
 api/v1/profile/
   show.php                      GET  — usuário + estatísticas (pedidos, cupons;
                                  pontos de fidelidade fica null, ver README)
@@ -94,6 +117,15 @@ lib/                          código compartilhado entre módulos
                                    find_or_create_cart(), recompute_cart_subtotal()
   validation.php                  CPF/CNPJ com dígito verificador, e-mail, telefone
   uuid.php                        UUIDv4 sem dependência
+  idempotency.php                 idempotent_response(): X-Idempotency-Key
+                                   grava a resposta e devolve a MESMA em
+                                   replay, pros 5 métodos de pagamento
+  pix.php                         gera o Pix "copia e cola" (BR Code/EMV) —
+                                   CRC16 conferido contra o vetor de teste
+                                   padrão do algoritmo antes de entrar em uso
+  mercadopago.php                 cliente HTTP da Payments API do Mercado
+                                   Pago (cartão, Pix), com modo "fake" pra
+                                   rodar sem conta sandbox real (ver README)
 tests/
   smoke_identity.sh             fluxo completo de identity (signup, código errado,
                                  refresh, detecção de reuso) contra um banco já migrado
@@ -105,6 +137,11 @@ tests/
   smoke_cart.sh                 variação obrigatória, indisponível barrado, troca
                                  de loja bloqueada com carrinho cheio e permitida
                                  vazio, recálculo em update/remove
+  smoke_payments.sh             checkout do carrinho, os 5 métodos de
+                                 pagamento, idempotência (replay e reuso
+                                 barrado), upload+aprovação/recusa de
+                                 comprovante Pix, aprovação dupla barrada,
+                                 webhook do Pix automático
   support/random_cnpj.php       CNPJ aleatório com dígito verificador válido,
                                  pra seed de teste não colidir entre scripts
 db/
@@ -297,9 +334,10 @@ status='cart'". Os dois modelos convivem — nenhum substituiu o outro.
   (regra de quem paga o desconto, teto, um uso por CPF), não deste
   módulo. O campo avisa que ainda não foi implementado em vez de aceitar
   qualquer código e fingir um desconto.
-- **"Ir para pagamento" é onde a Fase 3 para.** O botão existe, mas leva a
-  um aviso — Fase 4 (pagamento) ainda não foi portada, e depende da
-  decisão de gateway (Mercado Pago, conforme a cláusula zero).
+- **"Ir para pagamento" é onde a Fase 3 do front para.** O botão existe,
+  mas ainda leva a um aviso — o backend de checkout+pagamento já existe
+  (`orders/checkout.php`, `payments/pay.php`, ver seção própria abaixo),
+  só a tela da Fase 4 que ainda não foi construída em Svelte.
 - **Modal x classe reservada do Bootstrap: bug real, corrigido.** O
   primeiro `ItemModal.svelte` usava a classe `.modal` — que é exatamente o
   nome que o Bootstrap usa pro componente dele (`display: none` por
@@ -309,6 +347,109 @@ status='cart'". Os dois modelos convivem — nenhum substituiu o outro.
   Achado com Playwright checando `boundingBox()` do modal (`null` = não
   estava renderizando, apesar de estar no DOM) — não teria aparecido só
   olhando o código.
+
+## Módulo de pagamentos — decisões de implementação
+
+Fase 4 (seleção de método, cartão, Pix, dinheiro, maquininha) e Fase 7.3
+(painel da loja, validação humana do Pix) do mock, em cima das tabelas da
+migração `005`. `orders/checkout.php` foi criado nesta passada porque
+faltava a ponte entre o carrinho incremental (Fase 3, `status='cart'`) e
+o pagamento — ele não existia antes deste módulo.
+
+- **Limite honesto: não há conta sandbox real do Mercado Pago neste
+  ambiente.** `lib/mercadopago.php` implementa o cliente HTTP contra o
+  contrato documentado da Payments API de verdade (`POST /v1/payments`,
+  cartão tokenizado + Pix), mas sem `MERCADOPAGO_ACCESS_TOKEN` configurado
+  ele cai em `MERCADOPAGO_MODE=fake`: simula aprovação/recusa de cartão
+  pela mesma convenção de prefixo que os cartões de teste do próprio
+  Mercado Pago usam (`OTHE`/`CONT`/`FUND` recusam, qualquer outro token
+  aprova) e devolve um Pix automático simulado no mesmo formato de
+  resposta. Os smoke tests e o front rodam de ponta a ponta nesse modo;
+  trocar pra produção é só preencher a variável de ambiente, nenhuma
+  linha de chamada muda.
+- **`payment_method` é lido do pedido, nunca do corpo da requisição.**
+  `payments/pay.php` despacha pelo método que `orders/checkout.php` já
+  gravou em `orders.payment_method` — o cliente não consegue pagar um
+  pedido de cartão como se fosse dinheiro só trocando o JSON.
+- **Idempotência exigida nos 5 métodos, não só cartão.** A especificação
+  pede `X-Idempotency-Key` explicitamente para cartão ("sempre com
+  X-Idempotency-Key"); este projeto amplia a exigência pros cinco —
+  nenhum método pode rodar duas vezes por um retry de rede, nem os de
+  validação humana (dois comprovantes pro mesmo clique, por exemplo).
+  `lib/idempotency.php` grava a chave com o hash da rota+corpo antes de
+  chamar o handler e devolve a MESMA resposta HTTP em replay; reusar a
+  chave numa requisição diferente dá 409. Um `register_shutdown_function`
+  libera a reserva se o handler terminar a requisição por dentro (ex.:
+  `advance_order()` batendo numa transição ilegal) sem nunca gravar a
+  resposta — sem isso, esse caso deixaria a chave "em processamento" pra
+  sempre, travando qualquer retry legítimo.
+- **Dinheiro e maquininha vão direto pra `paid`, sem etapa de validação
+  humana antes da cozinha.** Nenhum dinheiro trocou de mãos ainda nesse
+  momento — quem confere é o entregador na entrega (Fase 8/9,
+  `courier_cash_ledger`/`card_transactions`, ainda não construídos). Pix é
+  diferente: o dinheiro já saiu da conta do cliente antes da cozinha
+  começar (é transferência bancária, não reversível como um cartão), por
+  isso precisa da barreira humana antes.
+- **Pix manual não passa pelo Mercado Pago.** "Dinheiro cai direto na
+  conta do dono (white-label)" — o QR/copia-e-cola usa a
+  `restaurant_credentials.pix_key` da própria loja. É exatamente por isso
+  que precisa de comprovante + revisão humana: não existe webhook de
+  confirmação de quem não processou o pagamento. Pix automático
+  (`pix_auto`) é diferente — passa pelo Mercado Pago e é confirmado pelo
+  webhook, sem revisão humana; o enum já previa os dois métodos
+  (`payment_method`), mas o mock só desenha telas para o manual — o
+  automático ficou sem tela nesta passada (registrado em "Próximos
+  passos").
+- **Pix copia-e-cola é um gerador real de BR Code (EMV/Pix estático)**,
+  não uma string decorativa: `lib/pix.php` monta os campos TLV do Banco
+  Central e fecha com CRC16. Como é dinheiro de verdade saindo da conta de
+  alguém (o código embarcado num QR real teria que ser aceito por
+  qualquer banco), o CRC16 foi conferido contra o vetor de teste padrão do
+  algoritmo (`"123456789"` → `0x29B1`, CRC-16/CCITT-FALSE) antes de entrar
+  em uso — não é um "parece certo", é o valor exato que a especificação
+  pública do algoritmo define.
+- **Prazo único de 15 minutos, não reiniciado no upload.**
+  `orders.verification_deadline` é gravado quando o Pix (manual ou
+  automático) é criado em `payments/pay.php`, cobrindo pagar + enviar
+  comprovante + a loja validar — é o mesmo campo que a Fase 4.3 (QR) e a
+  Fase 5.2 (tela "Analisando") leem, e o `pg_cron` (`expire_pending_verifications`,
+  migração `009`) só age quando o pedido já está em `pending_verification`.
+- **Comprovante: MIME real por `finfo`, não o `Content-Type` do
+  navegador**, sha256 exato e um "average hash" (aHash) de 64 bits como
+  phash simplificado — documentado como simplificação: um pHash de
+  verdade usa DCT; este usa a média de luminância de um grid 8×8, sem
+  dependência nova (`ext-gd`, já disponível), e já cobre o caso descrito
+  no mock ("imagem inédita" vs. reenviada). Marca d'água aplicada com a
+  fonte embutida do GD (`imagestring`), sem exigir um arquivo `.ttf` que
+  este ambiente não tem.
+- **Guardado em disco local (`PROOF_STORAGE_DIR`), não um bucket.** Em
+  produção isto é Cloudflare R2/S3 com URL assinada — este ambiente não
+  tem um bucket real configurado, e inventar uma integração sem poder
+  testá-la contra o serviço de verdade seria pior que ser explícito sobre
+  a lacuna.
+- **`FOR UPDATE` trava aprovação dupla do Pix (Fase 7.3), de verdade.**
+  `restaurants/approve_pix.php` tranca a linha de `payment_proofs` antes
+  de decidir; a segunda chamada (duas abas clicando "Aprovar" ao mesmo
+  tempo) vê `state != 'pending'` e recebe 409 — testado no smoke test
+  literalmente chamando o endpoint duas vezes com o mesmo `proof_id`.
+- **Aprovar/recusar chama `advance_order()` no mesmo commit da revisão** —
+  imprimir a comanda (ESC/POS) e notificar o cliente (push/outbox) ficam
+  para quando a fila de impressão e o worker de push existirem (Fase
+  7.2/11), fora do escopo deste módulo; hoje só o evento em
+  `order_events` e a mudança de status acontecem.
+- **`refunds` e `card_transactions` existem no esquema (migração `005`),
+  mas não têm endpoint ainda.** Reembolso é Fase 13 (cancelamento/
+  disputa) e reconciliação de maquininha é Fase 9 (fechamento de caixa) —
+  os dois dependem de fluxos que ainda não foram portados (entregador
+  confirmando NSU, painel de disputa), então construir os endpoints agora
+  seria adivinhar o contrato sem a tela que o usa.
+- **Validado contra Postgres e PHP reais, não só `php -l`.**
+  `tests/smoke_payments.sh` roda os cinco métodos ponta a ponta (incluindo
+  o caminho de recusa de cartão e o webhook confirmando um Pix
+  automático), a idempotência (replay idêntico, reuso de chave barrado,
+  chave ausente barrada), o upload de um JPEG real gerado via GD, e o
+  ciclo completo de aprovação/recusa humana do Pix — contra o mesmo banco
+  migrado que os outros módulos, em sequência, sem colisão.
 
 ## Front-end (`web/`) — Fase 1, Fase 2 e Fase 3, decisões de implementação
 
@@ -480,10 +621,15 @@ JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identi
 JWT_SECRET=dev-secret bash tests/smoke_ordering.sh    # fluxo completo de checkout (semeia loja/cardápio sozinho)
 JWT_SECRET=dev-secret bash tests/smoke_discovery.sh   # lista por distância, busca, perfil (semeia sozinho)
 JWT_SECRET=dev-secret bash tests/smoke_cart.sh        # carrinho incremental (semeia sozinho)
+JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_payments.sh   # pagamentos (semeia sozinho)
 
 php -S localhost:8080                  # API, num terminal
 cd web && npm install && npm run dev   # front-end Svelte, noutro terminal — http://localhost:5173
 ```
+
+`MERCADOPAGO_MODE=fake` é o padrão quando `MERCADOPAGO_ACCESS_TOKEN` não
+está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
+de conta sandbox pra rodar nada disto localmente.
 
 As dez migrações foram validadas de ponta a ponta (`up` completo, `down`
 completo em ordem reversa, `up` de novo) contra um PostgreSQL 16 real com
@@ -533,6 +679,17 @@ carrinho cheio barrada (409), acúmulo de subtotal em dois itens,
 recálculo em `update_quantity`/`remove_item`. `tests/smoke_cart.sh` roda
 tudo isso a cada push, no mesmo CI.
 
+O módulo de pagamentos também: checkout do carrinho barrado sem endereço,
+os cinco métodos pagando de ponta a ponta (dinheiro e maquininha indo
+direto pra `paid`, cartão aprovado e recusado pelo modo fake do Mercado
+Pago, Pix automático confirmado por webhook, Pix manual gerando um BR
+Code de verdade), idempotência com replay idêntico/reuso barrado/chave
+ausente barrada, upload de comprovante real (JPEG gerado via GD) avançando
+o pedido, aprovação e recusa humana do Pix com aprovação dupla barrada por
+`FOR UPDATE`. `tests/smoke_payments.sh` roda tudo isso a cada push, no
+mesmo CI, em `MERCADOPAGO_MODE=fake` (ver seção "Módulo de pagamentos"
+acima pro porquê).
+
 O front-end validou o mesmo jeito, não só compilado, nas três fases com
 Playwright + Chromium numa janela de 430px: Fase 1 (fade do splash,
 seleção de estado com destaque, SweetAlert real antes da Geolocation API,
@@ -549,24 +706,36 @@ código.
 
 ## Próximos passos (ordem sugerida pela especificação, Parte I §10)
 
-1. **Módulo de pagamentos em PHP** — rotas com PDO, idempotência, webhooks
-   do Mercado Pago, reembolso, os seis testes de concorrência da Parte I §9.
-   Gateway é Mercado Pago, decidido — o AbacatePay do `fuudelivery-backend`
-   (Go) não entra neste projeto, em nenhuma hipótese (ver seção acima).
-   É o próximo passo natural também do front: o `CartDrawer` (3.3) já tem
-   o botão "Ir para pagamento", só que hoje isso é um aviso em vez de
-   levar à Fase 4 de verdade.
+1. **Fase 4 no front (seleção de método, cartão, Pix, dinheiro,
+   maquininha)** — o backend já existe (`orders/checkout.php`,
+   `payments/pay.php`, `payments/upload_proof.php`, ver seção "Módulo de
+   pagamentos" acima); falta a tela Svelte que chama isso a partir do
+   botão "Ir para pagamento" do `CartDrawer` (3.3).
 2. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
-   para Svelte + Bootstrap — Fases 1, 2 e 3 prontas, faltam 12 — seguindo
-   a mesma ordem de risco (dinheiro primeiro, conveniência depois).
-3. **Decisão de produto pendente: fidelidade/pontos.** A tela 2.3 existe
+   para Svelte + Bootstrap — Fases 1, 2 e 3 prontas, Fase 4 com backend
+   pronto e tela pendente, faltam as outras 11 — seguindo a mesma ordem de
+   risco (dinheiro primeiro, conveniência depois).
+3. **Fase 7.2 (push) e impressão ESC/POS** — `restaurants/approve_pix.php`
+   já grava o evento e avança o pedido, mas notificar o cliente e imprimir
+   a comanda dependem de uma fila de push (outbox + worker) e de conexão
+   com impressora térmica que ainda não existem neste repositório.
+4. **Reembolso (Fase 13) e reconciliação de maquininha (Fase 9).**
+   `refunds` e `card_transactions` existem no esquema (migração `005`) sem
+   endpoint — os dois dependem de telas/fluxos (disputa, entregador
+   confirmando NSU) que ainda não foram portados.
+5. **Decisão de produto pendente: fidelidade/pontos.** A tela 2.3 existe
    só como desenho (dado de exemplo, sem tabela no banco). Se for pra
    valer, precisa de um ledger de pontos — mesmo padrão append-only do
    `ledger_entries` financeiro — e isso é decisão de escopo, não algo pra
    inventar numa migração de suporte a tela.
-4. **Decisão de produto pendente: cupons.** `coupons`/`coupon_redemptions`
+6. **Decisão de produto pendente: cupons.** `coupons`/`coupon_redemptions`
    existem desde a migração `008`, mas não há endpoint de resgate. O
    `CartDrawer` (3.3) já tem o campo de UI, esperando o backend.
+7. **Decisão de produto pendente: Pix automático sem tela.** O enum
+   `payment_method` já tem `pix_auto` e o backend já processa (webhook
+   incluído), mas o mock de 64 telas só desenha o fluxo manual (Fase 4.3);
+   não há uma tela própria pra "Pix instantâneo" — fica pra quando/se essa
+   tela for desenhada.
 
 ## Origem
 
