@@ -4,16 +4,17 @@ Plataforma de delivery com quatro superfícies (cliente, entregador, loja em
 tablet/KDS, painel admin), especificada em `Especificação FUUDelivery —
 Documento Único` (64 telas, 15 fases, esquema PostgreSQL de 42 tabelas).
 
-## Relação com o `fuudelivery-backend` (Go)
+## Relação com o `fuudelivery-backend` (Go) — não usado neste projeto
 
 Existe um backend em produção — `MarcosPavanBR/fuudelivery-backend` — em Go
 (microsserviços `auth_api`/`orders_api`/`delivery_api`, GORM, três bancos
-Postgres separados no Supabase, RabbitMQ, gateway AbacatePay). Este
-repositório **não é uma extensão dele**: é a implementação da especificação
-PHP + Svelte + PostgreSQL único, decidida como o caminho daqui pra frente. O
-backend Go fica em produção enquanto a migração não estiver pronta, sem
-prazo definido para desligar — mas a stack fixada pela cláusula zero abaixo
-vale só para este repositório.
+Postgres separados no Supabase, RabbitMQ, gateway AbacatePay). **Decisão do
+dono do produto: `fuuphp` não usa Go nem AbacatePay, em nenhuma hipótese.**
+Este repositório é a implementação completa da especificação — PHP +
+Svelte + PostgreSQL único + Mercado Pago — sem depender de nada do
+backend Go e sem integrar com AbacatePay. O repositório Go é citado aqui só
+como contexto histórico (existe, roda em produção, tem nome parecido), não
+como stack, dependência ou fallback deste projeto.
 
 ## Cláusula zero — a stack é fixa
 
@@ -436,9 +437,8 @@ navegação Perfil → Pedidos → volta).
 
 1. **Módulo de pagamentos em PHP** — rotas com PDO, idempotência, webhooks
    do Mercado Pago, reembolso, os seis testes de concorrência da Parte I §9.
-   (Nota: a cláusula zero fixa Mercado Pago, mas o gateway real em produção
-   hoje — no `fuudelivery-backend` em Go — é AbacatePay; vale confirmar
-   antes de integrar de verdade.)
+   Gateway é Mercado Pago, decidido — o AbacatePay do `fuudelivery-backend`
+   (Go) não entra neste projeto, em nenhuma hipótese (ver seção acima).
 2. **Fase 3 (cardápio, item, carrinho)** — é o próximo passo natural do
    front-end: a Home (2.1) já abre um restaurante, só que hoje isso é um
    aviso ("ainda não portada") em vez de uma tela de verdade.
