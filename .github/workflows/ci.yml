@@ -56,11 +56,11 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
           bash db/migrate.sh up
 
-      - name: Reverter tudo e aplicar de novo (down 9, up) -- prova de que o round-trip fecha
+      - name: Reverter tudo e aplicar de novo (down 10, up) -- prova de que o round-trip fecha
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
         run: |
-          bash db/migrate.sh down 9
+          bash db/migrate.sh down 10
           bash db/migrate.sh up
 
       - name: Conferir que as tabelas do esquema existem
@@ -93,6 +93,12 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
           JWT_SECRET: ci-test-secret
         run: bash tests/smoke_ordering.sh
+
+      - name: Smoke test -- módulo de descoberta (restaurants/list, search, profile)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+        run: bash tests/smoke_discovery.sh
 
       - name: Instalar Node 22
         uses: actions/setup-node@v4

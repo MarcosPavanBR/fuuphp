@@ -15,6 +15,23 @@ require_once __DIR__ . '/auth_guard.php';
 require_once __DIR__ . '/policy.php';
 require_once __DIR__ . '/orders.php';
 
+// Em produção, PWA e API ficam atrás do mesmo domínio via Cloudflare (a
+// especificação nunca fala em domínios separados) -- CORS não seria
+// necessário. Em dev, o Vite roda em outra porta (origem diferente pro
+// navegador), então precisa disto pra o front conseguir chamar a API.
+// ALLOWED_ORIGIN vazio em produção = nenhum Access-Control-* enviado.
+$__allowedOrigin = env('ALLOWED_ORIGIN', 'http://localhost:5173');
+if ($__allowedOrigin !== '') {
+    header("Access-Control-Allow-Origin: {$__allowedOrigin}");
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Idempotency-Key, X-Trace-Id');
+    header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+    header('Access-Control-Allow-Credentials: false');
+}
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
+
 // Nenhum stack trace escapa para o cliente: vira log estruturado com o
 // trace_id que a resposta 500 também carrega (Especificação, Parte I §8).
 set_exception_handler(static function (Throwable $e): void {

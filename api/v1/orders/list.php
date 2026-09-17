@@ -13,8 +13,13 @@ if (($claims['role'] ?? null) !== 'customer') {
 
 $pdo = db();
 $stmt = $pdo->prepare(
-    'SELECT id, public_code, restaurant_id, status, total, payment_method, created_at
-     FROM orders WHERE user_id = :user_id ORDER BY created_at DESC LIMIT 50'
+    'SELECT o.id, o.public_code, o.restaurant_id, r.name AS restaurant_name,
+            o.status, o.total, o.payment_method, o.verification_deadline, o.created_at,
+            (SELECT count(*) FROM order_items oi WHERE oi.order_id = o.id) AS items_count
+     FROM orders o
+     JOIN restaurants r ON r.id = o.restaurant_id
+     WHERE o.user_id = :user_id
+     ORDER BY o.created_at DESC LIMIT 50'
 );
 $stmt->execute(['user_id' => $claims['sub']]);
 

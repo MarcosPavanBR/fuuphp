@@ -49,20 +49,23 @@ export const ALL_STATES = [
 // verdade. Cobertura completa de municípios (5.570 no Brasil) é trabalho
 // de uma fonte de dados real (IBGE) integrada depois -- fora do escopo de
 // um mock de tela.
+// lat/lng são o centro aproximado da cidade (não do bairro escolhido) --
+// bastam pra ordenar a Home por distância de verdade; geocodificação fina
+// por bairro é a mesma lacuna já registrada em CityPicker.svelte.
 export const CITIES_BY_STATE = {
   SP: [
-    { name: 'São Paulo', ibge: '3550308', neighborhoods: ['Pinheiros', 'Cambuí', 'Moema', 'Vila Mariana'] },
-    { name: 'Campinas', ibge: '3509502', neighborhoods: ['Cambuí', 'Taquaral', 'Bosque'] },
-    { name: 'Santos', ibge: '3548500', neighborhoods: ['Gonzaga', 'Embaré', 'Boqueirão'] },
-    { name: 'Sorocaba', ibge: '3552205', neighborhoods: ['Campolim', 'Jardim Vergueiro'] },
+    { name: 'São Paulo', ibge: '3550308', lat: -23.5505, lng: -46.6333, neighborhoods: ['Pinheiros', 'Cambuí', 'Moema', 'Vila Mariana'] },
+    { name: 'Campinas', ibge: '3509502', lat: -22.9056, lng: -47.0608, neighborhoods: ['Cambuí', 'Taquaral', 'Bosque'] },
+    { name: 'Santos', ibge: '3548500', lat: -23.9608, lng: -46.3339, neighborhoods: ['Gonzaga', 'Embaré', 'Boqueirão'] },
+    { name: 'Sorocaba', ibge: '3552205', lat: -23.5015, lng: -47.4526, neighborhoods: ['Campolim', 'Jardim Vergueiro'] },
   ],
   MG: [
-    { name: 'Belo Horizonte', ibge: '3106200', neighborhoods: ['Savassi', 'Lourdes', 'Buritis'] },
+    { name: 'Belo Horizonte', ibge: '3106200', lat: -19.9167, lng: -43.9345, neighborhoods: ['Savassi', 'Lourdes', 'Buritis'] },
   ],
   PR: [
-    { name: 'Curitiba', ibge: '4106902', neighborhoods: ['Batel', 'Água Verde'] },
+    { name: 'Curitiba', ibge: '4106902', lat: -25.4284, lng: -49.2733, neighborhoods: ['Batel', 'Água Verde'] },
   ],
   BA: [
-    { name: 'Salvador', ibge: '2927408', neighborhoods: ['Barra', 'Pituba'] },
+    { name: 'Salvador', ibge: '2927408', lat: -12.9777, lng: -38.5016, neighborhoods: ['Barra', 'Pituba'] },
   ],
 };

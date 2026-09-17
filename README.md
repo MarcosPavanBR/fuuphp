@@ -29,14 +29,15 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (nove migrações SQL), o **módulo de identidade** e o
-**módulo de catálogo + pedido + checkout** em PHP sobre ela, e o começo do
-**front-end em Svelte** (`web/`) — só a Fase 1 (onboarding) por enquanto,
-das 15 fases / 64 telas. Pagamentos, ledger, dispatch e o resto do backend
-ainda não foram portados; as outras 14 fases do front também não. Segue a
-ordem sugerida pela especificação (12 semanas, Parte I §10) —
-catálogo/pedido vem antes de pagamentos porque `POST /v1/orders/:id/pay`
-pressupõe que o pedido já existe.
+A **fundação de banco** (dez migrações SQL), os módulos **identity**,
+**catálogo + pedido + checkout** e **descoberta** (busca de loja e
+produto) em PHP sobre ela, e o **front-end em Svelte** (`web/`) cobrindo a
+Fase 1 (onboarding) e a Fase 2 (home, busca, fidelidade, pedidos, perfil)
+— 2 das 15 fases / 64 telas. Pagamentos, ledger, dispatch, cardápio+carrinho
+(Fase 3) e o resto ainda não foram portados. Segue a ordem sugerida pela
+especificação (12 semanas, Parte I §10) — catálogo/pedido vem antes de
+pagamentos porque `POST /v1/orders/:id/pay` pressupõe que o pedido já
+existe.
 
 ```
 api/v1/auth/                módulo identity (endpoints, um arquivo por rota)
@@ -45,9 +46,13 @@ api/v1/auth/                módulo identity (endpoints, um arquivo por rota)
   refresh.php                  POST — rotaciona refresh, detecta reuso
   partner_login.php            POST — loja (CNPJ+senha) / entregador (CPF+código)
   consent.php                  POST — registra aceite de termo (LGPD), autenticado
-api/v1/restaurants/         catálogo (público, exceto orders.php)
+api/v1/restaurants/         catálogo e descoberta (público, exceto orders.php)
   show.php                     GET  ?id= — dados da loja + horário de funcionamento
   menu.php                     GET  ?id= — cardápio disponível, com variações
+  list.php                     GET  ?city_ibge_code=&category=&lat=&lng= — lojas
+                                da cidade, distância real por Haversine se lat/lng vierem
+  search_products.php          GET  ?city_ibge_code=&q= — busca de produto por
+                                nome (índice GIN trigram), min. 2 caracteres
   orders.php                   GET  ?id= — fila do KDS (só restaurant_staff da própria loja)
 api/v1/addresses/           endereços do cliente autenticado
   create.php                   POST — cadastra endereço
@@ -56,12 +61,16 @@ api/v1/orders/               pedido e checkout
   create.php                   POST — checkout: valida política/preço/loja aberta,
                                 cria o pedido, avança cart → pending_payment
   show.php                     GET  ?id= — detalhe (dono ou loja do pedido, só)
-  list.php                     GET  — pedidos do cliente autenticado
+  list.php                     GET  — pedidos do cliente autenticado, com nome
+                                da loja e contagem de itens
   status.php                   POST — única porta pra mudar status, por cima de
                                 advance_order(); autorização por papel aqui,
                                 legalidade da transição só no banco
+api/v1/profile/
+  show.php                      GET  — usuário + estatísticas (pedidos, cupons;
+                                 pontos de fidelidade fica null, ver README)
 lib/                          código compartilhado entre módulos
-  bootstrap.php                 carrega .env, registra handler de erro, requires
+  bootstrap.php                 carrega .env, CORS (dev), registra handler de erro, requires
   db.php                          PDO (DATABASE_URL → pgsql DSN) + pg_bool()
   response.php                    envelope de erro/sucesso com trace_id (contrato de API, Parte I §3)
   jwt.php                          JWT HS256 escrito à mão (sem dependência nova)
@@ -78,6 +87,10 @@ tests/
   smoke_ordering.sh             fluxo completo de checkout (política, preço com
                                  variação, transição ilegal barrada, papel sem
                                  permissão barrado, KDS, paid→preparing→ready)
+  smoke_discovery.sh            lista por distância, filtro de categoria, busca
+                                 por trigram, perfil com estatísticas reais
+  support/random_cnpj.php       CNPJ aleatório com dígito verificador válido,
+                                 pra seed de teste não colidir entre scripts
 db/
   migrations/
     001_identity.up.sql / .down.sql      users, partner_accounts, otp_codes,
@@ -104,10 +117,15 @@ db/
     009_operations.up.sql / .down.sql    RLS, courier_positions (UNLOGGED),
                                           jobs do pg_cron, views de relatório,
                                           grants de produção
+    010_catalog_discovery.up.sql / .down.sql   restaurants ganha category,
+                                          logo_key, lat, lng + índice trigram
+                                          em menu_items.name (fora das 42
+                                          tabelas originais — ver seção própria)
   migrate.sh              runner simples (up / down N) via DATABASE_URL
   Dockerfile               postgres:16 + pg_cron
 docker-compose.yml          banco (Postgres) + app (PHP embutido) para desenvolvimento
 .github/workflows/ci.yml    CI: migrações (up/down/up) + lint PHP + smoke tests dos módulos
+                             + build do front-end
 ```
 
 Cada arquivo de migração segue exatamente a Parte II da especificação
@@ -203,13 +221,43 @@ fechar essa lacuna:
   por requisição é o próximo passo para RLS virar defesa em profundidade de
   verdade, não só desenho.
 
-## Front-end (`web/`) — Fase 1, decisões de implementação
+## Módulo de descoberta — decisões de implementação
+
+A migração `010` e os endpoints `restaurants/list.php` e
+`restaurants/search_products.php` existem porque a tela 2.1 (Home/Explorar)
+do mock mostra categoria, distância e logo por loja, e nenhum dos três tinha
+coluna no esquema — a Parte II original fixa 42 tabelas e nenhuma delas tem
+`category`/`lat`/`lng` em `restaurants`.
+
+- **O que foi adicionado (`restaurants.category`, `logo_key`, `lat`, `lng`)
+  é extensão justificada, não invenção livre.** São fatos básicos de
+  catálogo — "que tipo de comida" e "onde fica" — sem os quais a tela que
+  o próprio dono do produto encomendou não tem como funcionar de verdade.
+- **O que ficou de fora por ser escopo grande demais pra uma migração de
+  suporte: nota da loja (rating).** O mock mostra "4,8 (812)" por loja —
+  isso pede uma tabela de avaliações inteira (nota + comentário +
+  moderação + agregação), que não está em nenhum lugar da especificação.
+  Inventar esse sistema sem decisão do dono do produto seria escopo novo
+  demais; fica de fora, documentado, até vir decisão.
+- **Distância é Haversine de verdade, calculado no PostgreSQL** — não
+  estimativa nem mock. Só fica `NULL` quando falta lat/lng de um dos dois
+  lados (cliente não mandou, ou a loja não tem coordenada cadastrada).
+- **Busca de produto usa `ILIKE` sobre o índice GIN trigram**
+  (`gin_trgm_ops`, extensão `pg_trgm` já criada na migração `001`) — é
+  exatamente o que a tela 2.2 pede no chip "PostgreSQL trigram". Os
+  filtros do mock (Entrega grátis / Até 30 min / 4,5+) dependem de taxa de
+  entrega, ETA e nota por loja — nenhum dos três é real ainda (mesma
+  lacuna do parágrafo acima); só o filtro "Tudo" filtra de verdade no
+  front, os outros avisam em vez de fingir.
+
+## Front-end (`web/`) — Fase 1 e Fase 2, decisões de implementação
 
 Svelte 5 + Vite, Bootstrap 5, Bootstrap Icons, `sweetalert` (não
 `sweetalert2` — o pacote `sweetalert` na versão 2.x do npm *é* a
-biblioteca clássica, a mesma API `swal()` que o mock usa). Só a Fase 1
-(splash, seleção de estado, cidade+bairro) está portada; as outras 14
-fases ainda não têm componente.
+biblioteca clássica, a mesma API `swal()` que o mock usa). Fase 1 (splash,
+seleção de estado, cidade+bairro) e Fase 2 (home, busca, fidelidade,
+pedidos, perfil) estão portadas; as outras 13 fases ainda não têm
+componente.
 
 ```
 web/
@@ -218,16 +266,25 @@ web/
                                de origem (grep de #hex por frequência —
                                ver comentário no topo do arquivo)
     lib/
-      toastr.js                  toastr sem jQuery (ver abaixo)
-      data/states.js              UFs e cidades/bairros de exemplo (estático)
+      api.js                      cliente fetch fino (base URL, token, erros)
+      session.svelte.js            estado de sessão reativo (login/logout real)
+      toastr.js                    toastr sem jQuery (ver abaixo)
+      data/states.js                UFs, cidades e coordenadas de exemplo (estático)
       components/
-        PhoneStatusBar.svelte        barra "9:41" que aparece em toda tela
-        PhoneScreen.svelte            moldura de largura de celular
+        PhoneStatusBar.svelte          barra "9:41" que aparece em toda tela
+        PhoneScreen.svelte              moldura de largura de celular
+        BottomNav.svelte                5 abas (house/search/cart/star/person)
+        QuickLogin.svelte               login mínimo real (ver abaixo)
       screens/
-        Splash.svelte                 1.1 — fade, avança sozinho
-        StateSelector.svelte          1.2 — busca + lista com contagem de lojas
-        CityPicker.svelte             1.3 — busca de cidade, bairro, SweetAlert
-    App.svelte                  orquestra as 3 telas da Fase 1
+        Splash.svelte                   1.1 — fade, avança sozinho
+        StateSelector.svelte            1.2 — busca + lista com contagem de lojas
+        CityPicker.svelte               1.3 — busca de cidade, bairro, SweetAlert
+        Home.svelte                     2.1 — categorias, lojas por distância real
+        Search.svelte                   2.2 — busca de produto por trigram
+        Loyalty.svelte                  2.3 — só desenho, dado de exemplo (ver abaixo)
+        Orders.svelte                   2.4 — pedidos do cliente, tabs em andamento/histórico
+        Profile.svelte                  2.5 — perfil, estatísticas, endereços
+    App.svelte                  orquestra Fase 1 -> Fase 2 (abas + sub-telas)
 ```
 
 - **`toastr` sem jQuery.** O pacote npm `toastr` declara "jQuery is
@@ -258,29 +315,75 @@ web/
   externo (Google/Mapbox/Nominatim) que não foi decidido ainda, então o
   fluxo usa o primeiro bairro conhecido da cidade como resultado.
 - **Validado visualmente, não só compilado.** `npm run build` limpo não
-  prova que a tela se parece com o mock. As 3 telas foram conferidas numa
-  janela de 430px com Playwright + Chromium: splash com o fade automático,
-  seleção de estado com destaque e botão desabilitado até escolher, o
-  modal do SweetAlert dentro do fluxo de cidade, o toast de sucesso depois
-  da geolocalização, e a Fase 1 fechando com o `city_ibge_code` certo.
+  prova que a tela se parece com o mock. As 3 telas da Fase 1 foram
+  conferidas numa janela de 430px com Playwright + Chromium: splash com o
+  fade automático, seleção de estado com destaque e botão desabilitado até
+  escolher, o modal do SweetAlert dentro do fluxo de cidade, o toast de
+  sucesso depois da geolocalização, e a Fase 1 fechando com o
+  `city_ibge_code` certo.
+
+**Fase 2 — decisões adicionais:**
+
+- **A barra inferior tem 5 abas** (house/search/cart/star/person), **não
+  6** — "Pedidos" (2.4) não é uma delas. No mock, ela é alcançada tocando
+  a estatística "PEDIDOS" dentro do Perfil (2.5); é assim que
+  `App.svelte` liga as duas (`Profile` → `onOpenOrders` → aba `orders`,
+  com botão de voltar em `Orders.svelte`, já que ela não é uma aba
+  própria da navegação inferior).
+- **A aba Carrinho existe mas não abre nada** — avisa que é a Fase 3
+  (cardápio/item/carrinho), ainda não portada, em vez de levar a uma tela
+  vazia fingindo que funciona.
+- **Login é `QuickLogin.svelte`, um formulário mínimo de verdade** (chama
+  `/auth/otp_request.php` e `/otp_verify.php` reais), não a tela completa
+  da Fase 10 — que ainda não foi desenhada em componente. Ele gate as três
+  abas que precisam de usuário autenticado (fidelidade, pedidos, perfil) e
+  deixa isso visível na tela com um selo "login provisório".
+- **CORS entrou em `lib/bootstrap.php`** porque Fase 2 é a primeira vez
+  que o front chama a API de verdade — Vite (porta 5173 em dev) e PHP
+  (porta 8080) são origens diferentes pro navegador. `ALLOWED_ORIGIN` no
+  `.env` controla isso; vazio em produção assume que PWA e API dividem
+  domínio via Cloudflare (a especificação nunca fala em domínios
+  separados), então nenhum header `Access-Control-*` é enviado.
+- **Fidelidade (2.3) é a única tela que não chama a API.** Sem tabela de
+  pontos no banco (ver "Módulo de descoberta" acima — mesma lacuna, outra
+  tela), os números são fixos, os mesmos do mock, com um selo visível
+  avisando que é dado de exemplo. Os botões "Resgatar"/"Trocar" mostram um
+  aviso em vez de fingir uma transação.
+- **`orders/list.php` foi enriquecido** (nome da loja, contagem de itens)
+  depois que a tela de Pedidos (2.4) mostrou que a versão anterior (só
+  `status`/`total`/`payment_method`) não bastava pra uma lista útil — o
+  endpoint mudou junto com a tela que o usa, não antes.
+- **Validado com Playwright de ponta a ponta, incluindo login real:**
+  onboarding → Home com lojas ordenadas por distância Haversine de
+  verdade → filtro de categoria refazendo a consulta → busca de produto
+  por trigram → aba Fidelidade sem login → aba Perfil pedindo login →
+  cadastro por OTP dentro do `QuickLogin` → Perfil com estatísticas reais
+  → toque em "PEDIDOS" → sub-tela de pedidos → volta pro Perfil. Zero
+  erros de console em todo o percurso (um 404 apareceu no meio do teste e
+  não era bug: é a própria API respondendo `user_not_found` de propósito
+  para um telefone sem cadastro — o Chromium loga qualquer `fetch` não-2xx
+  como "erro" no console, mesmo quando a aplicação trata a resposta
+  corretamente, como este caso trata).
 
 ## Como rodar localmente
 
 ```bash
 docker compose up -d
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
-bash db/migrate.sh up          # aplica as 9, em ordem
-bash db/migrate.sh down 3      # reverte as 3 últimas
-bash db/migrate.sh down 9      # reverte tudo
+bash db/migrate.sh up           # aplica as 10, em ordem
+bash db/migrate.sh down 3       # reverte as 3 últimas
+bash db/migrate.sh down 10      # reverte tudo
 
-cp .env.example .env           # ajuste DATABASE_URL/JWT_SECRET se precisar
-JWT_SECRET=dev-secret bash tests/smoke_identity.sh   # fluxo completo de identity
-JWT_SECRET=dev-secret bash tests/smoke_ordering.sh   # fluxo completo de checkout (semeia loja/cardápio sozinho)
+cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN se precisar
+JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
+JWT_SECRET=dev-secret bash tests/smoke_ordering.sh    # fluxo completo de checkout (semeia loja/cardápio sozinho)
+JWT_SECRET=dev-secret bash tests/smoke_discovery.sh   # lista por distância, busca, perfil (semeia sozinho)
 
-cd web && npm install && npm run dev   # front-end Svelte, http://localhost:5173
+php -S localhost:8080                  # API, num terminal
+cd web && npm install && npm run dev   # front-end Svelte, noutro terminal — http://localhost:5173
 ```
 
-As nove migrações foram validadas de ponta a ponta (`up` completo, `down`
+As dez migrações foram validadas de ponta a ponta (`up` completo, `down`
 completo em ordem reversa, `up` de novo) contra um PostgreSQL 16 real com
 `pg_cron` instalado, incluindo um teste funcional de `advance_order()`
 confirmando que transições legais avançam o pedido e transições ilegais
@@ -310,12 +413,24 @@ como string vazia `''` — e o PostgreSQL rejeita `''` como `boolean`
 ("invalid input syntax for type boolean"). `lib/db.php` ganhou `pg_bool()`
 pra isso; qualquer parâmetro booleano futuro deve passar por ela.
 
-O front-end validou o mesmo jeito, não só compilado: as 3 telas da Fase 1
-conferidas com Playwright + Chromium numa janela de 430px — fade do splash,
-seleção de estado com destaque e "Continuar" desabilitado até escolher, o
-SweetAlert real perguntando antes da Geolocation API, o toast (sem jQuery)
-confirmando o bairro achado, e o fluxo fechando com o `city_ibge_code`
-certo passado adiante.
+O módulo de descoberta também: lista por distância real (Haversine)
+ordenando a loja mais perto primeiro, filtro de categoria devolvendo só a
+categoria pedida, busca por trigram achando o produto pelo nome parcial
+mesmo na loja certa, busca curta demais barrada, e perfil autenticado
+devolvendo estatísticas reais sem vazar CPF. `tests/smoke_discovery.sh`
+semeia sua própria loja com CNPJ aleatório válido (`tests/support/random_cnpj.php`)
+— um bug real de teste apareceu aqui: os primeiros CNPJs fixos colidiam
+com os que `smoke_ordering.sh` já tinha semeado no mesmo banco, porque os
+dois scripts rodam em sequência no mesmo CI sem recriar o banco entre um e
+outro.
+
+O front-end validou o mesmo jeito, não só compilado, nas duas fases com
+Playwright + Chromium numa janela de 430px: Fase 1 (fade do splash,
+seleção de estado com destaque, SweetAlert real antes da Geolocation API,
+toast sem jQuery) e Fase 2 (lojas ordenadas por distância de verdade,
+filtro de categoria refazendo a consulta, busca de produto, login real por
+OTP destravando as abas autenticadas, perfil com estatísticas reais,
+navegação Perfil → Pedidos → volta).
 
 ## Próximos passos (ordem sugerida pela especificação, Parte I §10)
 
@@ -324,11 +439,17 @@ certo passado adiante.
    (Nota: a cláusula zero fixa Mercado Pago, mas o gateway real em produção
    hoje — no `fuudelivery-backend` em Go — é AbacatePay; vale confirmar
    antes de integrar de verdade.)
-2. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
-   para Svelte + Bootstrap — só a Fase 1 (onboarding) está pronta, faltam
-   14 fases — seguindo a mesma ordem de risco (dinheiro primeiro,
-   conveniência depois), e ligando cada tela nova às rotas de API que já
-   existem (identity, catalog, ordering).
+2. **Fase 3 (cardápio, item, carrinho)** — é o próximo passo natural do
+   front-end: a Home (2.1) já abre um restaurante, só que hoje isso é um
+   aviso ("ainda não portada") em vez de uma tela de verdade.
+3. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
+   para Svelte + Bootstrap — Fases 1 e 2 prontas, faltam 13 — seguindo a
+   mesma ordem de risco (dinheiro primeiro, conveniência depois).
+4. **Decisão de produto pendente: fidelidade/pontos.** A tela 2.3 existe
+   só como desenho (dado de exemplo, sem tabela no banco). Se for pra
+   valer, precisa de um ledger de pontos — mesmo padrão append-only do
+   `ledger_entries` financeiro — e isso é decisão de escopo, não algo pra
+   inventar numa migração de suporte a tela.
 
 ## Origem
 
