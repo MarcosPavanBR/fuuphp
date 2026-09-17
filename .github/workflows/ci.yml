@@ -1,18 +1,24 @@
-name: migrations
+name: ci
 
 # ADR-002 (Especificacao FUUDelivery, Parte I): migracoes versionadas rodam
-# no CI, nunca no cPanel. Este workflow e a prova disso -- aplica as nove
-# migracoes do zero, reverte tudo e aplica de novo, contra um PostgreSQL 16
-# real com pg_cron, a cada push.
+# no CI, nunca no cPanel. Este workflow aplica as nove migracoes do zero,
+# reverte tudo e aplica de novo contra um PostgreSQL 16 real com pg_cron, e
+# depois roda o smoke test de cada modulo PHP sobre esse banco migrado.
 
 on:
   push:
     paths:
       - "db/**"
+      - "api/**"
+      - "lib/**"
+      - "tests/**"
       - ".github/workflows/migrations.yml"
   pull_request:
     paths:
       - "db/**"
+      - "api/**"
+      - "lib/**"
+      - "tests/**"
       - ".github/workflows/migrations.yml"
 
 jobs:
@@ -63,3 +69,19 @@ jobs:
             "SELECT count(*) FROM pg_tables WHERE schemaname='public'")
           echo "tabelas criadas: $count"
           test "$count" -ge 40
+
+      - name: Instalar PHP 8.4 + pdo_pgsql
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: pdo_pgsql, pgsql
+
+      - name: Lint de sintaxe em todos os arquivos PHP
+        run: |
+          find lib api -name "*.php" -print0 | xargs -0 -n1 php -l
+
+      - name: Smoke test -- módulo identity
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+        run: bash tests/smoke_identity.sh

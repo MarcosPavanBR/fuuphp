@@ -21,5 +21,23 @@ services:
       timeout: 5s
       retries: 10
 
+  app:
+    image: php:8.4-cli
+    working_dir: /app
+    volumes:
+      - .:/app
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/fuudelivery
+      JWT_SECRET: dev-secret-not-for-prod
+      APP_ENV: development
+    depends_on:
+      db:
+        condition: service_healthy
+    # a imagem oficial não vem com pdo_pgsql; instala e sobe o servidor
+    # embutido do PHP num único comando, sem Dockerfile próprio pra dev.
+    entrypoint: ["sh", "-c", "docker-php-ext-install pdo_pgsql pgsql >/dev/null && php -S 0.0.0.0:8080 -t /app"]
+
 volumes:
   fuudelivery_pgdata:

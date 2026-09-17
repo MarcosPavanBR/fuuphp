@@ -27,15 +27,35 @@ por versão mais nova, nem por biblioteca que pareça melhor. Ver a
 especificação completa para o texto integral da cláusula e o raciocínio por
 trás de cada item.
 
-## O que este primeiro commit contém
+## O que este repositório contém
 
-Só a **fundação de banco** — as nove migrações SQL do esquema completo,
-porque é dela que tudo o resto depende (checkout, pagamento, caixa,
-dispatch, disputa, cupom). PHP, Svelte e as telas ainda não foram portados;
-essa é a próxima etapa, na ordem sugerida pela especificação (12 semanas,
-Parte I §10).
+A **fundação de banco** (nove migrações SQL) e o **módulo de identidade em
+PHP** sobre ela — login por OTP, sessão com rotação de refresh token, login
+de parceiro (loja/entregador). Pagamentos, pedido, ledger e o resto ainda
+não foram portados; Svelte e as telas também não. Segue a ordem sugerida
+pela especificação (12 semanas, Parte I §10).
 
 ```
+api/v1/auth/                módulo identity (endpoints, um arquivo por rota)
+  otp_request.php             POST — pede código (login/signup/phone_verify)
+  otp_verify.php               POST — confirma código, emite access+refresh
+  refresh.php                  POST — rotaciona refresh, detecta reuso
+  partner_login.php            POST — loja (CNPJ+senha) / entregador (CPF+código)
+  consent.php                  POST — registra aceite de termo (LGPD), autenticado
+lib/                          código compartilhado entre módulos
+  bootstrap.php                 carrega .env, registra handler de erro, requires
+  db.php                          PDO (DATABASE_URL → pgsql DSN)
+  response.php                    envelope de erro/sucesso com trace_id (contrato de API, Parte I §3)
+  jwt.php                          JWT HS256 escrito à mão (sem dependência nova)
+  sessions.php                    emissão e rotação de sessão (Parte I §7)
+  otp.php                          geração/hash de código, limite de pedidos
+  auth_guard.php                  exige access token válido
+  validation.php                  CPF/CNPJ com dígito verificador, e-mail, telefone
+  uuid.php                        UUIDv4 sem dependência
+tests/
+  smoke_identity.sh             sobe o servidor PHP embutido e roda o fluxo
+                                 completo (signup, código errado, refresh,
+                                 detecção de reuso) contra um banco já migrado
 db/
   migrations/
     001_identity.up.sql / .down.sql      users, partner_accounts, otp_codes,
@@ -64,8 +84,8 @@ db/
                                           grants de produção
   migrate.sh              runner simples (up / down N) via DATABASE_URL
   Dockerfile               postgres:16 + pg_cron
-docker-compose.yml          banco local para desenvolvimento
-.github/workflows/migrations.yml   CI: aplica as 9, reverte tudo, aplica de novo
+docker-compose.yml          banco (Postgres) + app (PHP embutido) para desenvolvimento
+.github/workflows/ci.yml    CI: migrações (up/down/up) + lint PHP + smoke test do identity
 ```
 
 Cada arquivo de migração segue exatamente a Parte II da especificação
@@ -97,6 +117,38 @@ especificou. O algoritmo fino de acerto semanal (netting, retry de payout
 falho, valor mínimo) pertence ao módulo de pagamentos em PHP — fora do
 escopo desta migração de esquema.
 
+## Módulo identity — decisões de implementação
+
+A especificação descreve o *quê* (OTP, refresh com rotação e detecção de
+reuso, login de parceiro) mas não o *como* em código. Decisões tomadas para
+fechar essa lacuna:
+
+- **JWT escrito à mão** (`lib/jwt.php`, HS256), em vez de uma biblioteca via
+  Composer — a cláusula zero não autoriza nenhuma, e o formato é simples o
+  bastante para não precisar. Se algum dia crescer (RS256, JWKS, revogação
+  por `jti`), isso é proposta de mudança de stack, não decisão de código.
+- **Endpoints são arquivos diretos** (`api/v1/auth/otp_request.php` etc.),
+  sem framework de rotas — casa com o diagrama da especificação
+  (`api/*.php ─► PG`) e com a cláusula zero (PHP puro, PDO). URL bonita
+  (`/v1/auth/otp/request`) viraria reescrita de servidor (nginx/.htaccess),
+  ainda não configurada porque a hospedagem real não foi decidida aqui.
+- **Cadastro (`purpose=signup`) exige `full_name` na primeira chamada**,
+  porque `users.full_name` é `NOT NULL` no esquema — não dá para criar um
+  usuário "rascunho" só com telefone. Login (`purpose=login`) exige que o
+  usuário já exista; se não existir, a resposta aponta para `signup` (regra
+  "erro sempre com saída", Parte I §6).
+- **2FA por aparelho em `partner_login`, na forma mais simples que o
+  esquema permite:** confiança no primeiro uso — o primeiro `device_id`
+  enviado fica gravado em `partner_accounts.device_id`; login de outro
+  aparelho dá `device_mismatch` até o suporte liberar a troca manualmente.
+  A especificação menciona "2FA por aparelho" sem detalhar o fluxo de troca
+  (reenvio de código, aprovação em outro dispositivo já logado etc.) —
+  fica como decisão de produto em aberto.
+- **`dev_code` na resposta de `otp_request` só fora de produção**
+  (`APP_ENV != production`). Sem um provedor de SMS/e-mail configurado
+  ainda, é assim que o fluxo é testável; o código real nunca é logado nem
+  devolvido quando `APP_ENV=production`.
+
 ## Como rodar localmente
 
 ```bash
@@ -105,6 +157,9 @@ export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
 bash db/migrate.sh up          # aplica as 9, em ordem
 bash db/migrate.sh down 3      # reverte as 3 últimas
 bash db/migrate.sh down 9      # reverte tudo
+
+cp .env.example .env           # ajuste DATABASE_URL/JWT_SECRET se precisar
+JWT_SECRET=dev-secret bash tests/smoke_identity.sh   # sobe um servidor PHP embutido e roda o fluxo completo
 ```
 
 As nove migrações foram validadas de ponta a ponta (`up` completo, `down`
@@ -114,13 +169,19 @@ confirmando que transições legais avançam o pedido e transições ilegais
 levantam exceção (a defesa de concorrência descrita na Parte I §4 e na
 Parte II §9).
 
+O módulo identity foi validado do mesmo jeito, ponta a ponta contra um
+Postgres real: cadastro por OTP, rejeição de código errado com contador de
+tentativas, emissão de tokens, `consent` autenticado x sem token, rotação
+de refresh e — o caso que mais importa — reuso de um refresh já rotacionado
+derrubando a família de sessão inteira (a defesa contra token roubado da
+Parte I §7). `tests/smoke_identity.sh` é exatamente essa sequência,
+automatizada, e roda no CI a cada push em `api/`, `lib/` ou `tests/`.
+
 ## Próximos passos (ordem sugerida pela especificação, Parte I §10)
 
-1. **Módulo de identidade em PHP** sobre `001` — OTP, sessão com rotação de
-   refresh token, login de parceiro (loja CNPJ+senha, entregador CPF+código).
-2. **Módulo de pagamentos em PHP** — rotas com PDO, idempotência, webhooks
+1. **Módulo de pagamentos em PHP** — rotas com PDO, idempotência, webhooks
    do Mercado Pago, reembolso, os seis testes de concorrência da Parte I §9.
-3. **Portar as telas** de `FUUDelivery - 64 Telas (offline).html` para
+2. **Portar as telas** de `FUUDelivery - 64 Telas (offline).html` para
    Svelte + Bootstrap, uma fase por vez, seguindo a mesma ordem de risco
    (dinheiro primeiro, conveniência depois).
 
