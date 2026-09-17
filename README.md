@@ -30,11 +30,13 @@ trás de cada item.
 ## O que este repositório contém
 
 A **fundação de banco** (nove migrações SQL), o **módulo de identidade** e o
-**módulo de catálogo + pedido + checkout** em PHP sobre ela. Pagamentos,
-ledger, dispatch e o resto ainda não foram portados; Svelte e as telas
-também não. Segue a ordem sugerida pela especificação (12 semanas, Parte I
-§10) — catálogo/pedido vem antes de pagamentos porque `POST
-/v1/orders/:id/pay` pressupõe que o pedido já existe.
+**módulo de catálogo + pedido + checkout** em PHP sobre ela, e o começo do
+**front-end em Svelte** (`web/`) — só a Fase 1 (onboarding) por enquanto,
+das 15 fases / 64 telas. Pagamentos, ledger, dispatch e o resto do backend
+ainda não foram portados; as outras 14 fases do front também não. Segue a
+ordem sugerida pela especificação (12 semanas, Parte I §10) —
+catálogo/pedido vem antes de pagamentos porque `POST /v1/orders/:id/pay`
+pressupõe que o pedido já existe.
 
 ```
 api/v1/auth/                módulo identity (endpoints, um arquivo por rota)
@@ -201,6 +203,67 @@ fechar essa lacuna:
   por requisição é o próximo passo para RLS virar defesa em profundidade de
   verdade, não só desenho.
 
+## Front-end (`web/`) — Fase 1, decisões de implementação
+
+Svelte 5 + Vite, Bootstrap 5, Bootstrap Icons, `sweetalert` (não
+`sweetalert2` — o pacote `sweetalert` na versão 2.x do npm *é* a
+biblioteca clássica, a mesma API `swal()` que o mock usa). Só a Fase 1
+(splash, seleção de estado, cidade+bairro) está portada; as outras 14
+fases ainda não têm componente.
+
+```
+web/
+  src/
+    styles/tokens.css         paleta, tipografia e forma extraídos do HTML
+                               de origem (grep de #hex por frequência —
+                               ver comentário no topo do arquivo)
+    lib/
+      toastr.js                  toastr sem jQuery (ver abaixo)
+      data/states.js              UFs e cidades/bairros de exemplo (estático)
+      components/
+        PhoneStatusBar.svelte        barra "9:41" que aparece em toda tela
+        PhoneScreen.svelte            moldura de largura de celular
+      screens/
+        Splash.svelte                 1.1 — fade, avança sozinho
+        StateSelector.svelte          1.2 — busca + lista com contagem de lojas
+        CityPicker.svelte             1.3 — busca de cidade, bairro, SweetAlert
+    App.svelte                  orquestra as 3 telas da Fase 1
+```
+
+- **`toastr` sem jQuery.** O pacote npm `toastr` declara "jQuery is
+  required" no próprio `package.json` — e a cláusula zero proíbe jQuery em
+  código novo. As duas regras da mesma cláusula se contradizem para
+  front-end escrito do zero. Resolvido do mesmo jeito que o JWT do módulo
+  identity: `web/src/lib/toastr.js` reimplementa a mesma interface
+  (`toastr.success/error/warning/info`) em ~60 linhas de DOM puro, sem
+  puxar jQuery. Trocar por versão nova ou biblioteca "melhor" seria
+  proposta de mudança de stack, não decisão de quem está escrevendo tela.
+- **Vite como bundler não é item da cláusula zero.** A cláusula lista
+  frameworks e bibliotecas de runtime, não ferramenta de build; não existe
+  jeito de compilar `.svelte` pra produção sem alguma. Fica registrado
+  aqui pela mesma razão que o Composer não apareceu no módulo PHP: é
+  plumbing, não stack.
+- **UFs/cidades/bairros são dado estático local** (`web/src/lib/data/states.js`),
+  não um endpoint do backend. O esquema do banco só guarda
+  `city_ibge_code` por endereço — não existe tabela de UFs/municípios — e
+  a especificação diz que essa lista "vem do edge cache da Cloudflare",
+  que é exatamente o que um JSON estático bem cacheado seria em produção.
+  As 4 contagens de "lojas ativas" (SP 1.284, MG 612, PR 348, BA 297) são
+  as mesmas do mock original — não vêm de `COUNT(*)` real.
+- **Geolocalização e SweetAlert são reais, não simulados.** A tela 1.3
+  chama de verdade `navigator.geolocation.getCurrentPosition` depois do
+  SweetAlert confirmar — testado via Playwright com permissão de
+  localização concedida e coordenadas fixas. O que é simplificado é achar
+  o bairro a partir de lat/lng: geocodificação reversa pede um provedor
+  externo (Google/Mapbox/Nominatim) que não foi decidido ainda, então o
+  fluxo usa o primeiro bairro conhecido da cidade como resultado.
+- **Validado visualmente, não só compilado.** `npm run build` limpo não
+  prova que a tela se parece com o mock. As 3 telas foram conferidas numa
+  janela de 430px com Playwright + Chromium: splash com o fade automático,
+  seleção de estado com destaque e botão desabilitado até escolher, o
+  modal do SweetAlert dentro do fluxo de cidade, o toast de sucesso depois
+  da geolocalização, e a Fase 1 fechando com o `city_ibge_code` certo.
+
 ## Como rodar localmente
 
 ```bash
@@ -213,6 +276,8 @@ bash db/migrate.sh down 9      # reverte tudo
 cp .env.example .env           # ajuste DATABASE_URL/JWT_SECRET se precisar
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh   # fluxo completo de identity
 JWT_SECRET=dev-secret bash tests/smoke_ordering.sh   # fluxo completo de checkout (semeia loja/cardápio sozinho)
+
+cd web && npm install && npm run dev   # front-end Svelte, http://localhost:5173
 ```
 
 As nove migrações foram validadas de ponta a ponta (`up` completo, `down`
@@ -245,6 +310,13 @@ como string vazia `''` — e o PostgreSQL rejeita `''` como `boolean`
 ("invalid input syntax for type boolean"). `lib/db.php` ganhou `pg_bool()`
 pra isso; qualquer parâmetro booleano futuro deve passar por ela.
 
+O front-end validou o mesmo jeito, não só compilado: as 3 telas da Fase 1
+conferidas com Playwright + Chromium numa janela de 430px — fade do splash,
+seleção de estado com destaque e "Continuar" desabilitado até escolher, o
+SweetAlert real perguntando antes da Geolocation API, o toast (sem jQuery)
+confirmando o bairro achado, e o fluxo fechando com o `city_ibge_code`
+certo passado adiante.
+
 ## Próximos passos (ordem sugerida pela especificação, Parte I §10)
 
 1. **Módulo de pagamentos em PHP** — rotas com PDO, idempotência, webhooks
@@ -252,9 +324,11 @@ pra isso; qualquer parâmetro booleano futuro deve passar por ela.
    (Nota: a cláusula zero fixa Mercado Pago, mas o gateway real em produção
    hoje — no `fuudelivery-backend` em Go — é AbacatePay; vale confirmar
    antes de integrar de verdade.)
-2. **Portar as telas** de `FUUDelivery - 64 Telas (offline).html` para
-   Svelte + Bootstrap, uma fase por vez, seguindo a mesma ordem de risco
-   (dinheiro primeiro, conveniência depois).
+2. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
+   para Svelte + Bootstrap — só a Fase 1 (onboarding) está pronta, faltam
+   14 fases — seguindo a mesma ordem de risco (dinheiro primeiro,
+   conveniência depois), e ligando cada tela nova às rotas de API que já
+   existem (identity, catalog, ordering).
 
 ## Origem
 

@@ -1,0 +1,187 @@
+/*
+ * Design tokens do FUUdelivery.
+ * Fonte: paleta contada diretamente do HTML de origem
+ * ("FUUDelivery - 64 Telas (offline).html", grep de #hex por frequência) e
+ * o guia de identidade embutido nele ("IDENTIDADE FUUDELIVERY" / "COR COM
+ * SIGNIFICADO"). Cor tem significado — não é decoração:
+ *   vermelho  = marca e ação principal, nunca perigo (perigo é forma, não cor)
+ *   folha     = confirmado, aprovado, recebido
+ *   alerta    = só em texto e contorno: prazo, fraude, recusa
+ *   espera    = aguardando validação, prazo correndo
+ *   papel     = toda superfície, nos quatro apps — nunca tela escura
+ */
+:root {
+  /* marca / ação */
+  --fuu-red: #cc2b1d;
+  --fuu-red-hover: #c71a04;
+  --fuu-red-tint: #fdedeb;
+  --fuu-red-tint-2: #f3d5d1;
+
+  /* confirmado */
+  --fuu-leaf: #10633a;
+  --fuu-leaf-dark: #0e5232;
+  --fuu-leaf-tint: #e8f3ec;
+
+  /* alerta (só texto/contorno, nunca bloco preenchido) */
+  --fuu-alert: #b3231a;
+
+  /* espera / aguardando */
+  --fuu-wait-bg: #fff6e5;
+  --fuu-wait-text: #8a5a00;
+  --fuu-wait-tint: #efd9a8;
+
+  /* papel — toda superfície */
+  --fuu-paper: #f7f7f7;
+  --fuu-white: #ffffff;
+
+  /* texto e traço, do mais escuro ao mais claro */
+  --fuu-ink-1: #2f2f2f;
+  --fuu-ink-2: #4f4f4f;
+  --fuu-ink-3: #5a5a5a;
+  --fuu-ink-4: #717171;
+  --fuu-ink-5: #767676;
+  --fuu-ink-6: #7a7a7a;
+
+  /* bordas / fundos sutis */
+  --fuu-line-1: #dedede;
+  --fuu-line-2: #e6e6e6;
+  --fuu-line-3: #eaeaea;
+  --fuu-line-4: #ededed;
+  --fuu-line-5: #f2f2f2;
+  --fuu-line-6: #f4f4f4;
+
+  /* tipografia */
+  --fuu-font-display: 'Bricolage Grotesque', system-ui, sans-serif; /* títulos e marca */
+  --fuu-font-body: 'Familjen Grotesk', system-ui, sans-serif; /* toda a interface */
+  --fuu-font-mono: 'IBM Plex Mono', monospace; /* código de pedido, NSU, valor conferido a olho */
+
+  /* forma */
+  --fuu-radius-card: 11px; /* cartão: raio 11px e fio de 1px, nunca sombra difusa */
+  --fuu-radius-pill: 999px; /* ação principal: pílula, sempre */
+  --fuu-tap-customer: 48px; /* alvo de toque mínimo no app do cliente */
+  --fuu-tap-operator: 56px; /* alvo de toque mínimo no tablet da cozinha / app do entregador */
+}
+
+body {
+  margin: 0;
+  font-family: var(--fuu-font-body);
+  color: var(--fuu-ink-1);
+  background: var(--fuu-paper);
+  font-variant-numeric: tabular-nums;
+}
+
+.fuu-display {
+  font-family: var(--fuu-font-display);
+}
+
+.fuu-mono {
+  font-family: var(--fuu-font-mono);
+}
+
+/* Ação principal: pílula, vermelho cheio, texto branco -- nunca sombra difusa */
+.btn-fuu-primary {
+  font-family: var(--fuu-font-body);
+  font-weight: 600;
+  background: var(--fuu-red);
+  color: var(--fuu-white);
+  border: none;
+  border-radius: var(--fuu-radius-pill);
+  min-height: var(--fuu-tap-customer);
+  padding: 0 28px;
+}
+.btn-fuu-primary:hover,
+.btn-fuu-primary:focus {
+  background: var(--fuu-red-hover);
+  color: var(--fuu-white);
+}
+.btn-fuu-primary:disabled {
+  background: var(--fuu-line-2);
+  color: var(--fuu-ink-5);
+}
+
+/* Perigo se distingue pela FORMA (contorno, texto escuro), nunca por bloco vermelho */
+.btn-fuu-danger-outline {
+  font-family: var(--fuu-font-body);
+  font-weight: 600;
+  background: transparent;
+  color: var(--fuu-alert);
+  border: 1px solid var(--fuu-alert);
+  border-radius: var(--fuu-radius-pill);
+  min-height: var(--fuu-tap-customer);
+  padding: 0 28px;
+}
+
+.fuu-card {
+  background: var(--fuu-white);
+  border: 1px solid var(--fuu-line-3);
+  border-radius: var(--fuu-radius-card);
+  box-shadow: none;
+}
+
+.fuu-badge-wait {
+  display: inline-block;
+  background: var(--fuu-wait-bg);
+  color: var(--fuu-wait-text);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fuu-badge-confirmed {
+  display: inline-block;
+  background: var(--fuu-leaf-tint);
+  color: var(--fuu-leaf-dark);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/*
+ * O SweetAlert monta o modal direto no <body>, fora da árvore do
+ * componente Svelte que o chamou -- por isso essas regras ficam aqui
+ * (global), não num <style> local que o compilador isolaria por escopo.
+ */
+.swal-modal {
+  border-radius: 16px;
+  font-family: var(--fuu-font-body);
+}
+.swal-title {
+  font-family: var(--fuu-font-display);
+  font-size: 19px;
+}
+.swal-text {
+  color: var(--fuu-ink-3);
+  font-size: 14px;
+}
+.swal-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 24px 24px;
+}
+.swal-button-container {
+  margin: 0;
+  width: 100%;
+}
+.swal-button.swal-btn-locate {
+  background: var(--fuu-red);
+  color: var(--fuu-white);
+  border-radius: 999px;
+  min-height: var(--fuu-tap-customer);
+  width: 100%;
+  font-weight: 600;
+}
+.swal-button.swal-btn-locate:hover {
+  background: var(--fuu-red-hover);
+}
+.swal-button.swal-btn-manual {
+  background: transparent;
+  color: var(--fuu-ink-3);
+  border-radius: 999px;
+  min-height: var(--fuu-tap-customer);
+  width: 100%;
+  font-weight: 500;
+  box-shadow: none;
+}

@@ -12,6 +12,7 @@ on:
       - "api/**"
       - "lib/**"
       - "tests/**"
+      - "web/**"
       - ".github/workflows/ci.yml"
   pull_request:
     paths:
@@ -19,6 +20,7 @@ on:
       - "api/**"
       - "lib/**"
       - "tests/**"
+      - "web/**"
       - ".github/workflows/ci.yml"
 
 jobs:
@@ -91,3 +93,16 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
           JWT_SECRET: ci-test-secret
         run: bash tests/smoke_ordering.sh
+
+      - name: Instalar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build do front-end (web/)
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
