@@ -1,0 +1,65 @@
+name: migrations
+
+# ADR-002 (Especificacao FUUDelivery, Parte I): migracoes versionadas rodam
+# no CI, nunca no cPanel. Este workflow e a prova disso -- aplica as nove
+# migracoes do zero, reverte tudo e aplica de novo, contra um PostgreSQL 16
+# real com pg_cron, a cada push.
+
+on:
+  push:
+    paths:
+      - "db/**"
+      - ".github/workflows/migrations.yml"
+  pull_request:
+    paths:
+      - "db/**"
+      - ".github/workflows/migrations.yml"
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build imagem Postgres 16 + pg_cron
+        run: docker build -t fuudelivery-db ./db
+
+      - name: Subir o banco
+        run: |
+          docker run -d --name fuudelivery-db \
+            -e POSTGRES_DB=fuudelivery \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -p 5432:5432 \
+            fuudelivery-db \
+            postgres -c shared_preload_libraries=pg_cron -c cron.database_name=fuudelivery
+
+      - name: Esperar o banco aceitar conexao
+        run: |
+          for i in $(seq 1 30); do
+            docker exec fuudelivery-db pg_isready -U postgres -d fuudelivery && break
+            sleep 2
+          done
+
+      - name: Aplicar as 9 migracoes (up)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          bash db/migrate.sh up
+
+      - name: Reverter tudo e aplicar de novo (down 9, up) -- prova de que o round-trip fecha
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+        run: |
+          bash db/migrate.sh down 9
+          bash db/migrate.sh up
+
+      - name: Conferir que as tabelas do esquema existem
+        env:
+          PGPASSWORD: postgres
+        run: |
+          count=$(psql -h localhost -U postgres -d fuudelivery -tAc \
+            "SELECT count(*) FROM pg_tables WHERE schemaname='public'")
+          echo "tabelas criadas: $count"
+          test "$count" -ge 40
