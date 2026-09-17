@@ -9,6 +9,7 @@
   import Profile from './lib/screens/Profile.svelte';
   import RestaurantPage from './lib/screens/RestaurantPage.svelte';
   import CartDrawer from './lib/screens/CartDrawer.svelte';
+  import PaymentFlow from './lib/screens/PaymentFlow.svelte';
   import BottomNav from './lib/components/BottomNav.svelte';
   import QuickLogin from './lib/components/QuickLogin.svelte';
   import { isAuthenticated, loadProfile } from './lib/session.svelte.js';
@@ -23,6 +24,7 @@
   let tab = $state('home');
   let restaurantId = $state(null);
   let cartOpen = $state(false);
+  let paymentOpen = $state(false);
 
   if (isAuthenticated()) {
     loadProfile().catch(() => {});
@@ -49,10 +51,18 @@
   function openRestaurant(r) {
     restaurantId = r.id;
     cartOpen = false;
+    paymentOpen = false;
   }
   function closeRestaurant() {
     restaurantId = null;
     cartOpen = false;
+    paymentOpen = false;
+  }
+  function finishPayment() {
+    restaurantId = null;
+    cartOpen = false;
+    paymentOpen = false;
+    tab = 'home';
   }
 
   function openOrder() {
@@ -68,9 +78,13 @@
   <StateSelector onContinue={goToCity} />
 {:else if step === 'city'}
   <CityPicker {uf} onDone={finishOnboarding} />
+{:else if restaurantId && paymentOpen}
+  <div class="page-shell">
+    <PaymentFlow {restaurantId} {location} onBack={() => (paymentOpen = false)} onDone={finishPayment} />
+  </div>
 {:else if restaurantId && cartOpen}
   <div class="page-shell">
-    <CartDrawer {restaurantId} onBack={() => (cartOpen = false)} />
+    <CartDrawer {restaurantId} onBack={() => (cartOpen = false)} onCheckout={() => (paymentOpen = true)} />
   </div>
 {:else if restaurantId}
   <div class="page-shell">

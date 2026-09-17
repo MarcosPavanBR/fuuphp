@@ -43,7 +43,7 @@
   }
 
   function goToPayment() {
-    toastr.info('Fase 4 (pagamento) ainda não foi portada.');
+    onCheckout();
   }
 </script>
 

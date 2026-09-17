@@ -1,5 +1,5 @@
 // Cliente HTTP fino para a API PHP. Sem lib nova: fetch nativo.
-const BASE = import.meta.env.VITE_API_BASE ?? '/api/v1';
+export const BASE = import.meta.env.VITE_API_BASE ?? '/api/v1';
 
 const TOKEN_KEY = 'fuu_access_token';
 
@@ -31,7 +31,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request(method, path, { body, auth = false, query, token } = {}) {
+async function request(method, path, { body, form, auth = false, query, token, headers: extraHeaders } = {}) {
   const url = new URL(BASE + path, window.location.origin);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
@@ -41,14 +41,17 @@ async function request(method, path, { body, auth = false, query, token } = {}) 
     }
   }
 
-  const headers = { 'Content-Type': 'application/json' };
+  // form (multipart, ex. upload_proof.php) não leva Content-Type manual --
+  // o navegador escreve o boundary sozinho; JSON leva.
+  const headers = form ? {} : { 'Content-Type': 'application/json' };
+  Object.assign(headers, extraHeaders ?? {});
   const bearer = token ?? (auth ? getStoredToken() : null);
   if (bearer) headers.Authorization = `Bearer ${bearer}`;
 
   const res = await fetch(url, {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: form ?? (body !== undefined ? JSON.stringify(body) : undefined),
   });
 
   const data = await res.json().catch(() => ({}));

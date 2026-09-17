@@ -451,14 +451,14 @@ o pagamento — ele não existia antes deste módulo.
   ciclo completo de aprovação/recusa humana do Pix — contra o mesmo banco
   migrado que os outros módulos, em sequência, sem colisão.
 
-## Front-end (`web/`) — Fase 1, Fase 2 e Fase 3, decisões de implementação
+## Front-end (`web/`) — Fase 1 a Fase 4, decisões de implementação
 
 Svelte 5 + Vite, Bootstrap 5, Bootstrap Icons, `sweetalert` (não
 `sweetalert2` — o pacote `sweetalert` na versão 2.x do npm *é* a
 biblioteca clássica, a mesma API `swal()` que o mock usa). Fase 1 (splash,
 seleção de estado, cidade+bairro), Fase 2 (home, busca, fidelidade,
-pedidos, perfil) e Fase 3 (loja, item, carrinho) estão portadas; as outras
-12 fases ainda não têm componente.
+pedidos, perfil), Fase 3 (loja, item, carrinho) e Fase 4 (pagamento) estão
+portadas; as outras 11 fases ainda não têm componente.
 
 ```
 web/
@@ -467,7 +467,8 @@ web/
                                de origem (grep de #hex por frequência —
                                ver comentário no topo do arquivo)
     lib/
-      api.js                      cliente fetch fino (base URL, token, erros)
+      api.js                      cliente fetch fino (base URL, token, erros,
+                                   headers extra, multipart -- ver Fase 4)
       session.svelte.js            estado de sessão reativo (login/logout real)
       cart.svelte.js                estado do carrinho, espelha a resposta da API
                                      a cada ação (não um store que finge sincronizar)
@@ -478,6 +479,7 @@ web/
         PhoneScreen.svelte              moldura de largura de celular
         BottomNav.svelte                5 abas (house/search/cart/star/person)
         QuickLogin.svelte               login mínimo real (ver abaixo)
+        QuickAddress.svelte             endereço mínimo real (ver Fase 4 abaixo)
         ItemModal.svelte                3.2 — variações, observação, preço ao vivo
       screens/
         Splash.svelte                   1.1 — fade, avança sozinho
@@ -490,7 +492,15 @@ web/
         Profile.svelte                  2.5 — perfil, estatísticas, endereços
         RestaurantPage.svelte           3.1 — cardápio por categoria, item esgotado visível
         CartDrawer.svelte               3.3 — itens, cupom (só UI), totais reais
-    App.svelte                  orquestra Fase 1 -> Fase 2 (abas) -> Fase 3
+        PaymentFlow.svelte              orquestra a Fase 4 inteira (endereço ->
+                                         seleção -> método -> resultado)
+        PaymentSelector.svelte          4.1 — grid de 5 métodos + BitPay (BETA, desabilitado)
+        CardForm.svelte                 4.2 — campos do cartão (tokenização real pendente)
+        PixPayment.svelte               4.3 — QR + copia-e-cola real, contador do banco
+        ProofUploader.svelte            4.4 — compressão via canvas, progresso real (XHR)
+        CashPayment.svelte              4.5 — troco, valida contra o total
+        MachinePayment.svelte           4.6 — débito/crédito, bandeiras aceitas
+    App.svelte                  orquestra Fase 1 -> Fase 2 (abas) -> Fase 3/4
                                  (tela cheia por cima das abas, com volta)
 ```
 
@@ -607,6 +617,87 @@ web/
   subtotal recalculado no servidor (R$38,90 → R$77,80). Zero erros de
   console do início ao fim.
 
+**Fase 4 — decisões adicionais:**
+
+- **`PaymentFlow.svelte` orquestra a fase inteira**, mas quem chama a API
+  de verdade é cada tela filha via callback (`onSubmit`/`onContinue`) — o
+  mesmo padrão de props+callback já usado em `ItemModal`/`CartDrawer`,
+  não um store novo só pra isto.
+- **Endereço mínimo (`QuickAddress.svelte`), no mesmo espírito do
+  `QuickLogin.svelte`**: lista os endereços salvos ou cadastra um novo
+  (chama `/addresses/list.php` e `/addresses/create.php` de verdade) — não
+  é a tela de CRUD completo da Fase 6 (editar, apagar, rótulo, padrão),
+  que ainda não foi portada. Sem isto, não haveria como testar o checkout
+  ponta a ponta nesta passada.
+- **`orders/checkout.php` só é chamado uma vez por fluxo.** Ele transiciona
+  `cart → pending_payment`; não existe "carrinho" pra achar numa segunda
+  chamada. Retry de pagamento (CVV errado, etc.) chama só `payments/pay.php`
+  de novo em cima do mesmo `order.id` — `PaymentFlow` guarda esse estado
+  (`order !== null` vira o sinal de "checkout já aconteceu"). Trocar de
+  método DEPOIS que o checkout já rodou (ex.: Pix sem chave cadastrada,
+  volta e escolhe cartão) não reabre um carrinho novo automaticamente —
+  isso exigiria um endpoint de abandono que não existe ainda; registrado
+  como simplificação no código.
+- **Recusa de cartão (HTTP 402) não é um "erro" pro fluxo — é uma decisão
+  de domínio.** `checkoutAndPay()` distingue os dois: um 402 cujo corpo já
+  traz `order`/`payment` (a forma que `payments/pay.php` sempre devolve
+  numa recusa) é tratado como resultado normal, não repassado como
+  exceção — vira a tela "Pagamento recusado" (SweetAlert, como a Fase 5.4
+  pede) e volta pro início, porque um pedido `rejected` é estado terminal
+  no banco (`advance_order()` não tem transição saindo dele) — não dá pra
+  "tentar de novo" no mesmo pedido.
+- **Tokenização real do MercadoPago.js não está integrada** — este
+  ambiente não tem uma Public Key de sandbox do Mercado Pago. `CardForm.svelte`
+  tem os mesmos campos do mock (4.2), mas manda um token placeholder (os
+  dígitos do cartão) em vez de um token de verdade gerado pelo SDK no
+  navegador; funciona porque o backend também está em
+  `MERCADOPAGO_MODE=fake` neste ambiente (ver "Módulo de pagamentos"
+  acima). Um selo amarelo avisa isso na própria tela, mesmo padrão do
+  "login provisório" do `QuickLogin`.
+- **Progresso de upload é real, não decorativo.** `fetch()` não expõe
+  progresso de envio de forma confiável entre navegadores, então
+  `ProofUploader.svelte` usa `XMLHttpRequest` só pra esta chamada
+  (`xhr.upload.onprogress`) — é por isso que este componente não usa
+  `lib/api.js` como os outros. A compressão antes do envio também é real:
+  redesenha a imagem num `<canvas>` (máximo 1280px no lado maior, JPEG
+  80%) e mostra o tamanho antes/depois, exatamente como o chip da tela
+  4.4 descreve.
+- **Pix copia-e-cola (BR Code) veio de `lib/pix.php` de verdade** — não é
+  texto decorativo. `PixPayment.svelte` exibe o payload EMV completo
+  (testado visualmente: começa com `000201`, contém `br.gov.bcb.pix`).
+  O CNPJ mostrado na tela exigiu adicionar a coluna `cnpj` na resposta de
+  `restaurants/show.php` (não vazava antes — é dado público, mesmo que já
+  sai em `partner_login.php`).
+- **Contador da tela 4.3 lê `orders.verification_deadline` do servidor**,
+  não um timer local — atualizado a cada segundo (`setInterval`) só pra
+  formatar `mm:ss`, nunca pra decidir quando expira; quem decide isso é o
+  `pg_cron` (`expire_pending_verifications`, migração `009`).
+- **Troco (`CashPayment`) valida contra o TOTAL do pedido no cliente**,
+  mais rigoroso que o mínimo que o próprio banco exige (`CHECK
+  cash_change_valid` só pede `change_for >= subtotal`, sem contar o
+  frete) — o valor mandado pro backend nunca fica abaixo do que o cliente
+  realmente deve, então a validação mais frouxa do banco nunca chega a
+  ser testada pelo caminho feliz desta tela.
+- **Validado com Playwright, os cinco métodos, ponta a ponta e contra o
+  backend real** (não só compilado): dinheiro com troco → "Pagamento
+  aprovado"; maquininha com bandeira obrigatória → "Pagamento aprovado";
+  cartão aprovado (modo fake) → "Pagamento aprovado" com bandeira/final
+  registrados; cartão recusado (interceptado com a resposta 402 exata que
+  o backend manda, já que o formulário real só aceita dígitos e a
+  convenção de recusa do modo fake do backend é alfanumérica) →
+  "Pagamento recusado", volta pro início; Pix manual → QR real exibido →
+  upload de um JPEG de teste gerado on-the-fly → "Comprovante em
+  análise" → aprovado pela loja via `restaurants/approve_pix.php` (login
+  de loja real) → pedido confirmado `paid`. Um bug real de reatividade
+  apareceu nesta fase e foi corrigido: `payments/pay.php` devolve
+  `pix_copy_paste` na raiz do corpo, não dentro de `payment` — o primeiro
+  código guardava só `payment`, então o código Pix aparecia em branco na
+  tela; achado comparando o texto renderizado com o esperado via
+  Playwright, não só lendo o código. Outro: limpar o carrinho (`clearCartState()`)
+  acontecia ANTES do SweetAlert de resultado, então a tela por trás do
+  modal (ex.: "Total do pedido") mostrava R$0,00 por uma fração de
+  segundo — corrigido movendo a limpeza pra depois do modal fechar.
+
 ## Como rodar localmente
 
 ```bash
@@ -690,52 +781,64 @@ o pedido, aprovação e recusa humana do Pix com aprovação dupla barrada por
 mesmo CI, em `MERCADOPAGO_MODE=fake` (ver seção "Módulo de pagamentos"
 acima pro porquê).
 
-O front-end validou o mesmo jeito, não só compilado, nas três fases com
+O front-end validou o mesmo jeito, não só compilado, nas quatro fases com
 Playwright + Chromium numa janela de 430px: Fase 1 (fade do splash,
 seleção de estado com destaque, SweetAlert real antes da Geolocation API,
 toast sem jQuery), Fase 2 (lojas ordenadas por distância de verdade,
 filtro de categoria refazendo a consulta, busca de produto, login real por
 OTP destravando as abas autenticadas, perfil com estatísticas reais,
-navegação Perfil → Pedidos → volta) e Fase 3 (cardápio com item esgotado
+navegação Perfil → Pedidos → volta), Fase 3 (cardápio com item esgotado
 visível, modal de variação com preço ao vivo, login embutido no modal
 preservando seleção, carrinho persistente com recálculo real de
-quantidade). Um bug real de CSS apareceu nesta fase e está documentado na
-seção "Módulo de carrinho" acima — a classe `.modal` colidindo com o
-Bootstrap, achada checando `boundingBox()` via Playwright, não só lendo o
-código.
+quantidade) e Fase 4 (os cinco métodos de pagamento contra o backend real,
+incluindo o ciclo completo de Pix manual com aprovação humana pelo painel
+da loja — ver seção "Fase 4 — decisões adicionais" acima pros dois bugs
+reais que apareceram e foram corrigidos nesta validação). Um bug real de
+CSS apareceu na Fase 3 e está documentado na seção "Módulo de carrinho"
+acima — a classe `.modal` colidindo com o Bootstrap, achada checando
+`boundingBox()` via Playwright, não só lendo o código.
 
 ## Próximos passos (ordem sugerida pela especificação, Parte I §10)
 
-1. **Fase 4 no front (seleção de método, cartão, Pix, dinheiro,
-   maquininha)** — o backend já existe (`orders/checkout.php`,
-   `payments/pay.php`, `payments/upload_proof.php`, ver seção "Módulo de
-   pagamentos" acima); falta a tela Svelte que chama isso a partir do
-   botão "Ir para pagamento" do `CartDrawer` (3.3).
-2. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
-   para Svelte + Bootstrap — Fases 1, 2 e 3 prontas, Fase 4 com backend
-   pronto e tela pendente, faltam as outras 11 — seguindo a mesma ordem de
-   risco (dinheiro primeiro, conveniência depois).
-3. **Fase 7.2 (push) e impressão ESC/POS** — `restaurants/approve_pix.php`
+1. **Fase 5 no front (pós-pedido e acompanhamento)** — hoje o resultado do
+   pagamento é um SweetAlert simples (`PaymentFlow.svelte`, `showResult()`),
+   com só o essencial de 5.1/5.2/5.4. Faltam a tela de tracking em tempo
+   real (5.3, SSE/LISTEN-NOTIFY + mapa), aprovado/em análise como telas
+   próprias (5.1/5.2) e avaliação do pedido (5.5).
+2. **Fase 6 no front (endereços, cartões salvos, configurações).**
+   `QuickAddress.svelte` cobre o mínimo pra Fase 4 funcionar (listar/criar
+   endereço); falta o CRUD completo (editar, apagar, rótulo, padrão) e
+   cartões salvos via Mercado Pago (nunca guardar PAN, só bandeira/4
+   últimos dígitos/id do cartão salvo).
+3. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
+   para Svelte + Bootstrap — Fases 1 a 4 prontas, faltam as outras 10.
+4. **Fase 7.2 (push) e impressão ESC/POS** — `restaurants/approve_pix.php`
    já grava o evento e avança o pedido, mas notificar o cliente e imprimir
    a comanda dependem de uma fila de push (outbox + worker) e de conexão
    com impressora térmica que ainda não existem neste repositório.
-4. **Reembolso (Fase 13) e reconciliação de maquininha (Fase 9).**
+5. **Reembolso (Fase 13) e reconciliação de maquininha (Fase 9).**
    `refunds` e `card_transactions` existem no esquema (migração `005`) sem
    endpoint — os dois dependem de telas/fluxos (disputa, entregador
    confirmando NSU) que ainda não foram portados.
-5. **Decisão de produto pendente: fidelidade/pontos.** A tela 2.3 existe
+6. **Decisão de produto pendente: fidelidade/pontos.** A tela 2.3 existe
    só como desenho (dado de exemplo, sem tabela no banco). Se for pra
    valer, precisa de um ledger de pontos — mesmo padrão append-only do
    `ledger_entries` financeiro — e isso é decisão de escopo, não algo pra
    inventar numa migração de suporte a tela.
-6. **Decisão de produto pendente: cupons.** `coupons`/`coupon_redemptions`
+7. **Decisão de produto pendente: cupons.** `coupons`/`coupon_redemptions`
    existem desde a migração `008`, mas não há endpoint de resgate. O
    `CartDrawer` (3.3) já tem o campo de UI, esperando o backend.
-7. **Decisão de produto pendente: Pix automático sem tela.** O enum
+8. **Decisão de produto pendente: Pix automático sem tela.** O enum
    `payment_method` já tem `pix_auto` e o backend já processa (webhook
    incluído), mas o mock de 64 telas só desenha o fluxo manual (Fase 4.3);
    não há uma tela própria pra "Pix instantâneo" — fica pra quando/se essa
    tela for desenhada.
+9. **Trocar de método de pagamento depois do checkout já ter acontecido
+   não reabre um carrinho novo** (ex.: Pix manual sem chave cadastrada,
+   volta e escolhe cartão) — precisaria de um endpoint de abandono de
+   `pending_payment` que não existe ainda. Registrado como simplificação
+   em `PaymentFlow.svelte`; não é o caminho comum (a maioria das voltas
+   acontece antes do checkout, quando o retry já funciona certo).
 
 ## Origem
 
