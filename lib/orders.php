@@ -42,6 +42,18 @@ function fetch_order_items(PDO $pdo, int $orderId): array
 }
 
 /**
+ * Linha do tempo do pedido (Fase 5.3, "cada etapa é uma linha de
+ * order_events, então o histórico é auditável"). Vem de advance_order() --
+ * nenhum evento é inventado aqui, só lido.
+ */
+function fetch_order_events(PDO $pdo, int $orderId): array
+{
+    $stmt = $pdo->prepare('SELECT * FROM order_events WHERE order_id = :id ORDER BY created_at, id');
+    $stmt->execute(['id' => $orderId]);
+    return $stmt->fetchAll();
+}
+
+/**
  * Garante que quem está pedindo pode ver/mexer nesse pedido: cliente só o
  * próprio, loja só o seu restaurante. Encerra a requisição com 403/404
  * quando não pode.

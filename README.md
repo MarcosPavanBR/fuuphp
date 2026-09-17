@@ -30,16 +30,18 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (dez migrações SQL), os módulos **identity**,
+A **fundação de banco** (onze migrações SQL), os módulos **identity**,
 **catálogo + pedido + checkout**, **descoberta** (busca de loja e
-produto), **carrinho incremental** e **pagamentos** (cartão via Mercado
+produto), **carrinho incremental**, **pagamentos** (cartão via Mercado
 Pago, Pix automático e manual, dinheiro, maquininha, validação humana do
-Pix) em PHP sobre ela, e o **front-end em Svelte** (`web/`) cobrindo a
-Fase 1 (onboarding), a Fase 2 (home, busca, fidelidade, pedidos, perfil) e
-a Fase 3 (loja, item, carrinho) — 3 das 15 fases / 64 telas; a Fase 4
-(pagamento) tem backend completo mas ainda não tem tela. Ledger, dispatch
-e o resto ainda não foram portados. Segue a ordem sugerida pela
-especificação (12 semanas, Parte I §10) — catálogo/pedido vem antes de
+Pix) e **acompanhamento pós-pedido** (linha do tempo, tracking em tempo
+real por SSE, avaliação) em PHP sobre ela, e o **front-end em Svelte**
+(`web/`) cobrindo a Fase 1 (onboarding), a Fase 2 (home, busca, fidelidade,
+pedidos, perfil), a Fase 3 (loja, item, carrinho) e a Fase 4 (pagamento) —
+4 das 15 fases / 64 telas; a Fase 5 (pós-pedido) tem backend completo mas
+ainda não tem tela. Ledger, dispatch e o resto ainda não foram portados.
+Segue a ordem sugerida pela especificação (12 semanas, Parte I §10) —
+catálogo/pedido vem antes de
 pagamentos porque `POST /v1/orders/:id/pay` pressupõe que o pedido já
 existe.
 
@@ -81,12 +83,16 @@ api/v1/orders/               pedido e checkout
                                  (Fase 3 → Fase 4): valida endereço/método/
                                  política, avança cart → pending_payment
                                  SEM criar um segundo pedido
-  show.php                     GET  ?id= — detalhe (dono ou loja do pedido, só)
+  show.php                     GET  ?id= — detalhe (dono ou loja do pedido, só),
+                                agora com a linha do tempo (order_events)
   list.php                     GET  — pedidos do cliente autenticado, com nome
                                 da loja e contagem de itens
   status.php                   POST — única porta pra mudar status, por cima de
                                 advance_order(); autorização por papel aqui,
                                 legalidade da transição só no banco
+  track.php                     GET  ?id= — SSE (Fase 5.3): snapshot na
+                                 hora + evento ao vivo por LISTEN/NOTIFY,
+                                 ver seção própria abaixo
 api/v1/payments/              módulo de pagamentos (Fase 4 + validação humana
                                do Pix, Fase 7.3) — ver seção própria abaixo
   pay.php                        POST — cobra o método já escolhido no
@@ -99,19 +105,27 @@ api/v1/payments/              módulo de pagamentos (Fase 4 + validação humana
   webhook_mercadopago.php        POST — webhook assíncrono (cartão em
                                   reanálise, Pix automático) — fonte da
                                   verdade, não a resposta síncrona de pay.php
+api/v1/reviews/
+  create.php                     POST — Fase 5.5: só com status='delivered',
+                                  uma nota por pedido (UNIQUE em reviews)
 api/v1/profile/
   show.php                      GET  — usuário + estatísticas (pedidos, cupons;
                                  pontos de fidelidade fica null, ver README)
 lib/                          código compartilhado entre módulos
   bootstrap.php                 carrega .env, CORS (dev), registra handler de erro, requires
-  db.php                          PDO (DATABASE_URL → pgsql DSN) + pg_bool()
+  db.php                          PDO (DATABASE_URL → pgsql DSN) + pg_bool() +
+                                   raw_pg_connect() (ext-pgsql cru, só pro
+                                   LISTEN/NOTIFY de orders/track.php)
   response.php                    envelope de erro/sucesso com trace_id (contrato de API, Parte I §3)
   jwt.php                          JWT HS256 escrito à mão (sem dependência nova)
   sessions.php                    emissão e rotação de sessão (Parte I §7)
   otp.php                          geração/hash de código, limite de pedidos
-  auth_guard.php                  exige access token válido
+  auth_guard.php                  exige access token válido + variante por
+                                   query string só pro SSE (EventSource não
+                                   manda header customizado)
   policy.php                      resolve política loja → plataforma, gera o policy_snapshot
-  orders.php                      chama advance_order(), autorização de acesso a pedido
+  orders.php                      chama advance_order(), autorização de acesso a
+                                   pedido, fetch_order_events() (linha do tempo, Fase 5.3)
   cart.php                        price_line() (preço de uma linha, usado por
                                    cart/add_item.php E orders/create.php),
                                    find_or_create_cart(), recompute_cart_subtotal()
@@ -142,6 +156,11 @@ tests/
                                  barrado), upload+aprovação/recusa de
                                  comprovante Pix, aprovação dupla barrada,
                                  webhook do Pix automático
+  smoke_tracking.sh             orders/show.php com linha do tempo, SSE de
+                                 orders/track.php (snapshot + evento ao vivo
+                                 via LISTEN/NOTIFY em outro processo),
+                                 reviews/create.php (gate por delivered,
+                                 uma avaliação por pedido)
   support/random_cnpj.php       CNPJ aleatório com dígito verificador válido,
                                  pra seed de teste não colidir entre scripts
 db/
@@ -174,6 +193,10 @@ db/
                                           logo_key, lat, lng + índice trigram
                                           em menu_items.name (fora das 42
                                           tabelas originais — ver seção própria)
+    011_reviews.up.sql  / .down.sql      reviews (Fase 5.5 -- também fora
+                                          das 42 tabelas originais, sem
+                                          coluna de nota agregada em
+                                          restaurants, ver seção própria)
   migrate.sh              runner simples (up / down N) via DATABASE_URL
   Dockerfile               postgres:16 + pg_cron
 docker-compose.yml          banco (Postgres) + app (PHP embutido) para desenvolvimento
@@ -451,6 +474,66 @@ o pagamento — ele não existia antes deste módulo.
   ciclo completo de aprovação/recusa humana do Pix — contra o mesmo banco
   migrado que os outros módulos, em sequência, sem colisão.
 
+## Módulo de acompanhamento pós-pedido — decisões de implementação
+
+Fase 5 do mock (aprovado, em análise, tracking em tempo real, rejeitado,
+avaliação), na parte que é backend puro: linha do tempo, SSE e avaliação.
+A Fase 5 no front (as 5 telas de verdade) ainda não foi portada — ver
+"Próximos passos".
+
+- **`reviews` é tabela nova (migração 011), fora das 42 originais —
+  decisão consciente, não um esquecimento.** A migração `010` já tinha
+  deixado registrado que "agregação, moderação" (nota média da loja
+  exibida em Home/Search, moderação de comentário) ficava de fora por
+  exigir decisão de produto. Esta migração respeita esse limite: nenhuma
+  coluna de nota agregada entra em `restaurants`, nenhuma tela lista ou
+  pondera reviews de outros usuários. O que entra é só o registro do
+  feedback em si — rating, tags, comentário, gorjeta pro entregador — os
+  campos que a tela 5.5 descreve, um por pedido (`UNIQUE (order_id)`), sem
+  inventar além disso.
+- **Gorjeta da avaliação (`courier_tip`) é REGISTRADA, não cobrada de
+  novo.** O mock diz "cobrada no mesmo cartão do pedido" — fazer isso de
+  verdade exigiria uma segunda transação no Mercado Pago associada ao
+  pagamento original, que este módulo não implementa. Mesmo padrão de
+  dinheiro/maquininha no módulo de pagamentos: intenção registrada,
+  captura de valor de verdade fica pra outro módulo.
+- **Avaliação só é aceita com `status = 'delivered'`** — e nenhum pedido
+  chega lá sozinho ainda: a transição `delivering → delivered` só existe
+  pra quem tem o app do entregador (Fase 8), que não foi construído nesta
+  passada. `tests/smoke_tracking.sh` avança o pedido manualmente via
+  `advance_order()` por `psql`, o mesmo artifício que os outros smoke
+  tests já usavam pra simular etapas de um módulo futuro (`smoke_ordering.sh`
+  já fazia isso pra simular pagamento aprovado antes deste módulo existir).
+- **SSE de verdade, não polling disfarçado — com um limite documentado.**
+  `orders/track.php` abre uma conexão `LISTEN order_changed` numa conexão
+  pgsql crua (`raw_pg_connect()`, PDO não tem LISTEN/NOTIFY assíncrono) e
+  manda um evento a cada `pg_notify` que `advance_order()` já dispara
+  (migração 004). A conexão dura só 25 segundos de propósito: o servidor
+  embutido do PHP (`php -S`), usado neste ambiente de desenvolvimento,
+  processa uma requisição por vez — segurar a conexão pra sempre travaria
+  o resto da API. O `EventSource` do navegador reconecta sozinho quando a
+  conexão cai (é o próprio protocolo SSE), e cada reconexão manda um
+  snapshot completo primeiro — então nenhum evento se perde, funciona como
+  long-poll encadeado. Atrás de PHP-FPM com múltiplos workers (produção),
+  o mesmo código aguentaria uma janela bem maior sem esse limite ser
+  necessário.
+- **`EventSource` não manda header customizado — o token vai por query
+  string nesta rota, como exceção documentada.** `require_auth_header_or_query()`
+  (`lib/auth_guard.php`) aceita `?token=` só aqui; toda outra rota continua
+  exigindo `Authorization: Bearer` normalmente. É `GET`, então o token na
+  URL não é mais exposto do que qualquer outro parâmetro de leitura —
+  ainda assim, um access token de 15 minutos de vida, não um refresh.
+- **`orders/show.php` ganhou `events`** (a mesma linha do tempo que o SSE
+  manda) — pra quem abre o pedido sem já estar ouvindo o SSE (ex.: entrou
+  direto pela lista de pedidos) ver o histórico sem esperar o próximo
+  evento.
+- **Validado contra Postgres e PHP reais, com o SSE testado de verdade —
+  não só a forma do JSON.** `tests/smoke_tracking.sh` abre a conexão SSE
+  de um processo, dispara `advance_order()` de OUTRO processo (`psql`) 2
+  segundos depois, e confere que o evento `preparing` chegou no stream
+  antes da conexão fechar — prova que o `LISTEN/NOTIFY` está entregando de
+  verdade entre processos, não só que a rota responde 200.
+
 ## Front-end (`web/`) — Fase 1 a Fase 4, decisões de implementação
 
 Svelte 5 + Vite, Bootstrap 5, Bootstrap Icons, `sweetalert` (não
@@ -703,9 +786,9 @@ web/
 ```bash
 docker compose up -d
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
-bash db/migrate.sh up           # aplica as 10, em ordem
+bash db/migrate.sh up           # aplica as 11, em ordem
 bash db/migrate.sh down 3       # reverte as 3 últimas
-bash db/migrate.sh down 10      # reverte tudo
+bash db/migrate.sh down 11      # reverte tudo
 
 cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN se precisar
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
@@ -713,6 +796,7 @@ JWT_SECRET=dev-secret bash tests/smoke_ordering.sh    # fluxo completo de checko
 JWT_SECRET=dev-secret bash tests/smoke_discovery.sh   # lista por distância, busca, perfil (semeia sozinho)
 JWT_SECRET=dev-secret bash tests/smoke_cart.sh        # carrinho incremental (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_payments.sh   # pagamentos (semeia sozinho)
+JWT_SECRET=dev-secret bash tests/smoke_tracking.sh    # timeline, SSE, avaliação (semeia sozinho)
 
 php -S localhost:8080                  # API, num terminal
 cd web && npm install && npm run dev   # front-end Svelte, noutro terminal — http://localhost:5173
@@ -722,7 +806,7 @@ cd web && npm install && npm run dev   # front-end Svelte, noutro terminal — h
 está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
 de conta sandbox pra rodar nada disto localmente.
 
-As dez migrações foram validadas de ponta a ponta (`up` completo, `down`
+As onze migrações foram validadas de ponta a ponta (`up` completo, `down`
 completo em ordem reversa, `up` de novo) contra um PostgreSQL 16 real com
 `pg_cron` instalado, incluindo um teste funcional de `advance_order()`
 confirmando que transições legais avançam o pedido e transições ilegais

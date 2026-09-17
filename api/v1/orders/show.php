@@ -23,4 +23,5 @@ authorize_order_access($order, $claims);
 json_response(200, [
     'order' => $order,
     'items' => fetch_order_items($pdo, $orderId),
+    'events' => fetch_order_events($pdo, $orderId),
 ]);

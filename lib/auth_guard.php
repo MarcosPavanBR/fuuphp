@@ -11,12 +11,32 @@ function require_auth(): array
     if (!str_starts_with($header, 'Bearer ')) {
         error_response(401, 'unauthorized', 'Token de acesso ausente.');
     }
+    return decode_access_token(substr($header, 7));
+}
 
+function decode_access_token(string $rawToken): array
+{
     try {
-        return Jwt::decode(substr($header, 7), jwt_secret());
+        return Jwt::decode($rawToken, jwt_secret());
     } catch (Throwable $e) {
         error_response(401, 'invalid_token', 'Token inválido ou expirado. Use /v1/auth/refresh.');
     }
+}
+
+/**
+ * Só pra orders/track.php (SSE, Fase 5.3): EventSource, a API nativa do
+ * navegador, não deixa mandar headers customizados, então não tem como
+ * usar Authorization: Bearer do jeito normal nesta rota. Aceita o token
+ * por query string como exceção documentada -- só nesta função, só GET,
+ * nunca numa rota que muda estado. Toda outra rota continua exigindo o
+ * header.
+ */
+function require_auth_header_or_query(): array
+{
+    if (isset($_GET['token']) && is_string($_GET['token']) && $_GET['token'] !== '') {
+        return decode_access_token($_GET['token']);
+    }
+    return require_auth();
 }
 
 function client_ip(): ?string
