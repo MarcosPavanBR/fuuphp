@@ -30,18 +30,19 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (onze migrações SQL), os módulos **identity**,
+A **fundação de banco** (doze migrações SQL), os módulos **identity**,
 **catálogo + pedido + checkout**, **descoberta** (busca de loja e
 produto), **carrinho incremental**, **pagamentos** (cartão via Mercado
 Pago, Pix automático e manual, dinheiro, maquininha, validação humana do
-Pix) e **acompanhamento pós-pedido** (linha do tempo, tracking em tempo
-real por SSE, avaliação) em PHP sobre ela, e o **front-end em Svelte**
-(`web/`) cobrindo a Fase 1 (onboarding), a Fase 2 (home, busca, fidelidade,
-pedidos, perfil), a Fase 3 (loja, item, carrinho), a Fase 4 (pagamento) e a
-Fase 5 (pós-pedido: linha do tempo, tracking ao vivo, avaliação) — 5 das
-15 fases / 64 telas. Ledger, dispatch e o resto ainda não foram portados.
-Segue a ordem sugerida pela especificação (12 semanas, Parte I §10) —
-catálogo/pedido vem antes de
+Pix), **acompanhamento pós-pedido** (linha do tempo, tracking em tempo
+real por SSE, avaliação) e **conta** (endereços CRUD, cartões salvos via
+Mercado Pago) em PHP sobre ela, e o **front-end em Svelte** (`web/`)
+cobrindo a Fase 1 (onboarding), a Fase 2 (home, busca, fidelidade,
+pedidos, perfil), a Fase 3 (loja, item, carrinho), a Fase 4 (pagamento), a
+Fase 5 (pós-pedido) e a Fase 6 (conta, endereços, cartões, configurações)
+— 6 das 15 fases / 64 telas. Ledger, dispatch e o resto ainda não foram
+portados. Segue a ordem sugerida pela especificação (12 semanas, Parte I
+§10) — catálogo/pedido vem antes de
 pagamentos porque `POST /v1/orders/:id/pay` pressupõe que o pedido já
 existe.
 
@@ -65,9 +66,22 @@ api/v1/restaurants/         catálogo, descoberta (público, exceto orders.php
   approve_pix.php               POST — Fase 7.3: validação humana do Pix
                                  manual, SELECT...FOR UPDATE trava aprovação
                                  dupla, aprova/recusa chama advance_order()
-api/v1/addresses/           endereços do cliente autenticado
+api/v1/addresses/           endereços do cliente autenticado (Fase 6.1)
   create.php                   POST — cadastra endereço
   list.php                     GET  — lista os do usuário logado
+  update.php                    POST — edita campos e/ou troca o padrão
+                                 (desmarca os outros na mesma transação)
+  delete.php                    POST — apaga; bloqueado com 409 se o
+                                 endereço já foi usado num pedido (FK)
+api/v1/cards/                cartões salvos via Mercado Pago (Fase 6.2)
+  create.php                    POST — cria o Customer no Mercado Pago na
+                                 primeira vez (users.mp_customer_id fica
+                                 guardado), salva o cartão; primeiro
+                                 cartão vira padrão sozinho
+  list.php                      GET  — cartões do usuário logado
+  update.php                     POST — só troca o padrão (o resto do
+                                  cartão é imutável depois de salvo)
+  delete.php                     POST — remove no Mercado Pago e no banco
 api/v1/cart/                 carrinho incremental (Fase 3) — item por item, não
                               tudo de uma vez como orders/create.php
   add_item.php                  POST — acha ou cria o carrinho (status='cart') da
@@ -138,8 +152,9 @@ lib/                          código compartilhado entre módulos
                                    CRC16 conferido contra o vetor de teste
                                    padrão do algoritmo antes de entrar em uso
   mercadopago.php                 cliente HTTP da Payments API do Mercado
-                                   Pago (cartão, Pix), com modo "fake" pra
-                                   rodar sem conta sandbox real (ver README)
+                                   Pago (cartão, Pix, Customer/Cards pra
+                                   cartão salvo), com modo "fake" pra rodar
+                                   sem conta sandbox real (ver README)
 tests/
   smoke_identity.sh             fluxo completo de identity (signup, código errado,
                                  refresh, detecção de reuso) contra um banco já migrado
@@ -161,6 +176,10 @@ tests/
                                  via LISTEN/NOTIFY em outro processo),
                                  reviews/create.php (gate por delivered,
                                  uma avaliação por pedido)
+  smoke_account.sh              CRUD de endereços (troca de padrão, bloqueio
+                                 de apagar endereço em uso) e cartões salvos
+                                 (mp_customer_id reaproveitado entre
+                                 cartões, troca de padrão, remoção)
   support/random_cnpj.php       CNPJ aleatório com dígito verificador válido,
                                  pra seed de teste não colidir entre scripts
 db/
@@ -197,6 +216,9 @@ db/
                                           das 42 tabelas originais, sem
                                           coluna de nota agregada em
                                           restaurants, ver seção própria)
+    012_saved_cards.up.sql / .down.sql   saved_cards (Fase 6.2) +
+                                          users.mp_customer_id -- também
+                                          fora das 42 originais
   migrate.sh              runner simples (up / down N) via DATABASE_URL
   Dockerfile               postgres:16 + pg_cron
 docker-compose.yml          banco (Postgres) + app (PHP embutido) para desenvolvimento
@@ -534,14 +556,58 @@ A Fase 5 no front (as 5 telas de verdade) ainda não foi portada — ver
   antes da conexão fechar — prova que o `LISTEN/NOTIFY` está entregando de
   verdade entre processos, não só que a rota responde 200.
 
-## Front-end (`web/`) — Fase 1 a Fase 5, decisões de implementação
+## Módulo de conta — decisões de implementação
+
+Fase 6 do mock (endereços, cartões, configurações), a parte que é backend
+puro: CRUD de endereços completo e cartão salvo via Mercado Pago.
+
+- **Endereços ganharam `update.php`/`delete.php`** — só existiam
+  `create`/`list` desde o módulo catalog+ordering. Trocar de padrão
+  desmarca os outros do mesmo usuário na mesma transação (não existe
+  `UNIQUE` parcial no banco garantindo "só um padrão"; é regra de
+  aplicação, testada no smoke test). Apagar um endereço já usado num
+  pedido é bloqueado pela própria FK (`orders.address_id` não tem `ON
+  DELETE`) — capturado e devolvido como 409, não como 500 cru.
+- **Taxa de entrega por endereço não é mostrada em lugar nenhum desta
+  tela** — mesmo achado documentado em `PaymentSelector.svelte`
+  (Fase 4.1): não existe cálculo de frete por bairro/distância neste
+  backend (`orders/checkout.php` recebe `delivery_fee` do corpo da
+  requisição, não calcula). O mock mostra "Taxa R$ 6,90 · 25–35 min" por
+  endereço; inventar esse número aqui seria fabricar um dado que o
+  sistema não sustenta. Registrado em "Próximos passos".
+- **Cartão salvo usa o modelo real do Mercado Pago: Customer → Cards.**
+  Um Customer por usuário (`users.mp_customer_id`, criado na primeira vez
+  que alguém salva um cartão), N cartões por Customer — sem guardar esse
+  id, cada cartão novo criaria um Customer à toa. `lib/mercadopago.php`
+  ganhou `mp_create_customer()`/`mp_create_card()`/`mp_delete_card()`,
+  seguindo o mesmo contrato documentado da API real, com o mesmo modo
+  fake já usado pelo módulo de pagamentos (sem conta sandbox neste
+  ambiente).
+- **Bandeira em modo fake é um palpite, nunca usado pra cobrança.** Sem
+  base de BIN neste ambiente, `mp_fake_create_card()` só olha o primeiro
+  dígito do token-placeholder (5→Mastercard, 4→Visa, resto→Elo) —
+  cosmético, documentado no código; em produção quem decide a bandeira de
+  verdade é o Mercado Pago, a partir do token real do SDK.
+- **`cards/update.php` só aceita `is_default`.** Os outros campos de um
+  cartão salvo (bandeira, últimos 4 dígitos, validade) vêm do Mercado Pago
+  no momento da criação — não existe "editar cartão" de verdade, e deixar
+  o endpoint aceitar isso silenciosamente criaria um cartão salvo com
+  dados que não batem com o que o Mercado Pago realmente tem.
+- **Validado contra Postgres e PHP reais.** `tests/smoke_account.sh` cobre
+  os dois endereços com troca de padrão, edição, e o bloqueio de apagar
+  endereço em uso; dois cartões com o mesmo `mp_customer_id` reaproveitado
+  (confirmado por query direta no banco, não só pela resposta da API),
+  troca de padrão e remoção.
+
+## Front-end (`web/`) — Fase 1 a Fase 6, decisões de implementação
 
 Svelte 5 + Vite, Bootstrap 5, Bootstrap Icons, `sweetalert` (não
 `sweetalert2` — o pacote `sweetalert` na versão 2.x do npm *é* a
 biblioteca clássica, a mesma API `swal()` que o mock usa). Fase 1 (splash,
 seleção de estado, cidade+bairro), Fase 2 (home, busca, fidelidade,
-pedidos, perfil), Fase 3 (loja, item, carrinho), Fase 4 (pagamento) e Fase
-5 (pós-pedido) estão portadas; as outras 10 fases ainda não têm componente.
+pedidos, perfil), Fase 3 (loja, item, carrinho), Fase 4 (pagamento), Fase 5
+(pós-pedido) e Fase 6 (conta, endereços, cartões, configurações) estão
+portadas; as outras 9 fases ainda não têm componente.
 
 ```
 web/
@@ -589,8 +655,13 @@ web/
         OrderTracking.svelte            5.1/5.2/5.3/5.4 numa tela só, reagindo
                                          ao status ao vivo por SSE (ver abaixo)
         ReviewScreen.svelte             5.5 — nota, tags, gorjeta, comentário
-    App.svelte                  orquestra Fase 1 -> Fase 2 (abas) -> Fase 3/4/5
-                                 (tela cheia por cima das abas, com volta)
+        AddressesScreen.svelte          6.1 — CRUD completo, CEP real (ViaCEP),
+                                         padrão, bloqueio de apagar em uso
+        PaymentMethods.svelte           6.2 — cartões salvos via Mercado Pago
+        SettingsScreen.svelte           6.3 — notificações por tipo (localStorage)
+    App.svelte                  orquestra Fase 1 -> Fase 2 (abas, e Fase 6
+                                 como pseudo-abas dentro do mesmo shell) ->
+                                 Fase 3/4/5 (tela cheia por cima das abas)
 ```
 
 - **`toastr` sem jQuery.** O pacote npm `toastr` declara "jQuery is
@@ -844,14 +915,50 @@ web/
   estrelas" em vez do botão de novo. Zero erros de console do início ao
   fim, nas duas passadas completas.
 
+**Fase 6 — decisões adicionais:**
+
+- **Endereços/cartões/configurações entram como pseudo-abas dentro do
+  mesmo `app-shell`**, não como uma pilha própria tipo `RestaurantPage`/
+  `PaymentFlow` — mesmo padrão que `Orders.svelte` (Fase 2.4) já usava
+  (`tab = 'orders'` sem estar na barra inferior). Simples, e consistente
+  com o que já existia.
+- **Busca por CEP é uma chamada real pro ViaCEP** (API pública,
+  gratuita, sem chave) — não um mock. Limite honesto: este ambiente de
+  desenvolvimento bloqueia tráfego de saída pra hosts fora da allowlist
+  do proxy, então só o caminho de FALHA foi testável aqui (a chamada
+  falha, cai de volta pro preenchimento manual, sem travar a tela). O
+  caminho de sucesso não pôde ser validado neste ambiente especificamente
+  — o contrato da API é público e estável, não é algo inventado, mas fica
+  registrado que não foi visto funcionando de ponta a ponta nesta sessão.
+- **Endereço padrão e cartão padrão usam o mesmo padrão de UI**: card
+  com badge "PADRÃO" pros outros, botão "Tornar padrão" pro resto — o
+  botão chama `addresses/update.php`/`cards/update.php` com só
+  `is_default: true`, o backend cuida de desmarcar o resto.
+- **Apagar endereço em uso mostra a mensagem certa, não um erro genérico**
+  — `AddressesScreen.svelte` reconhece especificamente o código
+  `address_in_use` (409) e troca a mensagem por algo que explica o motivo
+  (endereço já usado num pedido), em vez de deixar o texto cru do backend
+  ou um "erro desconhecido".
+- **Configurações são preferência real de aparelho (localStorage), não
+  decorativas** — os três toggles de notificação persistem entre reloads
+  deste navegador. Não viram push de verdade ainda (Fase 7.2 não
+  construída), mas o formato já é o que o worker de push vai precisar
+  checar quando existir.
+- **Validado com Playwright de ponta a ponta, contra o backend real, zero
+  erros de console**: dois endereços criados → trocar padrão → editar
+  complemento → apagar bloqueado (coberto pelo smoke test, não repetido
+  aqui) → dois cartões salvos (Mastercard e Visa pelo heurístico de
+  bandeira) → trocar padrão → configurações com os três toggles reais,
+  incluindo o de promoções ligado manualmente e persistido.
+
 ## Como rodar localmente
 
 ```bash
 docker compose up -d
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
-bash db/migrate.sh up           # aplica as 11, em ordem
+bash db/migrate.sh up           # aplica as 12, em ordem
 bash db/migrate.sh down 3       # reverte as 3 últimas
-bash db/migrate.sh down 11      # reverte tudo
+bash db/migrate.sh down 12      # reverte tudo
 
 cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN se precisar
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
@@ -860,6 +967,7 @@ JWT_SECRET=dev-secret bash tests/smoke_discovery.sh   # lista por distância, bu
 JWT_SECRET=dev-secret bash tests/smoke_cart.sh        # carrinho incremental (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_payments.sh   # pagamentos (semeia sozinho)
 JWT_SECRET=dev-secret bash tests/smoke_tracking.sh    # timeline, SSE, avaliação (semeia sozinho)
+JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_account.sh    # endereços e cartões (semeia sozinho)
 
 php -S localhost:8080                  # API, num terminal
 cd web && npm install && npm run dev   # front-end Svelte, noutro terminal — http://localhost:5173
@@ -869,7 +977,7 @@ cd web && npm install && npm run dev   # front-end Svelte, noutro terminal — h
 está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
 de conta sandbox pra rodar nada disto localmente.
 
-As onze migrações foram validadas de ponta a ponta (`up` completo, `down`
+As doze migrações foram validadas de ponta a ponta (`up` completo, `down`
 completo em ordem reversa, `up` de novo) contra um PostgreSQL 16 real com
 `pg_cron` instalado, incluindo um teste funcional de `advance_order()`
 confirmando que transições legais avançam o pedido e transições ilegais
@@ -935,7 +1043,13 @@ disparado por outro processo (não só a forma da resposta), e
 duplicada. `tests/smoke_tracking.sh` roda tudo isso a cada push, no mesmo
 CI.
 
-O front-end validou o mesmo jeito, não só compilado, nas cinco fases com
+O módulo de conta também: CRUD de endereços com troca de padrão e
+bloqueio de apagar em uso (409, não 500), dois cartões salvos com o mesmo
+`mp_customer_id` reaproveitado (confirmado por query direta no banco),
+troca de padrão e remoção. `tests/smoke_account.sh` roda tudo isso a cada
+push, no mesmo CI, em `MERCADOPAGO_MODE=fake`.
+
+O front-end validou o mesmo jeito, não só compilado, nas seis fases com
 Playwright + Chromium numa janela de 430px: Fase 1 (fade do splash,
 seleção de estado com destaque, SweetAlert real antes da Geolocation API,
 toast sem jQuery), Fase 2 (lojas ordenadas por distância de verdade,
@@ -947,60 +1061,78 @@ preservando seleção, carrinho persistente com recálculo real de
 quantidade), Fase 4 (os cinco métodos de pagamento contra o backend real,
 incluindo o ciclo completo de Pix manual com aprovação humana pelo painel
 da loja — ver seção "Fase 4 — decisões adicionais" acima pros dois bugs
-reais que apareceram e foram corrigidos nesta validação) e Fase 5
+reais que apareceram e foram corrigidos nesta validação), Fase 5
 (acompanhamento ao vivo por SSE entre processos diferentes, avaliação
 completa, reabertura pela lista de pedidos mostrando "já avaliado" — ver
 seção "Fase 5 — decisões adicionais" acima pro bug real de datas achado e
-corrigido em três lugares nesta validação). Um bug real de CSS apareceu na
-Fase 3 e está documentado na seção "Módulo de carrinho" acima — a classe
-`.modal` colidindo com o Bootstrap, achada checando `boundingBox()` via
-Playwright, não só lendo o código.
+corrigido em três lugares nesta validação) e Fase 6 (dois endereços com
+troca de padrão e edição, dois cartões salvos com bandeira detectada pelo
+heurístico, configurações persistindo em `localStorage` de verdade). Um
+bug real de CSS apareceu na Fase 3 e está documentado na seção "Módulo de
+carrinho" acima — a classe `.modal` colidindo com o Bootstrap, achada
+checando `boundingBox()` via Playwright, não só lendo o código.
 
 ## Próximos passos (ordem sugerida pela especificação, Parte I §10)
 
-1. **Fase 6 no front (endereços, cartões salvos, configurações).**
-   `QuickAddress.svelte` cobre o mínimo pra Fase 4 funcionar (listar/criar
-   endereço); falta o CRUD completo (editar, apagar, rótulo, padrão) e
-   cartões salvos via Mercado Pago (nunca guardar PAN, só bandeira/4
-   últimos dígitos/id do cartão salvo).
-2. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
-   para Svelte + Bootstrap — Fases 1 a 5 prontas, faltam as outras 9.
-3. **Fase 7.2 (push) e impressão ESC/POS** — `restaurants/approve_pix.php`
+1. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
+   para Svelte + Bootstrap — Fases 1 a 6 prontas, faltam as outras 9
+   (PWA/painel da loja, app do entregador, fechamento de caixa, login
+   completo, KDS, painel da plataforma, caminho do erro, suporte, dispatch).
+2. **Cálculo de frete no servidor.** `orders/checkout.php` (e
+   `orders/create.php`, desde antes) recebem `delivery_fee` no corpo da
+   requisição em vez de calcular — é a única parte do dinheiro que ainda
+   confia no cliente, contra o princípio que o resto do projeto segue
+   (`price_line()`, `min_order`, total como coluna gerada). O mock da Fase
+   6.1 mostra taxa por endereço ("Taxa R$ 6,90 · 25–35 min"), que depende
+   exatamente disso existir. Precisa de uma regra de preço (por bairro? por
+   distância? tabela por loja?) que a especificação não define — decisão de
+   produto antes de código.
+3. **Cartão salvo ainda não paga.** `cards/*` guarda o cartão (Fase 6.2),
+   mas `payments/pay.php` só aceita um `card_token` novo a cada compra —
+   pagar com cartão salvo exige o fluxo de CVV + token de uso único que o
+   próprio mock descreve ("pagar com ele ainda exige CVV e gera novo token
+   de uso único"), que depende do MercadoPago.js real.
+4. **Fase 7.2 (push) e impressão ESC/POS** — `restaurants/approve_pix.php`
    já grava o evento e avança o pedido, mas notificar o cliente e imprimir
    a comanda dependem de uma fila de push (outbox + worker) e de conexão
    com impressora térmica que ainda não existem neste repositório.
-4. **Mapa e posição do entregador (Fase 5.3 e Fase 8).**
+5. **Mapa e posição do entregador (Fase 5.3 e Fase 8).**
    `OrderTracking.svelte` já mostra a linha do tempo real, mas o mapa é um
    placeholder explícito — depende do app do entregador (Fase 8) existir
    pra ter posição de verdade pra mostrar.
-5. **Reembolso (Fase 13) e reconciliação de maquininha (Fase 9).**
+6. **Reembolso (Fase 13) e reconciliação de maquininha (Fase 9).**
    `refunds` e `card_transactions` existem no esquema (migração `005`) sem
    endpoint — os dois dependem de telas/fluxos (disputa, entregador
    confirmando NSU) que ainda não foram portados.
-6. **Decisão de produto pendente: fidelidade/pontos.** A tela 2.3 existe
+7. **Decisão de produto pendente: fidelidade/pontos.** A tela 2.3 existe
    só como desenho (dado de exemplo, sem tabela no banco). Se for pra
    valer, precisa de um ledger de pontos — mesmo padrão append-only do
    `ledger_entries` financeiro — e isso é decisão de escopo, não algo pra
    inventar numa migração de suporte a tela.
-7. **Decisão de produto pendente: cupons.** `coupons`/`coupon_redemptions`
+8. **Decisão de produto pendente: cupons.** `coupons`/`coupon_redemptions`
    existem desde a migração `008`, mas não há endpoint de resgate. O
    `CartDrawer` (3.3) já tem o campo de UI, esperando o backend.
-8. **Decisão de produto pendente: Pix automático sem tela.** O enum
+9. **Decisão de produto pendente: Pix automático sem tela.** O enum
    `payment_method` já tem `pix_auto` e o backend já processa (webhook
    incluído), mas o mock de 64 telas só desenha o fluxo manual (Fase 4.3);
    não há uma tela própria pra "Pix instantâneo" — fica pra quando/se essa
    tela for desenhada.
-9. **Trocar de método de pagamento depois do checkout já ter acontecido
-   não reabre um carrinho novo** (ex.: Pix manual sem chave cadastrada,
-   volta e escolhe cartão) — precisaria de um endpoint de abandono de
-   `pending_payment` que não existe ainda. Registrado como simplificação
-   em `PaymentFlow.svelte`; não é o caminho comum (a maioria das voltas
-   acontece antes do checkout, quando o retry já funciona certo).
-10. **Gorjeta da avaliação (Fase 5.5) é registrada, não cobrada.** O mock
+10. **Trocar de método de pagamento depois do checkout já ter acontecido
+    não reabre um carrinho novo** (ex.: Pix manual sem chave cadastrada,
+    volta e escolhe cartão) — precisaria de um endpoint de abandono de
+    `pending_payment` que não existe ainda. Registrado como simplificação
+    em `PaymentFlow.svelte`; não é o caminho comum (a maioria das voltas
+    acontece antes do checkout, quando o retry já funciona certo).
+11. **Gorjeta da avaliação (Fase 5.5) é registrada, não cobrada.** O mock
     diz "cobrada no mesmo cartão do pedido" — exigiria uma segunda
     transação no Mercado Pago associada ao pagamento original, que este
     módulo não implementa (mesma simplificação de dinheiro/maquininha no
     módulo de pagamentos).
+12. **Busca por CEP (Fase 6.1) não pôde ser testada neste ambiente.** A
+    chamada ao ViaCEP é real, mas o ambiente de desenvolvimento bloqueia
+    saída pra hosts fora da allowlist do proxy — só o caminho de falha
+    (cai pro preenchimento manual) foi observado funcionando. Vale
+    confirmar num ambiente com internet aberta antes de considerar pronto.
 
 ## Origem
 

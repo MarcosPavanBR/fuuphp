@@ -7,6 +7,9 @@
   import Loyalty from './lib/screens/Loyalty.svelte';
   import Orders from './lib/screens/Orders.svelte';
   import Profile from './lib/screens/Profile.svelte';
+  import AddressesScreen from './lib/screens/AddressesScreen.svelte';
+  import PaymentMethods from './lib/screens/PaymentMethods.svelte';
+  import SettingsScreen from './lib/screens/SettingsScreen.svelte';
   import RestaurantPage from './lib/screens/RestaurantPage.svelte';
   import CartDrawer from './lib/screens/CartDrawer.svelte';
   import PaymentFlow from './lib/screens/PaymentFlow.svelte';
@@ -113,7 +116,19 @@
       {:else if tab === 'orders'}
         <Orders onOpenOrder={openOrder} onBack={() => (tab = 'profile')} />
       {:else if tab === 'profile'}
-        <Profile onLoggedOut={() => (tab = 'home')} onOpenOrders={() => (tab = 'orders')} />
+        <Profile
+          onLoggedOut={() => (tab = 'home')}
+          onOpenOrders={() => (tab = 'orders')}
+          onOpenAddresses={() => (tab = 'addresses')}
+          onOpenPaymentMethods={() => (tab = 'payment_methods')}
+          onOpenSettings={() => (tab = 'settings')}
+        />
+      {:else if tab === 'addresses'}
+        <AddressesScreen {location} onBack={() => (tab = 'profile')} />
+      {:else if tab === 'payment_methods'}
+        <PaymentMethods onBack={() => (tab = 'profile')} />
+      {:else if tab === 'settings'}
+        <SettingsScreen onBack={() => (tab = 'profile')} />
       {/if}
     </div>
     <BottomNav active={tab} onNavigate={(t) => (tab = t)} />

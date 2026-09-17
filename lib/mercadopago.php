@@ -147,6 +147,73 @@ function mp_fake_pix_payment(float $amount): array
 }
 
 /**
+ * Fase 6.2 — cartão salvo. Modelo do Mercado Pago: um Customer por
+ * usuário, N Cards por Customer. Cria o Customer só na primeira vez
+ * (users.mp_customer_id fica null até então); toda chamada seguinte
+ * reaproveita o id salvo.
+ *
+ * @return array{mp_customer_id:string}
+ */
+function mp_create_customer(string $email): array
+{
+    if (mp_mode() === 'fake') {
+        return ['mp_customer_id' => 'fake_customer_' . bin2hex(random_bytes(8))];
+    }
+    $resp = mp_request('POST', '/v1/customers', ['email' => $email]);
+    return ['mp_customer_id' => (string) ($resp['body']['id'] ?? '')];
+}
+
+/**
+ * @return array{mp_card_id:string,brand:string,last4:string,exp_month:int,exp_year:int}
+ */
+function mp_create_card(string $mpCustomerId, string $cardToken): array
+{
+    if (mp_mode() === 'fake') {
+        return mp_fake_create_card($cardToken);
+    }
+    $resp = mp_request('POST', "/v1/customers/{$mpCustomerId}/cards", ['token' => $cardToken]);
+    $body = $resp['body'];
+    if ($resp['http_status'] >= 400 && !isset($body['id'])) {
+        throw new RuntimeException('Mercado Pago recusou salvar o cartão: ' . json_encode($body, JSON_UNESCAPED_UNICODE));
+    }
+    return [
+        'mp_card_id' => (string) ($body['id'] ?? ''),
+        'brand' => (string) ($body['payment_method']['id'] ?? 'desconhecida'),
+        'last4' => (string) ($body['last_four_digits'] ?? '0000'),
+        'exp_month' => (int) ($body['expiration_month'] ?? 1),
+        'exp_year' => (int) ($body['expiration_year'] ?? 2000),
+    ];
+}
+
+function mp_delete_card(string $mpCustomerId, string $mpCardId): void
+{
+    if (mp_mode() === 'fake') {
+        return;
+    }
+    mp_request('DELETE', "/v1/customers/{$mpCustomerId}/cards/{$mpCardId}", []);
+}
+
+/**
+ * Sem BIN de verdade pra consultar (não há base de bandeiras neste
+ * ambiente), a bandeira em modo fake é um palpite simples pelo primeiro
+ * dígito do token-placeholder (que, no CardForm.svelte, são os próprios
+ * dígitos do cartão) -- só cosmético, nunca usado pra decidir cobrança.
+ */
+function mp_fake_create_card(string $cardToken): array
+{
+    $digits = preg_replace('/\D/', '', $cardToken) ?? '';
+    $digits = $digits !== '' ? $digits : '4000000000000000';
+    $brand = str_starts_with($digits, '5') ? 'mastercard' : (str_starts_with($digits, '4') ? 'visa' : 'elo');
+    return [
+        'mp_card_id' => 'fake_card_' . bin2hex(random_bytes(8)),
+        'brand' => $brand,
+        'last4' => substr(str_pad($digits, 4, '0', STR_PAD_LEFT), -4),
+        'exp_month' => 11,
+        'exp_year' => (int) date('Y') + 3,
+    ];
+}
+
+/**
  * Confere a assinatura do webhook do Mercado Pago (header x-signature,
  * formato "ts=...,v1=..."), seguindo o manifesto documentado:
  * "id:{data.id};request-id:{x-request-id};ts:{ts};". Sem

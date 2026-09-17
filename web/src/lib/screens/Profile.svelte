@@ -6,11 +6,12 @@
   // Tela 2.5 — Perfil. "Entrada para LGPD (exportar/excluir dados) —
   // exigência do banco de comprovantes com retenção de 180 dias."
   // (Bootstrap list-group, api/profile.php, LGPD)
-  let { onLoggedOut, onOpenOrders } = $props();
+  //
+  // "Endereços salvos", "Formas de pagamento" e "Configurações" abrem as
+  // telas da Fase 6 de verdade (AddressesScreen/PaymentMethods/SettingsScreen).
+  let { onLoggedOut, onOpenOrders, onOpenAddresses, onOpenPaymentMethods, onOpenSettings } = $props();
 
   let stats = $state(null);
-  let addresses = $state(null);
-  let showAddresses = $state(false);
 
   async function loadStats() {
     try {
@@ -21,18 +22,6 @@
     }
   }
   loadStats();
-
-  async function toggleAddresses() {
-    showAddresses = !showAddresses;
-    if (showAddresses && addresses === null) {
-      try {
-        const data = await api.get('/addresses/list.php', { auth: true });
-        addresses = data.addresses;
-      } catch (e) {
-        toastr.error(e.message ?? 'Não deu pra carregar os endereços.');
-      }
-    }
-  }
 
   function notPortedYet(what) {
     toastr.info(`${what} ainda não foi portado.`);
@@ -78,25 +67,11 @@
   {/if}
 
   <div class="menu">
-    <button type="button" onclick={toggleAddresses}>
+    <button type="button" onclick={onOpenAddresses}>
       <span>Endereços salvos</span>
-      <i class={`bi ${showAddresses ? 'bi-chevron-up' : 'bi-chevron-down'}`}></i>
+      <i class="bi bi-chevron-right"></i>
     </button>
-    {#if showAddresses}
-      <div class="address-list">
-        {#if addresses === null}
-          <p class="note">Carregando…</p>
-        {:else if addresses.length === 0}
-          <p class="note">Nenhum endereço salvo ainda.</p>
-        {:else}
-          {#each addresses as a (a.id)}
-            <p class="address-item">{a.street}, {a.number ?? 's/n'} — {a.neighborhood ?? a.city}</p>
-          {/each}
-        {/if}
-      </div>
-    {/if}
-
-    <button type="button" onclick={() => notPortedYet('Formas de pagamento')}>
+    <button type="button" onclick={onOpenPaymentMethods}>
       <span>Formas de pagamento</span>
       <i class="bi bi-chevron-right"></i>
     </button>
@@ -104,11 +79,7 @@
       <span>Notas e comprovantes</span>
       <i class="bi bi-chevron-right"></i>
     </button>
-    <button type="button" onclick={() => notPortedYet('Exportar/excluir dados (LGPD)')}>
-      <span>Privacidade e dados (LGPD)</span>
-      <i class="bi bi-chevron-right"></i>
-    </button>
-    <button type="button" onclick={() => notPortedYet('Configurações')}>
+    <button type="button" onclick={onOpenSettings}>
       <span>Configurações</span>
       <i class="bi bi-chevron-right"></i>
     </button>
@@ -216,16 +187,6 @@
   }
   .menu button i {
     color: var(--fuu-ink-5);
-  }
-  .address-list {
-    background: var(--fuu-line-6);
-    border-radius: var(--fuu-radius-card);
-    padding: 10px 14px;
-  }
-  .address-item {
-    margin: 0 0 6px;
-    font-size: 13px;
-    color: var(--fuu-ink-2);
   }
   .logout {
     margin-bottom: 16px;
