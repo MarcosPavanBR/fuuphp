@@ -61,77 +61,19 @@ if ($paymentMethod === 'pos_machine' && !in_array($machineKind, ['debit', 'credi
     error_response(422, 'machine_kind_required', 'Informe machine_kind: debit ou credit.', fields: ['machine_kind' => 'obrigatório']);
 }
 
-// Carrega os itens do cardápio pedidos, valida que pertencem à loja e
-// estão disponíveis -- preço que vale é o que a loja tem cadastrado agora,
-// nunca o que o cliente mandou (Especificação, Parte I §2, módulo catalog).
-$requestedItemIds = array_values(array_unique(array_map(
-    static fn (array $i) => (int) ($i['menu_item_id'] ?? 0),
-    $items
-)));
-if (in_array(0, $requestedItemIds, true)) {
-    error_response(422, 'invalid_item', 'Item de carrinho sem menu_item_id.');
-}
-
-$placeholders = implode(',', array_fill(0, count($requestedItemIds), '?'));
-$menuStmt = $pdo->prepare(
-    "SELECT id, name, price FROM menu_items WHERE restaurant_id = ? AND available = true AND id IN ($placeholders)"
-);
-$menuStmt->execute([$restaurantId, ...$requestedItemIds]);
-$menuById = [];
-foreach ($menuStmt->fetchAll() as $row) {
-    $menuById[(int) $row['id']] = $row;
-}
-
-$allVariantIds = [];
-foreach ($items as $line) {
-    foreach (($line['variant_ids'] ?? []) as $vid) {
-        $allVariantIds[] = (int) $vid;
-    }
-}
-$variantsById = [];
-if ($allVariantIds !== []) {
-    $vPlaceholders = implode(',', array_fill(0, count($allVariantIds), '?'));
-    $variantStmt = $pdo->prepare("SELECT id, menu_item_id, name, price_delta FROM item_variants WHERE id IN ($vPlaceholders)");
-    $variantStmt->execute($allVariantIds);
-    foreach ($variantStmt->fetchAll() as $row) {
-        $variantsById[(int) $row['id']] = $row;
-    }
-}
-
+// Preço que vale é o que a loja tem cadastrado agora, nunca o que o
+// cliente mandou (Especificação, Parte I §2, módulo catalog) -- price_line()
+// é a mesma validação usada pelo carrinho incremental (api/v1/cart/*.php).
 $orderLines = [];
 $subtotal = 0.0;
 foreach ($items as $line) {
     $menuItemId = (int) ($line['menu_item_id'] ?? 0);
     $quantity = (int) ($line['quantity'] ?? 0);
-    if (!isset($menuById[$menuItemId])) {
-        error_response(422, 'item_unavailable', "Item {$menuItemId} não existe ou está indisponível nessa loja.");
-    }
-    if ($quantity < 1) {
-        error_response(422, 'invalid_quantity', "Quantidade inválida para o item {$menuItemId}.");
-    }
+    $variantIds = array_map('intval', $line['variant_ids'] ?? []);
 
-    $menuItem = $menuById[$menuItemId];
-    $unitPrice = (float) $menuItem['price'];
-    $variantsSnapshot = [];
-    foreach (($line['variant_ids'] ?? []) as $vid) {
-        $vid = (int) $vid;
-        if (!isset($variantsById[$vid]) || $variantsById[$vid]['menu_item_id'] !== $menuItemId) {
-            error_response(422, 'invalid_variant', "Variação {$vid} não pertence ao item {$menuItemId}.");
-        }
-        $variant = $variantsById[$vid];
-        $unitPrice += (float) $variant['price_delta'];
-        $variantsSnapshot[] = ['id' => $vid, 'name' => $variant['name'], 'price_delta' => (float) $variant['price_delta']];
-    }
-
-    $subtotal += $unitPrice * $quantity;
-    $orderLines[] = [
-        'menu_item_id' => $menuItemId,
-        'name_snapshot' => $menuItem['name'],
-        'unit_price' => round($unitPrice, 2),
-        'quantity' => $quantity,
-        'variants_snapshot' => $variantsSnapshot,
-        'notes' => $line['notes'] ?? null,
-    ];
+    $priced = price_line($pdo, $restaurantId, $menuItemId, $variantIds, $quantity);
+    $subtotal += $priced['unit_price'] * $quantity;
+    $orderLines[] = [...$priced, 'quantity' => $quantity, 'notes' => $line['notes'] ?? null];
 }
 
 $subtotal = round($subtotal, 2);

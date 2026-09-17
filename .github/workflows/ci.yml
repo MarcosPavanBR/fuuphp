@@ -100,6 +100,12 @@ jobs:
           JWT_SECRET: ci-test-secret
         run: bash tests/smoke_discovery.sh
 
+      - name: Smoke test -- carrinho incremental (Fase 3)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+        run: bash tests/smoke_cart.sh
+
       - name: Instalar Node 22
         uses: actions/setup-node@v4
         with:

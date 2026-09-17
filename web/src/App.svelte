@@ -7,18 +7,22 @@
   import Loyalty from './lib/screens/Loyalty.svelte';
   import Orders from './lib/screens/Orders.svelte';
   import Profile from './lib/screens/Profile.svelte';
+  import RestaurantPage from './lib/screens/RestaurantPage.svelte';
+  import CartDrawer from './lib/screens/CartDrawer.svelte';
   import BottomNav from './lib/components/BottomNav.svelte';
   import QuickLogin from './lib/components/QuickLogin.svelte';
   import { isAuthenticated, loadProfile } from './lib/session.svelte.js';
   import { toastr } from './lib/toastr.js';
 
-  // Fase 1 (onboarding) -> Fase 2 (navegação principal: home, busca,
-  // fidelidade, pedidos, perfil). Cardápio/item/carrinho é Fase 3, ainda
-  // não portada -- abrir um restaurante por enquanto só avisa disso.
+  // Fase 1 (onboarding) -> Fase 2 (navegação principal, abas) -> Fase 3
+  // (loja/item/carrinho, tela cheia por cima das abas -- o mock não mostra
+  // a barra inferior em 3.1/3.3, é uma pilha própria com botão de voltar).
   let step = $state('splash');
   let uf = $state(null);
   let location = $state(null);
   let tab = $state('home');
+  let restaurantId = $state(null);
+  let cartOpen = $state(false);
 
   if (isAuthenticated()) {
     loadProfile().catch(() => {});
@@ -43,7 +47,12 @@
   }
 
   function openRestaurant(r) {
-    toastr.info(`Fase 3 (cardápio de "${r.name}") ainda não foi portada.`);
+    restaurantId = r.id;
+    cartOpen = false;
+  }
+  function closeRestaurant() {
+    restaurantId = null;
+    cartOpen = false;
   }
 
   function openOrder() {
@@ -59,6 +68,14 @@
   <StateSelector onContinue={goToCity} />
 {:else if step === 'city'}
   <CityPicker {uf} onDone={finishOnboarding} />
+{:else if restaurantId && cartOpen}
+  <div class="page-shell">
+    <CartDrawer {restaurantId} onBack={() => (cartOpen = false)} />
+  </div>
+{:else if restaurantId}
+  <div class="page-shell">
+    <RestaurantPage {restaurantId} onBack={closeRestaurant} onOpenCart={() => (cartOpen = true)} />
+  </div>
 {:else}
   <div class="app-shell">
     <div class="app-content">
@@ -81,7 +98,8 @@
 {/if}
 
 <style>
-  .app-shell {
+  .app-shell,
+  .page-shell {
     max-width: 430px;
     margin: 0 auto;
     min-height: 100vh;

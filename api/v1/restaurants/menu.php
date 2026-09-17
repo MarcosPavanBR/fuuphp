@@ -12,10 +12,14 @@ if (!is_string($restaurantId) || $restaurantId === '') {
 
 $pdo = db();
 
+// Item esgotado vem na lista, marcado como indisponível -- desabilitado no
+// servidor, não escondido (Especificação, Fase 3, tela 3.1: "item esgotado
+// desabilitado no servidor, não escondido"). Esconder mudaria o cardápio
+// sob os pés do cliente, o que é pior do que mostrar cinza.
 $itemsStmt = $pdo->prepare(
-    'SELECT id, name, description, price, category, photo_key, position
+    'SELECT id, name, description, price, category, photo_key, position, available
      FROM menu_items
-     WHERE restaurant_id = :id AND available = true
+     WHERE restaurant_id = :id
      ORDER BY category, position, name'
 );
 $itemsStmt->execute(['id' => $restaurantId]);

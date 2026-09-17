@@ -31,14 +31,14 @@ trás de cada item.
 ## O que este repositório contém
 
 A **fundação de banco** (dez migrações SQL), os módulos **identity**,
-**catálogo + pedido + checkout** e **descoberta** (busca de loja e
-produto) em PHP sobre ela, e o **front-end em Svelte** (`web/`) cobrindo a
-Fase 1 (onboarding) e a Fase 2 (home, busca, fidelidade, pedidos, perfil)
-— 2 das 15 fases / 64 telas. Pagamentos, ledger, dispatch, cardápio+carrinho
-(Fase 3) e o resto ainda não foram portados. Segue a ordem sugerida pela
-especificação (12 semanas, Parte I §10) — catálogo/pedido vem antes de
-pagamentos porque `POST /v1/orders/:id/pay` pressupõe que o pedido já
-existe.
+**catálogo + pedido + checkout**, **descoberta** (busca de loja e
+produto) e **carrinho incremental** em PHP sobre ela, e o **front-end em
+Svelte** (`web/`) cobrindo a Fase 1 (onboarding), a Fase 2 (home, busca,
+fidelidade, pedidos, perfil) e a Fase 3 (loja, item, carrinho) — 3 das 15
+fases / 64 telas. Pagamentos, ledger, dispatch e o resto ainda não foram
+portados. Segue a ordem sugerida pela especificação (12 semanas, Parte I
+§10) — catálogo/pedido vem antes de pagamentos porque `POST
+/v1/orders/:id/pay` pressupõe que o pedido já existe.
 
 ```
 api/v1/auth/                módulo identity (endpoints, um arquivo por rota)
@@ -49,7 +49,8 @@ api/v1/auth/                módulo identity (endpoints, um arquivo por rota)
   consent.php                  POST — registra aceite de termo (LGPD), autenticado
 api/v1/restaurants/         catálogo e descoberta (público, exceto orders.php)
   show.php                     GET  ?id= — dados da loja + horário de funcionamento
-  menu.php                     GET  ?id= — cardápio disponível, com variações
+  menu.php                     GET  ?id= — cardápio completo, disponível ou não
+                                (item esgotado vem marcado, não escondido — Fase 3)
   list.php                     GET  ?city_ibge_code=&category=&lat=&lng= — lojas
                                 da cidade, distância real por Haversine se lat/lng vierem
   search_products.php          GET  ?city_ibge_code=&q= — busca de produto por
@@ -58,9 +59,17 @@ api/v1/restaurants/         catálogo e descoberta (público, exceto orders.php)
 api/v1/addresses/           endereços do cliente autenticado
   create.php                   POST — cadastra endereço
   list.php                     GET  — lista os do usuário logado
+api/v1/cart/                 carrinho incremental (Fase 3) — item por item, não
+                              tudo de uma vez como orders/create.php
+  add_item.php                  POST — acha ou cria o carrinho (status='cart') da
+                                 loja, precifica a linha no servidor, insere
+  show.php                      GET  ?restaurant_id= — carrinho atual ou order:null
+  update_quantity.php           POST — muda quantidade, recalcula subtotal
+  remove_item.php               POST — tira a linha, recalcula subtotal
 api/v1/orders/               pedido e checkout
-  create.php                   POST — checkout: valida política/preço/loja aberta,
-                                cria o pedido, avança cart → pending_payment
+  create.php                   POST — checkout de um passo só: valida
+                                política/preço/loja aberta, cria o pedido,
+                                avança cart → pending_payment
   show.php                     GET  ?id= — detalhe (dono ou loja do pedido, só)
   list.php                     GET  — pedidos do cliente autenticado, com nome
                                 da loja e contagem de itens
@@ -80,6 +89,9 @@ lib/                          código compartilhado entre módulos
   auth_guard.php                  exige access token válido
   policy.php                      resolve política loja → plataforma, gera o policy_snapshot
   orders.php                      chama advance_order(), autorização de acesso a pedido
+  cart.php                        price_line() (preço de uma linha, usado por
+                                   cart/add_item.php E orders/create.php),
+                                   find_or_create_cart(), recompute_cart_subtotal()
   validation.php                  CPF/CNPJ com dígito verificador, e-mail, telefone
   uuid.php                        UUIDv4 sem dependência
 tests/
@@ -90,6 +102,9 @@ tests/
                                  permissão barrado, KDS, paid→preparing→ready)
   smoke_discovery.sh            lista por distância, filtro de categoria, busca
                                  por trigram, perfil com estatísticas reais
+  smoke_cart.sh                 variação obrigatória, indisponível barrado, troca
+                                 de loja bloqueada com carrinho cheio e permitida
+                                 vazio, recálculo em update/remove
   support/random_cnpj.php       CNPJ aleatório com dígito verificador válido,
                                  pra seed de teste não colidir entre scripts
 db/
@@ -251,14 +266,58 @@ coluna no esquema — a Parte II original fixa 42 tabelas e nenhuma delas tem
   lacuna do parágrafo acima); só o filtro "Tudo" filtra de verdade no
   front, os outros avisam em vez de fingir.
 
-## Front-end (`web/`) — Fase 1 e Fase 2, decisões de implementação
+## Módulo de carrinho — decisões de implementação
+
+A Fase 3 revelou que `orders/create.php` (checkout de um passo só, feito
+para o módulo catalog+ordering) não é como a tela realmente funciona: o
+mock é item por item, com `toastr` confirmando cada adição, e "o carrinho
+vive num store Svelte e é espelhado no PostgreSQL como pedido em
+status='cart'". Os dois modelos convivem — nenhum substituiu o outro.
+
+- **`price_line()` foi extraída pra `lib/cart.php` e reaproveitada em
+  `orders/create.php`.** Precificar uma linha (validar item+variação
+  contra o cardápio atual, nunca confiar no preço que o cliente mandou) é
+  a mesma regra nos dois fluxos; duplicar essa validação seria o tipo de
+  coisa que diverge silenciosamente com o tempo.
+- **Um usuário só pode ter carrinho aberto numa loja por vez** — o próprio
+  esquema força isso (`orders.restaurant_id` é fixo por pedido). Trocar de
+  loja com o carrinho **vazio** troca sem perguntar (é o caso comum:
+  passou pela loja e não pediu nada); com **item** dentro, dá 409 — a
+  decisão de esvaziar e trocar fica com quem está usando o app, o backend
+  não assume por conta própria.
+- **Item esgotado aparece na lista, desabilitado, não escondido** — bug
+  real encontrado nesta passada: `restaurants/menu.php` filtrava
+  `available = true` desde a Fase 2, o que contradizia a própria
+  especificação da tela 3.1 ("item esgotado desabilitado no servidor, não
+  escondido"). Corrigido: o endpoint devolve todo o cardápio, com
+  `available` no payload, e o front decide a aparência.
+- **Cupom (`Cupom BEMVINDO10 −R$10,00` no mock) é só campo de UI.** A
+  tabela `coupons` existe desde a migração `008`, mas não há endpoint de
+  resgate/validação — construir isso é escopo de um cupom de verdade
+  (regra de quem paga o desconto, teto, um uso por CPF), não deste
+  módulo. O campo avisa que ainda não foi implementado em vez de aceitar
+  qualquer código e fingir um desconto.
+- **"Ir para pagamento" é onde a Fase 3 para.** O botão existe, mas leva a
+  um aviso — Fase 4 (pagamento) ainda não foi portada, e depende da
+  decisão de gateway (Mercado Pago, conforme a cláusula zero).
+- **Modal x classe reservada do Bootstrap: bug real, corrigido.** O
+  primeiro `ItemModal.svelte` usava a classe `.modal` — que é exatamente o
+  nome que o Bootstrap usa pro componente dele (`display: none` por
+  padrão). O CSS com escopo do Svelte deveria vencer por especificidade,
+  mas depender disso é frágil; o certo é nunca usar nomes reservados do
+  framework de UI. Renomeado para `.item-modal-panel` / `.item-modal-backdrop`.
+  Achado com Playwright checando `boundingBox()` do modal (`null` = não
+  estava renderizando, apesar de estar no DOM) — não teria aparecido só
+  olhando o código.
+
+## Front-end (`web/`) — Fase 1, Fase 2 e Fase 3, decisões de implementação
 
 Svelte 5 + Vite, Bootstrap 5, Bootstrap Icons, `sweetalert` (não
 `sweetalert2` — o pacote `sweetalert` na versão 2.x do npm *é* a
 biblioteca clássica, a mesma API `swal()` que o mock usa). Fase 1 (splash,
-seleção de estado, cidade+bairro) e Fase 2 (home, busca, fidelidade,
-pedidos, perfil) estão portadas; as outras 13 fases ainda não têm
-componente.
+seleção de estado, cidade+bairro), Fase 2 (home, busca, fidelidade,
+pedidos, perfil) e Fase 3 (loja, item, carrinho) estão portadas; as outras
+12 fases ainda não têm componente.
 
 ```
 web/
@@ -269,6 +328,8 @@ web/
     lib/
       api.js                      cliente fetch fino (base URL, token, erros)
       session.svelte.js            estado de sessão reativo (login/logout real)
+      cart.svelte.js                estado do carrinho, espelha a resposta da API
+                                     a cada ação (não um store que finge sincronizar)
       toastr.js                    toastr sem jQuery (ver abaixo)
       data/states.js                UFs, cidades e coordenadas de exemplo (estático)
       components/
@@ -276,6 +337,7 @@ web/
         PhoneScreen.svelte              moldura de largura de celular
         BottomNav.svelte                5 abas (house/search/cart/star/person)
         QuickLogin.svelte               login mínimo real (ver abaixo)
+        ItemModal.svelte                3.2 — variações, observação, preço ao vivo
       screens/
         Splash.svelte                   1.1 — fade, avança sozinho
         StateSelector.svelte            1.2 — busca + lista com contagem de lojas
@@ -285,7 +347,10 @@ web/
         Loyalty.svelte                  2.3 — só desenho, dado de exemplo (ver abaixo)
         Orders.svelte                   2.4 — pedidos do cliente, tabs em andamento/histórico
         Profile.svelte                  2.5 — perfil, estatísticas, endereços
-    App.svelte                  orquestra Fase 1 -> Fase 2 (abas + sub-telas)
+        RestaurantPage.svelte           3.1 — cardápio por categoria, item esgotado visível
+        CartDrawer.svelte               3.3 — itens, cupom (só UI), totais reais
+    App.svelte                  orquestra Fase 1 -> Fase 2 (abas) -> Fase 3
+                                 (tela cheia por cima das abas, com volta)
 ```
 
 - **`toastr` sem jQuery.** O pacote npm `toastr` declara "jQuery is
@@ -366,6 +431,41 @@ web/
   como "erro" no console, mesmo quando a aplicação trata a resposta
   corretamente, como este caso trata).
 
+**Fase 3 — decisões adicionais:**
+
+- **`RestaurantPage`/`CartDrawer` são tela cheia por cima das abas, sem a
+  barra inferior** — é assim que o mock desenha 3.1/3.3 (sem os 5 ícones
+  visíveis), diferente das telas da Fase 2. `App.svelte` trata isso como
+  uma pilha própria (`restaurantId`/`cartOpen`), não como mais uma aba.
+- **Adicionar item sem estar logado abre o `QuickLogin` *dentro* do
+  modal**, sem fechar ou perder as variações já marcadas — testado de
+  ponta a ponta: seleciona variação, tenta adicionar, loga pelo formulário
+  embutido, volta pro item com tudo como estava. Depois do login, ainda é
+  preciso tocar "Adicionar" de novo (não reenvia sozinho) — é uma escolha
+  deliberada de não disparar uma ação de carrinho sem toque explícito
+  depois de uma tela nova aparecer, não uma limitação técnica.
+- **Grupo de variação vira rádio ou checkbox pela própria coluna do
+  banco**: `max_selections === 1` é escolha única (rádio); qualquer outro
+  valor (ou `null`, sem limite) é múltipla escolha, capada nesse número
+  quando ele existir. Não tem coluna dizendo "isto é rádio" — é inferido
+  do mesmo jeito que o cardápio já descreve os grupos.
+- **Preço do item é recalculado a cada seleção, no cliente, só pra
+  mostrar** — o preço que de fato vira `order_items.unit_price` é
+  recalculado de novo no servidor (`price_line()`) quando `Adicionar` é
+  clicado. O número que o cliente vê antes de confirmar é preview, nunca
+  a fonte da verdade — exatamente o que o chip da tela 3.2 pede
+  ("preço recalculado no servidor antes de virar item do pedido").
+- **Validado com Playwright, incluindo o bug do `.modal` acima**: abrir
+  loja anônimo (o 401 de `cart/show.php` pra usuário deslogado é esperado
+  e já tratado, não erro), trocar de categoria, abrir item indisponível
+  (não abre modal — é `disabled`), selecionar variação obrigatória +
+  adicional, ver o preço somar ao vivo (R$32,90 → R$38,90), tentar
+  adicionar sem login → `QuickLogin` embutido → login real por OTP →
+  variações preservadas → adicionar de verdade → toast "Item adicionado
+  ✓" → barra de carrinho fixa → abrir carrinho → aumentar quantidade →
+  subtotal recalculado no servidor (R$38,90 → R$77,80). Zero erros de
+  console do início ao fim.
+
 ## Como rodar localmente
 
 ```bash
@@ -379,6 +479,7 @@ cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN 
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
 JWT_SECRET=dev-secret bash tests/smoke_ordering.sh    # fluxo completo de checkout (semeia loja/cardápio sozinho)
 JWT_SECRET=dev-secret bash tests/smoke_discovery.sh   # lista por distância, busca, perfil (semeia sozinho)
+JWT_SECRET=dev-secret bash tests/smoke_cart.sh        # carrinho incremental (semeia sozinho)
 
 php -S localhost:8080                  # API, num terminal
 cd web && npm install && npm run dev   # front-end Svelte, noutro terminal — http://localhost:5173
@@ -425,13 +526,26 @@ com os que `smoke_ordering.sh` já tinha semeado no mesmo banco, porque os
 dois scripts rodam em sequência no mesmo CI sem recriar o banco entre um e
 outro.
 
-O front-end validou o mesmo jeito, não só compilado, nas duas fases com
+O módulo de carrinho também: variação obrigatória exigida antes de
+precificar, item indisponível barrado, preço com variação somando certo
+(R$30 + R$5 = R$35), troca de loja com carrinho vazio permitida e com
+carrinho cheio barrada (409), acúmulo de subtotal em dois itens,
+recálculo em `update_quantity`/`remove_item`. `tests/smoke_cart.sh` roda
+tudo isso a cada push, no mesmo CI.
+
+O front-end validou o mesmo jeito, não só compilado, nas três fases com
 Playwright + Chromium numa janela de 430px: Fase 1 (fade do splash,
 seleção de estado com destaque, SweetAlert real antes da Geolocation API,
-toast sem jQuery) e Fase 2 (lojas ordenadas por distância de verdade,
+toast sem jQuery), Fase 2 (lojas ordenadas por distância de verdade,
 filtro de categoria refazendo a consulta, busca de produto, login real por
 OTP destravando as abas autenticadas, perfil com estatísticas reais,
-navegação Perfil → Pedidos → volta).
+navegação Perfil → Pedidos → volta) e Fase 3 (cardápio com item esgotado
+visível, modal de variação com preço ao vivo, login embutido no modal
+preservando seleção, carrinho persistente com recálculo real de
+quantidade). Um bug real de CSS apareceu nesta fase e está documentado na
+seção "Módulo de carrinho" acima — a classe `.modal` colidindo com o
+Bootstrap, achada checando `boundingBox()` via Playwright, não só lendo o
+código.
 
 ## Próximos passos (ordem sugerida pela especificação, Parte I §10)
 
@@ -439,17 +553,20 @@ navegação Perfil → Pedidos → volta).
    do Mercado Pago, reembolso, os seis testes de concorrência da Parte I §9.
    Gateway é Mercado Pago, decidido — o AbacatePay do `fuudelivery-backend`
    (Go) não entra neste projeto, em nenhuma hipótese (ver seção acima).
-2. **Fase 3 (cardápio, item, carrinho)** — é o próximo passo natural do
-   front-end: a Home (2.1) já abre um restaurante, só que hoje isso é um
-   aviso ("ainda não portada") em vez de uma tela de verdade.
-3. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
-   para Svelte + Bootstrap — Fases 1 e 2 prontas, faltam 13 — seguindo a
-   mesma ordem de risco (dinheiro primeiro, conveniência depois).
-4. **Decisão de produto pendente: fidelidade/pontos.** A tela 2.3 existe
+   É o próximo passo natural também do front: o `CartDrawer` (3.3) já tem
+   o botão "Ir para pagamento", só que hoje isso é um aviso em vez de
+   levar à Fase 4 de verdade.
+2. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
+   para Svelte + Bootstrap — Fases 1, 2 e 3 prontas, faltam 12 — seguindo
+   a mesma ordem de risco (dinheiro primeiro, conveniência depois).
+3. **Decisão de produto pendente: fidelidade/pontos.** A tela 2.3 existe
    só como desenho (dado de exemplo, sem tabela no banco). Se for pra
    valer, precisa de um ledger de pontos — mesmo padrão append-only do
    `ledger_entries` financeiro — e isso é decisão de escopo, não algo pra
    inventar numa migração de suporte a tela.
+4. **Decisão de produto pendente: cupons.** `coupons`/`coupon_redemptions`
+   existem desde a migração `008`, mas não há endpoint de resgate. O
+   `CartDrawer` (3.3) já tem o campo de UI, esperando o backend.
 
 ## Origem
 
