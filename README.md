@@ -29,11 +29,12 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (nove migrações SQL) e o **módulo de identidade em
-PHP** sobre ela — login por OTP, sessão com rotação de refresh token, login
-de parceiro (loja/entregador). Pagamentos, pedido, ledger e o resto ainda
-não foram portados; Svelte e as telas também não. Segue a ordem sugerida
-pela especificação (12 semanas, Parte I §10).
+A **fundação de banco** (nove migrações SQL), o **módulo de identidade** e o
+**módulo de catálogo + pedido + checkout** em PHP sobre ela. Pagamentos,
+ledger, dispatch e o resto ainda não foram portados; Svelte e as telas
+também não. Segue a ordem sugerida pela especificação (12 semanas, Parte I
+§10) — catálogo/pedido vem antes de pagamentos porque `POST
+/v1/orders/:id/pay` pressupõe que o pedido já existe.
 
 ```
 api/v1/auth/                módulo identity (endpoints, um arquivo por rota)
@@ -42,20 +43,39 @@ api/v1/auth/                módulo identity (endpoints, um arquivo por rota)
   refresh.php                  POST — rotaciona refresh, detecta reuso
   partner_login.php            POST — loja (CNPJ+senha) / entregador (CPF+código)
   consent.php                  POST — registra aceite de termo (LGPD), autenticado
+api/v1/restaurants/         catálogo (público, exceto orders.php)
+  show.php                     GET  ?id= — dados da loja + horário de funcionamento
+  menu.php                     GET  ?id= — cardápio disponível, com variações
+  orders.php                   GET  ?id= — fila do KDS (só restaurant_staff da própria loja)
+api/v1/addresses/           endereços do cliente autenticado
+  create.php                   POST — cadastra endereço
+  list.php                     GET  — lista os do usuário logado
+api/v1/orders/               pedido e checkout
+  create.php                   POST — checkout: valida política/preço/loja aberta,
+                                cria o pedido, avança cart → pending_payment
+  show.php                     GET  ?id= — detalhe (dono ou loja do pedido, só)
+  list.php                     GET  — pedidos do cliente autenticado
+  status.php                   POST — única porta pra mudar status, por cima de
+                                advance_order(); autorização por papel aqui,
+                                legalidade da transição só no banco
 lib/                          código compartilhado entre módulos
   bootstrap.php                 carrega .env, registra handler de erro, requires
-  db.php                          PDO (DATABASE_URL → pgsql DSN)
+  db.php                          PDO (DATABASE_URL → pgsql DSN) + pg_bool()
   response.php                    envelope de erro/sucesso com trace_id (contrato de API, Parte I §3)
   jwt.php                          JWT HS256 escrito à mão (sem dependência nova)
   sessions.php                    emissão e rotação de sessão (Parte I §7)
   otp.php                          geração/hash de código, limite de pedidos
   auth_guard.php                  exige access token válido
+  policy.php                      resolve política loja → plataforma, gera o policy_snapshot
+  orders.php                      chama advance_order(), autorização de acesso a pedido
   validation.php                  CPF/CNPJ com dígito verificador, e-mail, telefone
   uuid.php                        UUIDv4 sem dependência
 tests/
-  smoke_identity.sh             sobe o servidor PHP embutido e roda o fluxo
-                                 completo (signup, código errado, refresh,
-                                 detecção de reuso) contra um banco já migrado
+  smoke_identity.sh             fluxo completo de identity (signup, código errado,
+                                 refresh, detecção de reuso) contra um banco já migrado
+  smoke_ordering.sh             fluxo completo de checkout (política, preço com
+                                 variação, transição ilegal barrada, papel sem
+                                 permissão barrado, KDS, paid→preparing→ready)
 db/
   migrations/
     001_identity.up.sql / .down.sql      users, partner_accounts, otp_codes,
@@ -85,7 +105,7 @@ db/
   migrate.sh              runner simples (up / down N) via DATABASE_URL
   Dockerfile               postgres:16 + pg_cron
 docker-compose.yml          banco (Postgres) + app (PHP embutido) para desenvolvimento
-.github/workflows/ci.yml    CI: migrações (up/down/up) + lint PHP + smoke test do identity
+.github/workflows/ci.yml    CI: migrações (up/down/up) + lint PHP + smoke tests dos módulos
 ```
 
 Cada arquivo de migração segue exatamente a Parte II da especificação
@@ -149,6 +169,38 @@ fechar essa lacuna:
   ainda, é assim que o fluxo é testável; o código real nunca é logado nem
   devolvido quando `APP_ENV=production`.
 
+## Módulo catalog+ordering+checkout — decisões de implementação
+
+- **Frete (`delivery_fee`) é informado pelo cliente do checkout, não
+  calculado aqui.** O esquema não modela uma tarifa base por loja/distância
+  (só `surge_fee`, o frete turbinado do cenário sem entregador — Fase 15) e
+  a especificação não detalha de onde vem o valor normal. Fica validado
+  como número ≥ 0 e nada mais; o cálculo por distância/geolocalização é
+  responsabilidade de um módulo futuro (dispatch ou um serviço de tarifação
+  à parte).
+- **`policy_overrides` com `scope='city'` não entra no merge de
+  `lib/policy.php`.** Só `scope='restaurant'` é aplicado — um override por
+  praça exigiria cruzar `city_ibge_code` do endereço de entrega contra a
+  praça da loja, e essa resolução geográfica não existe neste módulo ainda.
+  Fica comentado no código.
+- **`POST /v1/orders/status` é uma porta só, por cima de `advance_order()`,**
+  em vez de um endpoint por transição (`/accept`, `/reject`, `/ready`...).
+  A legalidade de uma transição (de/para) é decidida inteiramente pelo
+  banco; o PHP só decide **quem tem permissão de pedir** cada transição
+  (cliente só cancela o próprio pedido; loja avança/recusa/cancela o seu).
+  Isso significa dois níveis de erro diferentes por design: 403 quando o
+  papel não pode pedir aquilo, 409 quando o banco recusa a transição em si.
+- **RLS por restaurante (migração 009) ainda não está em uso real.** As
+  policies existem no banco, mas a conexão PHP de `lib/db.php` usa o que
+  `DATABASE_URL` apontar — em dev/CI isso é o superusuário `postgres`, que
+  ignora RLS por padrão (é dono das tabelas). A autorização de acesso a
+  pedido hoje é feita inteiramente em `lib/orders.php`
+  (`authorize_order_access()`), comparando `user_id`/`restaurant_id` do
+  token com os do pedido. Rodar como o role `app_rw` (já com `GRANT`
+  configurado em `009`) e emitir `SET LOCAL app.role` / `app.restaurant_id`
+  por requisição é o próximo passo para RLS virar defesa em profundidade de
+  verdade, não só desenho.
+
 ## Como rodar localmente
 
 ```bash
@@ -159,7 +211,8 @@ bash db/migrate.sh down 3      # reverte as 3 últimas
 bash db/migrate.sh down 9      # reverte tudo
 
 cp .env.example .env           # ajuste DATABASE_URL/JWT_SECRET se precisar
-JWT_SECRET=dev-secret bash tests/smoke_identity.sh   # sobe um servidor PHP embutido e roda o fluxo completo
+JWT_SECRET=dev-secret bash tests/smoke_identity.sh   # fluxo completo de identity
+JWT_SECRET=dev-secret bash tests/smoke_ordering.sh   # fluxo completo de checkout (semeia loja/cardápio sozinho)
 ```
 
 As nove migrações foram validadas de ponta a ponta (`up` completo, `down`
@@ -177,10 +230,28 @@ derrubando a família de sessão inteira (a defesa contra token roubado da
 Parte I §7). `tests/smoke_identity.sh` é exatamente essa sequência,
 automatizada, e roda no CI a cada push em `api/`, `lib/` ou `tests/`.
 
+O módulo catalog+ordering+checkout também: cardápio com variação de preço
+somando certo, pedido abaixo do mínimo barrado, checkout gerando
+`policy_snapshot` e total corretos, transição ilegal (`pending_payment` →
+`ready` direto) barrada com 409, papel sem permissão barrado com 403, fila
+do KDS mostrando só o que a loja pode ver, e o caminho feliz completo
+`paid → preparing → ready`. `tests/smoke_ordering.sh` semeia sua própria
+loja/cardápio via `psql` e roda tudo isso a cada push, no mesmo CI.
+
+Um bug real apareceu e foi corrigido durante essa validação: com
+`PDO::ATTR_EMULATE_PREPARES` desligado (necessário pra prepared statement
+de verdade, não só client-side), `PDO::execute()` manda um `false` do PHP
+como string vazia `''` — e o PostgreSQL rejeita `''` como `boolean`
+("invalid input syntax for type boolean"). `lib/db.php` ganhou `pg_bool()`
+pra isso; qualquer parâmetro booleano futuro deve passar por ela.
+
 ## Próximos passos (ordem sugerida pela especificação, Parte I §10)
 
 1. **Módulo de pagamentos em PHP** — rotas com PDO, idempotência, webhooks
    do Mercado Pago, reembolso, os seis testes de concorrência da Parte I §9.
+   (Nota: a cláusula zero fixa Mercado Pago, mas o gateway real em produção
+   hoje — no `fuudelivery-backend` em Go — é AbacatePay; vale confirmar
+   antes de integrar de verdade.)
 2. **Portar as telas** de `FUUDelivery - 64 Telas (offline).html` para
    Svelte + Bootstrap, uma fase por vez, seguindo a mesma ordem de risco
    (dinheiro primeiro, conveniência depois).

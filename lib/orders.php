@@ -1,0 +1,65 @@
+<?php
+declare(strict_types=1);
+
+// Volta única para mudar status (Especificação, Parte II §9): nenhum
+// "UPDATE orders SET status" fora daqui, nem no PHP. Toda transição passa
+// pela função do banco, que é quem decide o que é legal.
+function call_advance_order(PDO $pdo, int $orderId, string $to, ?string $actorId, string $actorKind, array $meta = []): void
+{
+    try {
+        $stmt = $pdo->prepare('SELECT advance_order(:id, :to, :actor, :kind, :meta::jsonb)');
+        $stmt->execute([
+            'id' => $orderId,
+            'to' => $to,
+            'actor' => $actorId,
+            'kind' => $actorKind,
+            'meta' => json_encode($meta, JSON_UNESCAPED_UNICODE),
+        ]);
+    } catch (PDOException $e) {
+        if (str_contains($e->getMessage(), 'transicao ilegal')) {
+            error_response(409, 'illegal_transition', 'Esse pedido não pode mudar para esse status agora.', detail: $e->getMessage());
+        }
+        if (str_contains($e->getMessage(), 'inexistente')) {
+            error_response(404, 'order_not_found', 'Pedido não encontrado.');
+        }
+        throw $e;
+    }
+}
+
+function fetch_order(PDO $pdo, int $orderId): ?array
+{
+    $stmt = $pdo->prepare('SELECT * FROM orders WHERE id = :id');
+    $stmt->execute(['id' => $orderId]);
+    $order = $stmt->fetch();
+    return $order === false ? null : $order;
+}
+
+function fetch_order_items(PDO $pdo, int $orderId): array
+{
+    $stmt = $pdo->prepare('SELECT * FROM order_items WHERE order_id = :id ORDER BY id');
+    $stmt->execute(['id' => $orderId]);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Garante que quem está pedindo pode ver/mexer nesse pedido: cliente só o
+ * próprio, loja só o seu restaurante. Encerra a requisição com 403/404
+ * quando não pode.
+ */
+function authorize_order_access(array $order, array $claims): void
+{
+    $role = $claims['role'] ?? null;
+    if ($role === 'customer') {
+        if ($order['user_id'] !== $claims['sub']) {
+            error_response(404, 'order_not_found', 'Pedido não encontrado.');
+        }
+        return;
+    }
+    if ($role === 'restaurant_staff') {
+        if (($claims['restaurant_id'] ?? null) !== $order['restaurant_id']) {
+            error_response(404, 'order_not_found', 'Pedido não encontrado.');
+        }
+        return;
+    }
+    error_response(403, 'forbidden', 'Esse papel não acessa pedidos por aqui.');
+}

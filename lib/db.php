@@ -31,3 +31,14 @@ function db(): PDO
 
     return $pdo;
 }
+
+/**
+ * Com ATTR_EMULATE_PREPARES=false, PDO::execute(array) manda todo valor
+ * como string -- um PHP `false` vira '' na conexão, e o pgsql rejeita ''
+ * como boolean ("invalid input syntax for type boolean"). Use isto em
+ * qualquer parâmetro que vá para uma coluna `boolean`.
+ */
+function pg_bool(bool $value): string
+{
+    return $value ? 'true' : 'false';
+}

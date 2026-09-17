@@ -12,14 +12,14 @@ on:
       - "api/**"
       - "lib/**"
       - "tests/**"
-      - ".github/workflows/migrations.yml"
+      - ".github/workflows/ci.yml"
   pull_request:
     paths:
       - "db/**"
       - "api/**"
       - "lib/**"
       - "tests/**"
-      - ".github/workflows/migrations.yml"
+      - ".github/workflows/ci.yml"
 
 jobs:
   apply:
@@ -85,3 +85,9 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
           JWT_SECRET: ci-test-secret
         run: bash tests/smoke_identity.sh
+
+      - name: Smoke test -- módulo catalog+ordering+checkout
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+        run: bash tests/smoke_ordering.sh

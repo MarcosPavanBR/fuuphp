@@ -12,6 +12,8 @@ require_once __DIR__ . '/jwt.php';
 require_once __DIR__ . '/sessions.php';
 require_once __DIR__ . '/otp.php';
 require_once __DIR__ . '/auth_guard.php';
+require_once __DIR__ . '/policy.php';
+require_once __DIR__ . '/orders.php';
 
 // Nenhum stack trace escapa para o cliente: vira log estruturado com o
 // trace_id que a resposta 500 também carrega (Especificação, Parte I §8).
