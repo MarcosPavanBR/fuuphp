@@ -12,7 +12,7 @@
   //
   // A fila de Pix fica fixa no rodapé da terceira coluna, como no mock:
   // "trabalho pendente que trava faturamento, não notificação".
-  let { orders, proofs, onRefresh, onOpenProof } = $props();
+  let { orders, proofs, onRefresh, onOpenProof, onReject } = $props();
 
   let now = $state(Date.now());
   let busyId = $state(null);
@@ -118,14 +118,17 @@
         {#if order.payment_method === 'cash' && order.change_for}
           <p class="change">troco para {money(order.change_for)}</p>
         {/if}
-        <button
-          type="button"
-          class="btn-fuu-primary accept"
-          disabled={busyId === order.id}
-          onclick={() => advance(order, 'preparing')}
-        >
-          Aceitar
-        </button>
+        <div class="ticket-actions">
+          <button type="button" class="reject-btn" onclick={() => onReject(order)}>Recusar</button>
+          <button
+            type="button"
+            class="btn-fuu-primary accept"
+            disabled={busyId === order.id}
+            onclick={() => advance(order, 'preparing')}
+          >
+            Aceitar
+          </button>
+        </div>
       </article>
     {:else}
       <p class="empty">Nenhum pedido novo.</p>
@@ -159,14 +162,17 @@
             style={`width:${Math.min(100, Math.round((secs / TARGET_SECONDS) * 100))}%`}
           ></div>
         </div>
-        <button
-          type="button"
-          class="btn-fuu-primary ready-btn"
-          disabled={busyId === order.id}
-          onclick={() => advance(order, 'ready')}
-        >
-          Pronto
-        </button>
+        <div class="ticket-actions">
+          <button type="button" class="reject-btn" onclick={() => onReject(order)}>Recusar</button>
+          <button
+            type="button"
+            class="btn-fuu-primary ready-btn"
+            disabled={busyId === order.id}
+            onclick={() => advance(order, 'ready')}
+          >
+            Pronto
+          </button>
+        </div>
       </article>
     {:else}
       <p class="empty">Cozinha vazia.</p>
@@ -358,12 +364,29 @@
   .fill.late {
     background: var(--fuu-wait-text);
   }
+  .ticket-actions {
+    display: flex;
+    gap: 9px;
+    margin-top: 13px;
+  }
   .accept,
   .ready-btn {
-    width: 100%;
-    margin-top: 13px;
+    flex: 1.6;
     min-height: var(--fuu-tap-operator);
     font-size: 15px;
+  }
+  /* Recusar é secundário de propósito: a tela 13.2 mostra que recusar tem
+     custo, então o botão não compete com o caminho bom. */
+  .reject-btn {
+    flex: 1;
+    min-height: var(--fuu-tap-operator);
+    background: var(--fuu-white);
+    border: 1.5px solid var(--fuu-line-3);
+    border-radius: 10px;
+    font-family: var(--fuu-font-body);
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--fuu-ink-3);
   }
   .accept {
     background: var(--fuu-leaf-dark);

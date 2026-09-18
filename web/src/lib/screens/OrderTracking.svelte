@@ -5,6 +5,7 @@
   import { currentToken } from '../session.svelte.js';
   import { parsePgTimestamp } from '../datetime.js';
   import ReviewScreen from './ReviewScreen.svelte';
+  import CancelDialog from './CancelDialog.svelte';
 
   // Fase 5 — pós-pedido e acompanhamento (5.1 Aprovado, 5.2 Em análise,
   // 5.3 Tracking, 5.4 Rejeitado), uma tela só reagindo ao status ao vivo
@@ -20,6 +21,7 @@
   let restaurant = $state(null);
   let review = $state(null);
   let showReview = $state(false);
+  let showCancel = $state(false);
   let now = $state(Date.now());
   let evtSource;
   let clockInterval;
@@ -40,6 +42,13 @@
     cancelled: 'Cancelado',
     refunded: 'Reembolsado',
   };
+  const CANCELLABLE = new Set([
+    'pending_payment',
+    'pending_verification',
+    'paid',
+    'preparing',
+    'delivering',
+  ]);
   const PAYMENT_LABELS = {
     mp_card: 'Cartão', pix_auto: 'Pix', pix_manual: 'Pix', cash: 'Dinheiro', pos_machine: 'Maquininha',
   };
@@ -75,6 +84,21 @@
   onDestroy(() => {
     evtSource?.close();
     clearInterval(clockInterval);
+  });
+
+  // Enquanto o diálogo de cancelamento está aberto, a conexão de tempo real
+  // é fechada: o modal cobre a tela inteira (não há o que atualizar atrás
+  // dele) e ele precisa de duas chamadas HTTP -- a cotação e a confirmação.
+  // Sob `php -S`, que atende uma requisição por vez, manter o SSE aberto
+  // fazia a cotação esperar os 25s da janela do stream; medido em 23,5 s com
+  // o navegador antes desta linha existir.
+  $effect(() => {
+    if (showCancel) {
+      evtSource?.close();
+      evtSource = undefined;
+    } else if (order && !evtSource) {
+      connect();
+    }
   });
 
   let remainingSeconds = $derived(
@@ -169,11 +193,11 @@
     {/if}
 
     <div class="summary fuu-card">
-      <div class="row"><span>Pedido</span><span class="fuu-mono">#{order.public_code}</span></div>
-      <div class="row"><span>Pagamento</span><span>{PAYMENT_LABELS[order.payment_method] ?? order.payment_method}</span></div>
-      <div class="row"><span>Total</span><span class="fuu-mono">{money(order.total)}</span></div>
+      <div class="kv"><span>Pedido</span><span class="fuu-mono">#{order.public_code}</span></div>
+      <div class="kv"><span>Pagamento</span><span>{PAYMENT_LABELS[order.payment_method] ?? order.payment_method}</span></div>
+      <div class="kv"><span>Total</span><span class="fuu-mono">{money(order.total)}</span></div>
       {#if order.payment_method === 'cash' && order.change_for}
-        <div class="row"><span>Troco para</span><span class="fuu-mono">{money(order.change_for)}</span></div>
+        <div class="kv"><span>Troco para</span><span class="fuu-mono">{money(order.change_for)}</span></div>
       {/if}
     </div>
 
@@ -194,9 +218,28 @@
       {#if order.status === 'pending_verification'}
         <button type="button" class="btn-fuu-primary w-100" onclick={talkToStore}>Falar com a loja</button>
       {/if}
+      <!-- 13.1 — cancelar só aparece enquanto é possível. 'ready' fica de
+           fora porque a comida está na bancada esperando o entregador, e a
+           função do banco não permite essa transição. -->
+      {#if CANCELLABLE.has(order.status)}
+        <button type="button" class="link-btn danger" onclick={() => (showCancel = true)}>
+          Cancelar pedido
+        </button>
+      {/if}
       <button type="button" class="link-btn" onclick={onDone}>Voltar ao início</button>
     </div>
   </div>
+{/if}
+
+{#if showCancel}
+  <CancelDialog
+    orderId={order.id}
+    onClose={() => (showCancel = false)}
+    onCancelled={(data) => {
+      showCancel = false;
+      order = data.order;
+    }}
+  />
 {/if}
 
 <style>
@@ -294,7 +337,7 @@
     padding: 12px 16px;
     margin-bottom: 18px;
   }
-  .row {
+  .kv {
     display: flex;
     justify-content: space-between;
     font-size: 13.5px;
@@ -350,5 +393,8 @@
     font-size: 13px;
     font-weight: 600;
     padding: 8px 0;
+  }
+  .link-btn.danger {
+    color: var(--fuu-red);
   }
 </style>

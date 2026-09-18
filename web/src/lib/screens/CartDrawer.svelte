@@ -84,15 +84,15 @@
     </div>
 
     <div class="totals">
-      <div class="row">
+      <div class="kv">
         <span>Subtotal</span>
         <span class="fuu-mono">{money(cart.order.subtotal)}</span>
       </div>
-      <div class="row">
+      <div class="kv">
         <span>Taxa de entrega</span>
         <span class="fuu-mono">{money(cart.order.delivery_fee)} <small>(definida no checkout)</small></span>
       </div>
-      <div class="row total">
+      <div class="kv total">
         <span>Total</span>
         <span class="fuu-mono">{money(cart.order.total)}</span>
       </div>
@@ -214,19 +214,19 @@
     padding: 12px 0;
     margin-bottom: 18px;
   }
-  .row {
+  .kv {
     display: flex;
     justify-content: space-between;
     font-size: 13.5px;
     color: var(--fuu-ink-3);
     margin-bottom: 6px;
   }
-  .row small {
+  .kv small {
     color: var(--fuu-ink-5);
     font-family: var(--fuu-font-body);
     font-size: 10.5px;
   }
-  .row.total {
+  .kv.total {
     font-weight: 700;
     font-size: 15px;
     color: var(--fuu-ink-1);

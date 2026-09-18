@@ -18,6 +18,7 @@ require_once __DIR__ . '/cart.php';
 require_once __DIR__ . '/idempotency.php';
 require_once __DIR__ . '/pix.php';
 require_once __DIR__ . '/mercadopago.php';
+require_once __DIR__ . '/refunds.php';
 
 // Em produção, PWA e API ficam atrás do mesmo domínio via Cloudflare (a
 // especificação nunca fala em domínios separados) -- CORS não seria

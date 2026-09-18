@@ -80,7 +80,13 @@ while (time() < $deadline) {
         sse_snapshot($pdo, $orderId);
     }
 
-    if (time() - $lastHeartbeat >= 8) {
+    // O heartbeat não é só pra manter proxy acordado: connection_aborted()
+    // do PHP só vira true depois de uma escrita que falha, então é ELE que
+    // faz o servidor perceber que o cliente foi embora. A cada 2s (em vez de
+    // 8) um cliente que fechou a aba libera o processo quatro vezes mais
+    // rápido -- o que importa de verdade sob `php -S`, que atende uma
+    // requisição por vez. São ~30 bytes por ping.
+    if (time() - $lastHeartbeat >= 2) {
         sse_send('heartbeat', ['ts' => time()]);
         $lastHeartbeat = time();
     }

@@ -13,6 +13,7 @@
   import ProofQueue from './lib/screens/panel/ProofQueue.svelte';
   import ProofReviewModal from './lib/screens/panel/ProofReviewModal.svelte';
   import KdsBoard from './lib/screens/panel/KdsBoard.svelte';
+  import RejectDialog from './lib/screens/panel/RejectDialog.svelte';
   import PanelOverview from './lib/screens/panel/PanelOverview.svelte';
 
   // Painel da loja (telas 7.3 e 11.1). Roda numa página própria
@@ -25,6 +26,7 @@
   let recent = $state([]);
   let stats = $state(null);
   let selectedProof = $state(null);
+  let rejecting = $state(null);
   let lastSync = $state(null);
   let online = $state(true);
   let clock = $state(new Date());
@@ -149,6 +151,7 @@
         {proofs}
         onRefresh={() => pull({ withStats: true })}
         onOpenProof={(p) => (selectedProof = p)}
+        onReject={(o) => (rejecting = o)}
       />
     {:else}
       <div class="overview-layout">
@@ -176,6 +179,17 @@
 
   {#if selectedProof}
     <ProofReviewModal proof={selectedProof} onClose={() => (selectedProof = null)} {onReviewed} />
+  {/if}
+
+  {#if rejecting}
+    <RejectDialog
+      order={rejecting}
+      onClose={() => (rejecting = null)}
+      onRejected={() => {
+        rejecting = null;
+        pull({ withStats: true });
+      }}
+    />
   {/if}
 {/if}
 

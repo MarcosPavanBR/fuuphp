@@ -80,7 +80,7 @@
 
 <div class="fuu-card table-card">
   <p class="table-title">Pedidos recentes</p>
-  <div class="row head">
+  <div class="kv head">
     <div class="c-code">PEDIDO</div>
     <div class="c-name">CLIENTE</div>
     <div class="c-pay">PAGAMENTO</div>
@@ -88,7 +88,7 @@
     <div class="c-status">STATUS</div>
   </div>
   {#each recent as order (order.id)}
-    <div class="row">
+    <div class="kv">
       <div class="c-code fuu-mono">#{order.public_code}</div>
       <div class="c-name">{shortName(order.customer_name)}</div>
       <div class="c-pay">{method(order)}</div>
@@ -160,7 +160,7 @@
     margin: 0;
     color: var(--fuu-ink-1);
   }
-  .row {
+  .kv {
     display: flex;
     align-items: center;
     font-size: 12px;
@@ -168,7 +168,7 @@
     border-bottom: 1px solid var(--fuu-line-5);
     color: var(--fuu-ink-2);
   }
-  .row.head {
+  .kv.head {
     font-size: 10px;
     font-weight: 800;
     color: var(--fuu-ink-5);

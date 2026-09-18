@@ -113,7 +113,12 @@ api/v1/orders/               pedido e checkout
                                 da loja e contagem de itens
   status.php                   POST — única porta pra mudar status, por cima de
                                 advance_order(); autorização por papel aqui,
-                                legalidade da transição só no banco
+                                legalidade da transição só no banco. Cancelar
+                                ou recusar exige motivo e grava o reembolso na
+                                mesma transação (Fase 13)
+  cancel_quote.php             GET  ?id= — o que acontece se desfizer agora:
+                                taxa, valor de volta, canal, prazo e quem paga
+                                (telas 13.1 e 13.2); só lê
   track.php                     GET  ?id= — SSE (Fase 5.3): snapshot na
                                  hora + evento ao vivo por LISTEN/NOTIFY,
                                  ver seção própria abaixo
@@ -161,6 +166,8 @@ lib/                          código compartilhado entre módulos
   idempotency.php                 idempotent_response(): X-Idempotency-Key
                                    grava a resposta e devolve a MESMA em
                                    replay, pros 5 métodos de pagamento
+  refunds.php                   rotas de estorno por método, quem paga por
+                                 causa e gravação idempotente (Fase 13)
   pix.php                         gera o Pix "copia e cola" (BR Code/EMV) —
                                    CRC16 conferido contra o vetor de teste
                                    padrão do algoritmo antes de entrar em uso
@@ -193,6 +200,9 @@ tests/
                                  de apagar endereço em uso) e cartões salvos
                                  (mp_customer_id reaproveitado entre
                                  cartões, troca de padrão, remoção)
+  smoke_cancel.sh               caminho do erro: cancelamento com e sem taxa,
+                                 recusa da loja, reembolso por método (canal,
+                                 valor e quem paga) e isolamento por dono
   smoke_panel.sh                painel da loja: fila de validação de Pix,
                                  imagem do comprovante com autorização,
                                  resumo do dia, KDS e as transições da loja
@@ -235,6 +245,7 @@ db/
                                           das 42 tabelas originais, sem
                                           coluna de nota agregada em
                                           restaurants, ver seção própria)
+    014_cancellation.up.sql / .down.sql   platform_policies.cancel_fee (tela 13.1)
     013_signup_profile.up.sql / .down.sql users.birth_date (opcional da tela 10.3)
     012_saved_cards.up.sql / .down.sql   saved_cards (Fase 6.2) +
                                           users.mp_customer_id -- também
@@ -619,7 +630,7 @@ puro: CRUD de endereços completo e cartão salvo via Mercado Pago.
   (confirmado por query direta no banco, não só pela resposta da API),
   troca de padrão e remoção.
 
-## Front-end (`web/`) — Fases 1 a 6 e 10, decisões de implementação
+## Front-end (`web/`) — Fases 1 a 6, 10 e 13, decisões de implementação
 
 Svelte 5 + Vite, Bootstrap 5, Bootstrap Icons, `sweetalert` (não
 `sweetalert2` — o pacote `sweetalert` na versão 2.x do npm *é* a
@@ -627,9 +638,9 @@ biblioteca clássica, a mesma API `swal()` que o mock usa). Fase 1 (splash,
 seleção de estado, cidade+bairro), Fase 2 (home, busca, fidelidade,
 pedidos, perfil), Fase 3 (loja, item, carrinho), Fase 4 (pagamento), Fase 5
 (pós-pedido), Fase 6 (conta, endereços, cartões, configurações) e Fase 10.1
-a 10.3 (login e cadastro) estão portadas, mais o painel da loja (Fase 7.3 e
-11.1, em `painel.html`); as três têm seção própria adiante. As outras fases
-ainda não têm componente.
+a 10.3 (login e cadastro) e Fase 13.1/13.2 (cancelar e recusar) estão
+portadas, mais o painel da loja (Fase 7.3 e 11.1, em `painel.html`); as
+quatro têm seção própria adiante. As outras fases ainda não têm componente.
 
 ```
 web/
@@ -656,6 +667,7 @@ web/
         ItemModal.svelte                3.2 — variações, observação, preço ao vivo
       screens/
         AuthFlow.svelte                 orquestra a Fase 10: 10.1 -> 10.2 -> 10.3
+        CancelDialog.svelte             13.1 — taxa e estorno antes de confirmar
         LoginScreen.svelte              10.1 — telefone ou e-mail, código de uso único
         OtpScreen.svelte                10.2 — seis caixas, reenvio, WhatsApp
         SignupScreen.svelte             10.3 — cadastro com base legal por bloco
@@ -691,6 +703,7 @@ web/
                                          pedido à direita, aprovar ou recusar
           KdsBoard.svelte               11.1 — três colunas, cronômetro por pedido,
                                          fila de Pix fixa no canto
+          RejectDialog.svelte           13.2 — recusar mostrando o custo real
           PanelOverview.svelte          7.3 — visão geral de hoje + pedidos recentes
     App.svelte                  orquestra Fase 1 -> Fase 2 (abas, e Fase 6
                                  como pseudo-abas dentro do mesmo shell) ->
@@ -1052,6 +1065,78 @@ mock).
   perfil -- sem repetir o cadastro. As únicas respostas não-200 no console
   são os três erros que o próprio teste provoca.
 
+## Caminho do erro (Fase 13.1 e 13.2) — decisões de implementação
+
+"O buraco mais comum em app de delivery." Até aqui um pedido só avançava; o
+que acontece quando alguém desiste — e para onde vai o dinheiro — não existia
+em lugar nenhum além da tabela `refunds`, vazia desde a migração `005`.
+
+- **`lib/refunds.php` é a tabela da tela 13.4 escrita em código.** Por onde o
+  dinheiro volta em cada forma de pagamento (cartão → `gateway`, Pix →
+  `pix_return`, maquininha → `acquirer_void`, dinheiro → `none`), em quanto
+  tempo, e quem arca. Os canais são os do `CHECK` de `refunds.channel`, não
+  uma lista nova inventada pra caber na tela.
+- **A taxa de cancelamento virou política, não número mágico.** Migração
+  `014` adiciona `platform_policies.cancel_fee`, junto de teto de espécie,
+  comissão e prazo de repasse — versionada e auditável igual ao resto. O
+  padrão é **0**: o mock mostra R$ 15,00 num pedido de R$ 78,40, mas isso é
+  exemplo de desenho, não regra aprovada, e cobrar do cliente um valor que
+  ninguém autorizou seria pior que não cobrar.
+- **A taxa vale a do dia do pedido.** `cancel_fee` entra em
+  `orders.policy_snapshot` no checkout e é de lá que o cancelamento lê
+  (`policy_for_order()`): mudar a taxa hoje não encarece o cancelamento de um
+  pedido feito ontem. Pedido anterior à migração cai na política corrente.
+- **Quando a taxa existe é regra de código, não de configuração:** livre
+  antes de a cozinha começar (`pending_payment`, `pending_verification`,
+  `paid`), cobrada de `preparing` em diante — e só quando quem desiste é o
+  cliente. Loja recusando e falha nossa nunca cobram taxa de ninguém.
+- **A cotação e a execução usam a mesma função.** `orders/cancel_quote.php`
+  só lê e devolve o que a tela mostra antes do botão vermelho; `status.php`
+  recalcula com a mesma `refund_plan()` na hora de gravar. Se a tela
+  calculasse por conta própria, o cliente veria um valor e receberia outro --
+  que é exatamente o que a tela 13.1 existe pra evitar.
+- **Desfazer pedido e decidir o dinheiro acontecem na mesma transação.** Um
+  pedido cancelado sem o reembolso registrado junto é o estado que trava
+  reembolso por dias (tela 13.4). `status.php` abre transação, grava o
+  motivo, chama `advance_order()` e insere em `refunds` — tudo ou nada.
+- **Motivo passou a ser obrigatório pra cancelar ou recusar** (422
+  `reason_required`). Não é burocracia: é ele que alimenta o ranking da loja
+  e, do lado da loja, é o texto que o cliente lê.
+- **Estorno de zero não é linha na tabela.** `refunds.amount` tem
+  `CHECK (amount > 0)`, então pedido em dinheiro (nada foi cobrado) cancela
+  sem criar reembolso nenhum. A compensação do entregador que já se deslocou
+  é lançamento de `ledger_entries` — Fase 9, não construída.
+- **A taxa de recusa da loja conta o ATO, não o status final.** Pedido já em
+  preparo não pode ir pra `rejected` (a função do banco não permite essa
+  transição), vai pra `cancelled`. Contar por status deixaria a taxa presa em
+  zero justamente nas recusas que mais doem — então ela sai de
+  `order_events.actor_kind = 'store'`.
+- **O que o mock tem e a tela 13.2 não tem: "sugerir substituição".** Depende
+  de um canal pro cliente responder, que é a Fase 14 (suporte) e não existe.
+  Uma caixa de texto que não chega em ninguém seria pior que a ausência.
+- **Dois defeitos reais que o navegador achou aqui:**
+  1. **Colisão de classe com o Bootstrap, de novo.** `.row` do Bootstrap
+     força `width: 100%` nos filhos, então toda linha "rótulo à esquerda,
+     valor à direita" empilhava. Estava assim desde a Fase 5 no cartão de
+     resumo do acompanhamento, sem ninguém notar. As quatro telas que usavam
+     `.row` passaram a usar `.kv`. (O primeiro caso dessa família foi
+     `.modal`, documentado em "Módulo de carrinho".)
+  2. **O SSE do acompanhamento travava a própria tela.** Abrir o
+     cancelamento com o stream aberto fazia a cotação demorar **23,5 s**
+     medidos: `php -S` atende uma requisição por vez e o stream segura o
+     processo pela janela inteira. Duas correções, as duas boas por si só —
+     o modal fecha o `EventSource` enquanto está aberto (não há o que
+     atualizar atrás dele), e o heartbeat do stream caiu de 8 s pra 2 s,
+     porque é a escrita dele que faz o `connection_aborted()` do PHP
+     perceber que o cliente foi embora. Ficou em **1,3 s**.
+- **Validado com Postgres e navegador reais.** `tests/smoke_cancel.sh` cobre
+  os quatro métodos de pagamento, cancelamento com e sem taxa, recusa da
+  loja, o pagamento virando `refunded`, reembolso não duplicado e pedido de
+  outra pessoa (404, que não conta nem que existe). No Playwright: o cliente
+  abre o acompanhamento, cancela escolhendo motivo e vê o pedido virar
+  "Cancelado"; a loja recusa pelo KDS com o custo na tela (estorno,
+  entregador, taxa de recusa real). Zero erros de console.
+
 ## Painel da loja (`web/painel.html`) — Fase 7.3 e 11.1
 
 O tablet do balcão. Até aqui `restaurants/approve_pix.php` existia e passava
@@ -1137,9 +1222,9 @@ esse buraco e junta o KDS, que é a outra metade do mesmo trabalho.
 ```bash
 docker compose up -d
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
-bash db/migrate.sh up           # aplica as 13, em ordem
+bash db/migrate.sh up           # aplica as 14, em ordem
 bash db/migrate.sh down 3       # reverte as 3 últimas
-bash db/migrate.sh down 13      # reverte tudo
+bash db/migrate.sh down 14      # reverte tudo
 
 cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN se precisar
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
@@ -1150,6 +1235,7 @@ JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_payments.sh   # pag
 JWT_SECRET=dev-secret bash tests/smoke_tracking.sh    # timeline, SSE, avaliação (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_account.sh    # endereços e cartões (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_panel.sh      # painel da loja: fila de Pix e KDS (semeia sozinho)
+JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_cancel.sh     # cancelamento, recusa e reembolso (semeia sozinho)
 
 php -S localhost:8080                  # API, num terminal
 cd web && npm install && npm run dev   # front-end Svelte, noutro terminal
@@ -1161,7 +1247,7 @@ Os smoke tests semeiam dados próprios a cada execução, mas contam com um
 banco recém-migrado: rodar a suíte várias vezes no mesmo banco acumula
 lojas de teste e faz as asserções de contagem (ex.: "filtro de categoria
 trouxe 1 loja") falharem por dado velho, não por regressão. `bash
-db/migrate.sh down 13 && bash db/migrate.sh up` devolve o banco ao zero.
+db/migrate.sh down 14 && bash db/migrate.sh up` devolve o banco ao zero.
 
 `MERCADOPAGO_MODE=fake` é o padrão quando `MERCADOPAGO_ACCESS_TOKEN` não
 está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
@@ -1251,6 +1337,11 @@ negado pra loja rival nos quatro caminhos; a aprovação levando o pedido pra
 `paid`; e as transições da cozinha até `delivering`, incluindo a ilegal
 barrada pelo banco. `tests/smoke_panel.sh` roda tudo isso a cada push.
 
+E o caminho do erro: cancelamento livre antes do preparo, com taxa depois,
+recusa da loja sem custo pro cliente, o canal de estorno certo pra cada
+método, o pagamento virando `refunded` e reembolso que não duplica.
+`tests/smoke_cancel.sh` roda tudo isso a cada push.
+
 O front-end validou o mesmo jeito, não só compilado, nas seis fases com
 Playwright + Chromium numa janela de 430px: Fase 1 (fade do splash,
 seleção de estado com destaque, SweetAlert real antes da Geolocation API,
@@ -1278,12 +1369,14 @@ checando `boundingBox()` via Playwright, não só lendo o código.
 
 1. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
    para Svelte + Bootstrap — Fases 1 a 6 prontas, mais o painel da loja
-   (7.3 e 11.1) e o acesso do cliente (10.1 a 10.3); faltam PWA/offline e
-   push (7.1 e 7.2), app do entregador (8), fechamento de caixa (9), as
-   telas de configuração da Fase 10 (10.4 formas de pagamento da loja, 10.5
-   políticas do admin, 10.6 devolução de maquininha), o resto do app do
-   restaurante (11.2 a 11.4: pausar loja, cardápio, horário), painel da
-   plataforma (12), caminho do erro (13), suporte (14) e dispatch (15).
+   (7.3 e 11.1), o acesso do cliente (10.1 a 10.3) e o caminho do erro do
+   cliente e da loja (13.1 e 13.2); faltam PWA/offline e push (7.1 e 7.2),
+   app do entregador (8), fechamento de caixa (9), as telas de configuração
+   da Fase 10 (10.4 formas de pagamento da loja, 10.5 políticas do admin,
+   10.6 devolução de maquininha), o resto do app do restaurante (11.2 a
+   11.4: pausar loja, cardápio, horário), painel da plataforma (12), a
+   ocorrência de entrega e o reembolso do admin (13.3 e 13.4), suporte (14)
+   e dispatch (15).
 2. **Cálculo de frete no servidor.** `orders/checkout.php` (e
    `orders/create.php`, desde antes) recebem `delivery_fee` no corpo da
    requisição em vez de calcular — é a única parte do dinheiro que ainda
@@ -1306,10 +1399,14 @@ checando `boundingBox()` via Playwright, não só lendo o código.
    `OrderTracking.svelte` já mostra a linha do tempo real, mas o mapa é um
    placeholder explícito — depende do app do entregador (Fase 8) existir
    pra ter posição de verdade pra mostrar.
-6. **Reembolso (Fase 13) e reconciliação de maquininha (Fase 9).**
-   `refunds` e `card_transactions` existem no esquema (migração `005`) sem
-   endpoint — os dois dependem de telas/fluxos (disputa, entregador
-   confirmando NSU) que ainda não foram portados.
+6. **Reembolso é DECIDIDO e gravado, não EXECUTADO.** A Fase 13 cria a linha
+   em `refunds` com canal, valor, causa e pagador, e marca o pagamento como
+   `refunded` -- mas ninguém chama o `POST /v1/payments/{id}/refunds` do
+   Mercado Pago, nem devolve o Pix pra chave do pagador, nem cancela na
+   adquirente. `refunds.state` fica em `'pending'` esperando o worker que vai
+   fazer isso (e virar `'sent'`/`'done'`/`'failed'`). Junto vem a tela 13.4
+   (painel do admin), o crédito em carteira -- que não tem tabela -- e a
+   reconciliação de maquininha da Fase 9 (`card_transactions`, NSU).
 7. **Decisão de produto pendente: fidelidade/pontos.** A tela 2.3 existe
    só como desenho (dado de exemplo, sem tabela no banco). Se for pra
    valer, precisa de um ledger de pontos — mesmo padrão append-only do

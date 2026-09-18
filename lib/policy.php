@@ -46,6 +46,11 @@ function resolve_policy(PDO $pdo, string $restaurantId): array
         'enabled_methods' => $enabledMethods,
         'max_change' => $settings !== false ? (float) $settings['max_change'] : 100.00,
         'min_order' => $settings !== false ? (float) $settings['min_order'] : 0.0,
+        // Taxa de cancelamento entra no snapshot pelo mesmo motivo que
+        // comissão e teto de espécie: o cliente concorda com a política do
+        // dia do pedido, e mudar a política depois não pode reescrever o que
+        // já foi combinado (tela 13.1).
+        'cancel_fee' => (float) ($policy['cancel_fee'] ?? 0),
         'no_courier_timeout_seconds' => pg_interval_to_seconds((string) $policy['no_courier_timeout']),
     ];
 

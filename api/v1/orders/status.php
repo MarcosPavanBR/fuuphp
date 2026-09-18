@@ -40,18 +40,65 @@ if (!in_array($to, $allowed, true)) {
     error_response(403, 'forbidden', "Esse papel não pode pedir a transição para \"{$to}\".");
 }
 
+// Fase 13 — desfazer um pedido não é só mudar o status: alguém pagou, e esse
+// dinheiro precisa de destino. Cancelamento e recusa exigem motivo porque é
+// ele que decide a causa do reembolso (e, no caso do cliente, alimenta o
+// ranking da loja).
+$undoing = in_array($to, ['cancelled', 'rejected'], true);
+if ($undoing && ($reason === null || trim($reason) === '')) {
+    error_response(422, 'reason_required', 'Diga o motivo — ele decide quem arca com o estorno.', fields: ['reason' => 'obrigatório']);
+}
+
 $meta = $reason !== null ? ['reason' => $reason] : [];
-if ($to === 'cancelled' && $reason !== null) {
-    $pdo->prepare('UPDATE orders SET cancel_reason = :r WHERE id = :id')->execute(['r' => $reason, 'id' => $orderId]);
-}
-if ($to === 'rejected' && $reason !== null) {
-    $pdo->prepare('UPDATE orders SET reject_reason = :r WHERE id = :id')->execute(['r' => $reason, 'id' => $orderId]);
-}
 
 // order_events.actor_kind não usa os mesmos rótulos de users.role
 // (Especificação, Parte II §9: 'customer','store','courier','admin','system').
 $actorKind = $role === 'restaurant_staff' ? 'store' : 'customer';
 
-call_advance_order($pdo, $orderId, $to, (string) $claims['sub'], $actorKind, $meta);
+// A causa do reembolso vem de QUEM desfez, não do texto do motivo: cliente
+// cancelando é 'customer_cancel', loja recusando pedido já aceito é
+// 'store_reject' -- e é isso que decide de qual bolso sai o estorno.
+$cause = $to === 'rejected' || $role === 'restaurant_staff' ? 'store_reject' : 'customer_cancel';
 
-json_response(200, ['order' => fetch_order($pdo, $orderId)]);
+// O plano tem que ser calculado ANTES da transição: depois o pedido já está
+// 'cancelled' e a taxa (que depende de a cozinha ter começado) seria sempre
+// zero. Um pedido que nunca foi pago não gera reembolso nenhum.
+$plan = null;
+if ($undoing && (string) $order['status'] !== 'pending_payment') {
+    $plan = refund_plan($order, policy_for_order($pdo, $order), $cause);
+}
+
+$refund = null;
+$pdo->beginTransaction();
+try {
+    if ($to === 'cancelled' && $reason !== null) {
+        $pdo->prepare('UPDATE orders SET cancel_reason = :r WHERE id = :id')->execute(['r' => $reason, 'id' => $orderId]);
+    }
+    if ($to === 'rejected' && $reason !== null) {
+        $pdo->prepare('UPDATE orders SET reject_reason = :r WHERE id = :id')->execute(['r' => $reason, 'id' => $orderId]);
+    }
+
+    call_advance_order($pdo, $orderId, $to, (string) $claims['sub'], $actorKind, $meta);
+
+    // Mesma transação de propósito: um pedido desfeito sem a decisão do
+    // dinheiro registrada junto é exatamente o estado que trava reembolso
+    // por dias (tela 13.4).
+    if ($plan !== null) {
+        $refund = record_refund($pdo, $order, $plan, (string) $claims['sub']);
+    }
+
+    $pdo->commit();
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    throw $e;
+}
+
+$response = ['order' => fetch_order($pdo, $orderId)];
+if ($plan !== null) {
+    $response['refund_plan'] = $plan;
+    $response['refund'] = $refund;
+}
+
+json_response(200, $response);
