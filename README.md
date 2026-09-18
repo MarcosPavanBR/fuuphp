@@ -661,7 +661,7 @@ puro: CRUD de endereços completo e cartão salvo via Mercado Pago.
   (confirmado por query direta no banco, não só pela resposta da API),
   troca de padrão e remoção.
 
-## Front-end (`web/`) — Fases 1 a 6, 8, 9, 10, 13 e 14.2, decisões de implementação
+## Front-end (`web/`) — Fases 1 a 6, 7.1, 8, 9, 10, 13 e 14.2, decisões
 
 Svelte 5 + Vite, Bootstrap 5, Bootstrap Icons, `sweetalert` (não
 `sweetalert2` — o pacote `sweetalert` na versão 2.x do npm *é* a
@@ -670,13 +670,17 @@ seleção de estado, cidade+bairro), Fase 2 (home, busca, fidelidade,
 pedidos, perfil), Fase 3 (loja, item, carrinho), Fase 4 (pagamento), Fase 5
 (pós-pedido), Fase 6 (conta, endereços, cartões, configurações) e Fase 10.1
 a 10.3 (login e cadastro) e Fase 13.1/13.2 (cancelar e recusar) estão
-portadas, mais o chat do pedido (14.2), o painel da loja (Fase 7.3, 9.3 e
-11.1, em `painel.html`) e o app do entregador (Fase 8 e 9, em
-`entregador.html`); todos têm seção própria adiante. As outras fases ainda
-não têm componente.
+portadas, mais o PWA com modo offline (7.1), o chat do pedido (14.2), o
+painel da loja (Fase 7.3, 9.3 e 11.1, em `painel.html`) e o app do entregador
+(Fase 8 e 9, em `entregador.html`); todos têm seção própria adiante. As
+outras fases ainda não têm componente.
 
 ```
 web/
+  public/
+    manifest.webmanifest          7.1 — standalone, tema #CC2B1D, ícones 192/512
+    sw.js                         7.1 — cache do shell e das rotas públicas;
+                                   nada autenticado, nada que não seja GET
   src/
     styles/tokens.css         paleta, tipografia e forma extraídos do HTML
                                de origem (grep de #hex por frequência —
@@ -692,6 +696,8 @@ web/
                                      do PDO (offset de 2 dígitos, sem T) pra
                                      algo que Date() sempre entende
       data/states.js                UFs, cidades e coordenadas de exemplo (estático)
+      pwa.svelte.js                 7.1 — registra o service worker, guarda o
+                                     convite de instalação, sabe se está online
       components/
         PhoneStatusBar.svelte          barra "9:41" que aparece em toda tela
         PhoneScreen.svelte              moldura de largura de celular
@@ -705,7 +711,8 @@ web/
         LoginScreen.svelte              10.1 — telefone ou e-mail, código de uso único
         OtpScreen.svelte                10.2 — seis caixas, reenvio, WhatsApp
         SignupScreen.svelte             10.3 — cadastro com base legal por bloco
-        Splash.svelte                   1.1 — fade, avança sozinho
+        Splash.svelte                   1.1 — fade, avança sozinho (pulado quando
+                                         a praça já está salva)
         StateSelector.svelte            1.2 — busca + lista com contagem de lojas
         CityPicker.svelte               1.3 — busca de cidade, bairro, SweetAlert
         Home.svelte                     2.1 — categorias, lojas por distância real
@@ -1181,6 +1188,46 @@ em lugar nenhum além da tabela `refunds`, vazia desde a migração `005`.
   "Cancelado"; a loja recusa pelo KDS com o custo na tela (estorno,
   entregador, taxa de recusa real). Zero erros de console.
 
+## PWA e modo offline (Fase 7.1) — decisões de implementação
+
+O app do cliente instala e abre sem rede. Até aqui o rodapé do perfil dizia
+"PWA v2.0.0 (parcial)" porque não havia manifest nem service worker; agora
+há, e o que ele faz é limitado de propósito.
+
+- **A regra que organiza o cache: navegação pode vir do disco, dinheiro
+  nunca.** Só `GET` entra em cache, e entre os GETs só as rotas públicas --
+  `restaurants/list`, `show`, `menu` e `search_products`. Perfil, pedidos,
+  carrinho, pagamento, painel e entregador passam direto pra rede. Servir
+  dado de conta de outra pessoa que usou o mesmo aparelho seria pior que
+  ficar sem dado.
+- **Requisição com `Authorization` não entra em cache nem em rota pública**,
+  porque o header muda o que o servidor devolve e o cache do service worker
+  não varia por header.
+- **Duas estratégias, por motivo diferente.** App shell (HTML/JS/CSS/ícones):
+  cache primeiro -- é o que faz abrir rápido e abrir offline. Cardápio e
+  listas: rede primeiro com cópia no cache -- preço velho é pior que espera,
+  então a rede ganha sempre que existe, e o cache é o plano B.
+- **A praça escolhida passou a ser salva.** Não era: todo reload mandava o
+  cliente refazer a Fase 1. Offline isso seria fatal -- quem reabre o app no
+  metrô quer o cardápio salvo, não a tela "onde você está". Foi um achado do
+  teste de PWA, não do plano.
+- **O convite de instalar só aparece quando o navegador diz que dá.** O
+  banner é desenhado pela tela (`beforeinstallprompt` com `preventDefault`),
+  mas nunca é mostrado sem o evento -- um botão "Instalar" que não instala
+  seria pior que nenhum. "Depois" fica salvo.
+- **O que a tela 7.1 mostra e não foi construído: a fila de upload offline**
+  ("1 comprovante na fila... background sync"). O comprovante é o único
+  envio que o mock permite enfileirar, e fazer isso direito é IndexedDB mais
+  o evento `sync` do service worker. Fica registrado; o que existe hoje é o
+  upload direto, que falha claramente sem rede em vez de fingir que subiu.
+- **Push (7.2) continua fora.** A `outbox` existe no banco desde a migração
+  `004`, mas não há worker que leia e publique, nem chaves VAPID.
+- **Validado com navegador real, offline de verdade.** Playwright registra o
+  service worker, confere o manifest (`display: standalone`, tema `#CC2B1D`,
+  três ícones), navega com rede, corta a rede com `setOffline(true)`,
+  recarrega -- e o app abre, mostra a faixa "Você está offline — mostrando o
+  que está salvo", lembra a praça e lista as lojas que estavam no cache.
+
 ## Chat do pedido e cupons (Fase 14.2 + migração 008) — decisões
 
 Dois buracos que o próprio README já vinha apontando: `talkToStore()` no
@@ -1560,7 +1607,8 @@ checando `boundingBox()` via Playwright, não só lendo o código.
    (7.3, 9.3 e 11.1), o app do entregador (8.1 a 8.7 e 9.1/9.2/9.4), o acesso
    do cliente (10.1 a 10.3), o caminho do erro (13.1 e 13.2) e o chat do
    pedido (14.2); faltam
-   PWA/offline e push (7.1 e 7.2), a conciliação de maquininha e o netting
+   a fila de upload offline e o push (o resto de 7.1 e o 7.2 inteiro), a
+   conciliação de maquininha e o netting
    semanal (9.6 e 9.7), as telas de configuração da Fase 10 (10.4 formas de
    pagamento da loja, 10.5 políticas do admin, 10.6 devolução de maquininha),
    o resto do app do restaurante (11.2 a 11.4: pausar loja, cardápio,
