@@ -166,6 +166,26 @@
   // acréscimo da fila quando ela ligou isso; a viagem continua sendo uma
   // margem fixa, porque rota e trânsito ainda não existem em lugar nenhum.
   // Sem resposta da loja, cai na janela antiga de 25–45 min.
+  // 14.4 — pedido agendado não tem previsão calculada: tem hora combinada.
+  // Mostrar "chega entre 19:10 e 19:25" num pedido marcado pras 21h seria
+  // contar uma história diferente da que o cliente comprou.
+  let scheduledLabel = $derived.by(() => {
+    const range = order?.scheduled_for;
+    if (!range) return null;
+    const match = String(range).match(/\["(.+?)","(.+?)"\)/);
+    if (!match) return null;
+    const fmt = (raw) => {
+      const d = parsePgTimestamp(raw);
+      return d ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
+    };
+    const start = parsePgTimestamp(match[1]);
+    const dayLabel =
+      start && start.toDateString() !== new Date().toDateString()
+        ? `${start.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}, `
+        : '';
+    return `${dayLabel}${fmt(match[1])} – ${fmt(match[2])}`;
+  });
+
   const TRAVEL_MINUTES = 15;
   function etaWindow(createdAt) {
     const base = createdAt ? parsePgTimestamp(createdAt).getTime() : Date.now();
@@ -201,7 +221,13 @@
       <div class="hero approved">
         <i class="bi bi-check-circle-fill"></i>
         <h1 class="fuu-display">Pagamento aprovado</h1>
-        <p class="hero-text">A cozinha {restaurant ? `do ${restaurant.name} ` : ''}já começou o seu pedido.</p>
+        <p class="hero-text">
+          {#if scheduledLabel}
+            Agendado para {scheduledLabel} — a cozinha começa perto da hora combinada.
+          {:else}
+            A cozinha {restaurant ? `do ${restaurant.name} ` : ''}já começou o seu pedido.
+          {/if}
+        </p>
       </div>
     {:else if order.status === 'pending_verification'}
       <div class="hero waiting">
@@ -264,7 +290,13 @@
           <span>Mapa e localização do entregador — Fase 8 (app do entregador) ainda não foi construída</span>
         </div>
         <h1 class="fuu-display">{STATUS_LABELS[order.status]}</h1>
-        <p class="hero-text">Previsão de entrega: {etaWindow(order.created_at)}</p>
+        <p class="hero-text">
+          {#if scheduledLabel}
+            Agendado para {scheduledLabel}
+          {:else}
+            Previsão de entrega: {etaWindow(order.created_at)}
+          {/if}
+        </p>
       </div>
     {:else if order.status === 'delivered'}
       <div class="hero delivered">

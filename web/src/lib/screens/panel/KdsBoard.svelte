@@ -69,6 +69,15 @@
     return METHOD_LABEL[order.payment_method] ?? 'PAGO NO APP';
   }
 
+  // 14.4 — pedido agendado só chega aqui perto da faixa (o servidor filtra),
+  // mas a cozinha precisa ver a hora combinada: ela manda mais que a ordem
+  // de chegada.
+  function slotLabel(order) {
+    if (!order.scheduled_start) return null;
+    const d = parsePgTimestamp(order.scheduled_start);
+    return d ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
+  }
+
   function money(v) {
     return `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
   }
@@ -132,7 +141,11 @@
       <article class="ticket highlight">
         <div class="ticket-head">
           <span class="code fuu-mono">#{order.public_code}</span>
-          <span class="when">{ago(elapsed(order))}</span>
+          {#if slotLabel(order)}
+            <span class="slot-badge">AGENDADO {slotLabel(order)}</span>
+          {:else}
+            <span class="when">{ago(elapsed(order))}</span>
+          {/if}
           <span class="method">{methodLabel(order)}</span>
           <button type="button" class="chat" onclick={() => onOpenChat(order)} aria-label="Conversa do pedido">
             <i class="bi bi-chat-dots"></i>
@@ -464,6 +477,16 @@
   }
   .waiting-text {
     color: var(--fuu-ink-4);
+  }
+  .slot-badge {
+    font-family: var(--fuu-font-mono);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    background: var(--fuu-wait-bg);
+    color: var(--fuu-wait-text);
+    border-radius: 20px;
+    padding: 2px 8px;
   }
   .pickup-text {
     color: var(--fuu-leaf-dark);

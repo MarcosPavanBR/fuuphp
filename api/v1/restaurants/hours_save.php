@@ -18,6 +18,25 @@ $body = read_json_body();
 $days = $body['days'] ?? null;
 $shifts = $body['shifts'] ?? null;
 
+// 14.4 — quantos pedidos agendados cabem numa faixa de 30 min. Só a loja
+// sabe; zero (o padrão) significa "não aceito agendamento", não "cabe zero".
+$slotCapacity = null;
+if (array_key_exists('slot_capacity', $body)) {
+    $slotCapacity = (int) $body['slot_capacity'];
+    if ($slotCapacity < 0 || $slotCapacity > 100) {
+        error_response(422, 'invalid_slot_capacity', 'Capacidade por faixa vai de 0 (sem agendamento) a 100.', fields: ['slot_capacity' => 'inválida']);
+    }
+}
+
+if ($slotCapacity !== null && (!is_array($days) || $days === [])) {
+    // Salvar só a capacidade é um caminho legítimo: a loja pode ligar o
+    // agendamento sem mexer no horário.
+    $pdo = db();
+    $pdo->prepare('UPDATE restaurants SET slot_capacity = :c WHERE id = :id')
+        ->execute(['c' => $slotCapacity, 'id' => $restaurantId]);
+    json_response(200, ['slot_capacity' => $slotCapacity]);
+}
+
 if (!is_array($days) || $days === [] || !is_array($shifts)) {
     error_response(422, 'invalid_request', 'Informe days (0–6) e shifts.');
 }
@@ -95,6 +114,11 @@ try {
             ]);
         }
     }
+    if ($slotCapacity !== null) {
+        $pdo->prepare('UPDATE restaurants SET slot_capacity = :c WHERE id = :id')
+            ->execute(['c' => $slotCapacity, 'id' => $restaurantId]);
+    }
+
     $pdo->commit();
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {
@@ -112,10 +136,12 @@ $stmt = $pdo->prepare(
        FROM business_hours WHERE restaurant_id = :id ORDER BY dow, shift'
 );
 $stmt->execute(['id' => $restaurantId]);
-$openStmt = $pdo->prepare('SELECT is_open FROM restaurants WHERE id = :id');
+$openStmt = $pdo->prepare('SELECT is_open, slot_capacity FROM restaurants WHERE id = :id');
 $openStmt->execute(['id' => $restaurantId]);
+$store = $openStmt->fetch();
 
 json_response(200, [
     'hours' => $stmt->fetchAll(),
-    'is_open' => $openStmt->fetchColumn(),
+    'is_open' => $store['is_open'],
+    'slot_capacity' => (int) $store['slot_capacity'],
 ]);

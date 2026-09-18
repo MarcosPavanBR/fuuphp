@@ -9,6 +9,7 @@
   import ProofUploader from './ProofUploader.svelte';
   import CashPayment from './CashPayment.svelte';
   import MachinePayment from './MachinePayment.svelte';
+  import ScheduleScreen from './ScheduleScreen.svelte';
 
   // Fase 4 completa, orquestrada: endereço (mínimo, ver QuickAddress) ->
   // 4.1 seleção -> 4.2/4.3/4.5/4.6 conforme o método -> 4.4 (só Pix manual)
@@ -44,13 +45,18 @@
   let pixCopyPaste = $state('');
   let pixQrBase64 = $state(null);
   let busy = $state(false);
+  // 14.4 — a faixa escolhida, ou null pra "assim que ficar pronto".
+  let slot = $state(null);
 
   let total = $derived(Number(cart?.order?.total ?? 0));
 
   function onAddressReady(id, label) {
     addressId = id;
     addressLabel = label ?? 'endereço selecionado';
-    step = 'select';
+    // 14.4 entra ANTES do método de pagamento: quando receber muda o que a
+    // tela seguinte promete ("cobramos na entrega" só vale pra dinheiro e
+    // maquininha), então a pergunta vem primeiro.
+    step = 'when';
   }
 
   async function onMethodContinue(chosen) {
@@ -97,6 +103,7 @@
             // O desconto já está no carrinho; o código vai junto pra o
             // checkout gravar o resgate e consumir o orçamento da campanha.
             ...(couponCode ? { coupon_code: couponCode } : {}),
+            ...(slot ? { slot: { start: slot.start, end: slot.end } } : {}),
             ...extra,
           },
         });
@@ -184,7 +191,16 @@
   }
 </script>
 
-{#if step === 'address'}
+{#if step === 'when'}
+  <ScheduleScreen
+    {restaurantId}
+    prepMinutes={restaurant?.prep_minutes ?? null}
+    onContinue={(chosenSlot) => {
+      slot = chosenSlot;
+      step = 'select';
+    }}
+  />
+{:else if step === 'address'}
   <div class="flow-shell">
     <button type="button" class="back-link" onclick={onBack}><i class="bi bi-arrow-left"></i> Voltar ao carrinho</button>
     <QuickAddress {location} onReady={onAddressReady} />

@@ -65,7 +65,11 @@ for ($i = 0; $i < 23; $i++) {
     }
 }
 
+$capStmt = $pdo->prepare('SELECT slot_capacity FROM restaurants WHERE id = :id');
+$capStmt->execute(['id' => $restaurantId]);
+
 json_response(200, [
+    'slot_capacity' => (int) $capStmt->fetchColumn(),
     'hours' => $hoursStmt->fetchAll(),
     'holidays' => $holidayStmt->fetchAll(),
     'histogram' => $histogram,

@@ -102,6 +102,49 @@ if ($tip < 0) {
     error_response(422, 'invalid_tip', 'Gorjeta inválida.');
 }
 
+// Tela 14.4 — agendamento. A faixa é validada contra o horário declarado da
+// loja (não contra o relógio) e a vaga é reservada em delivery_slots, onde o
+// CHECK (taken <= capacity) da migração 004 é quem garante o "3 vagas".
+$scheduledRange = null;
+if (isset($body['slot']) && is_array($body['slot'])) {
+    if ((int) $restaurant['slot_capacity'] <= 0) {
+        error_response(409, 'scheduling_disabled', 'Essa loja não aceita pedido agendado.');
+    }
+    $slotStart = (string) ($body['slot']['start'] ?? '');
+    $slotEnd = (string) ($body['slot']['end'] ?? '');
+    if (strtotime($slotStart) === false || strtotime($slotEnd) === false) {
+        error_response(422, 'invalid_slot', 'Faixa inválida.', fields: ['slot' => 'inválida']);
+    }
+
+    // Mesmo horizonte que a tela oferece. Uma loja aberta 24h tem faixa
+    // "válida" em qualquer data do calendário; sem este limite, uma
+    // requisição direta agendaria pedido para 2030.
+    $limit = strtotime('+' . SLOT_HORIZON_DAYS . ' days');
+    if (strtotime($slotStart) > $limit) {
+        error_response(409, 'slot_too_far', 'Só dá pra agendar nos próximos ' . SLOT_HORIZON_DAYS . ' dias.');
+    }
+
+    // A faixa precisa ser uma das que a loja oferece NAQUELE dia -- aceitar
+    // um range qualquer deixaria o cliente agendar pras 4h da manhã.
+    $day = date('Y-m-d', strtotime($slotStart));
+    $offered = delivery_slots_for_day($pdo, $restaurant, $day);
+    $match = null;
+    foreach ($offered as $slot) {
+        if (strtotime($slot['start']) === strtotime($slotStart)) {
+            $match = $slot;
+            break;
+        }
+    }
+    if ($match === null) {
+        error_response(409, 'slot_unavailable', 'Essa faixa não está mais disponível.');
+    }
+    if ($match['free'] <= 0) {
+        error_response(409, 'slot_full', 'Essa faixa esgotou — escolha outra.');
+    }
+
+    $scheduledRange = reserve_slot($pdo, $restaurant, $match['start'], $match['end']);
+}
+
 $commission = round($subtotal * $policy['commission_bps'] / 10000, 2);
 
 // Cupom: o desconto já está no carrinho; o que falta é gravar o resgate. O
@@ -125,7 +168,8 @@ try {
     $pdo->prepare(
         'UPDATE orders SET address_id = :address_id, delivery_fee = :delivery_fee, tip = :tip,
                             payment_method = :payment_method, change_for = :change_for, machine_kind = :machine_kind,
-                            policy_snapshot = :policy_snapshot, commission = :commission
+                            policy_snapshot = :policy_snapshot, commission = :commission,
+                            scheduled_for = :scheduled_for::tstzrange
          WHERE id = :id'
     )->execute([
         'address_id' => $addressId,
@@ -136,6 +180,7 @@ try {
         'machine_kind' => $machineKind,
         'policy_snapshot' => json_encode($policy, JSON_UNESCAPED_UNICODE),
         'commission' => $commission,
+        'scheduled_for' => $scheduledRange,
         'id' => $cart['id'],
     ]);
 

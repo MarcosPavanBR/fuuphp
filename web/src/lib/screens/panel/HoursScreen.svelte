@@ -27,10 +27,15 @@
   let scope = $state('day');
   let saving = $state(false);
   let holidayForm = $state(null);
+  // 14.4 — quantos pedidos agendados cabem numa faixa de 30 min. Zero é
+  // "essa loja não aceita agendamento", e é o padrão.
+  let slotCapacity = $state(0);
+  let savingCapacity = $state(false);
 
   async function load() {
     try {
       data = await api.get('/restaurants/hours.php', { token: staffToken() });
+      slotCapacity = data.slot_capacity ?? 0;
       if (editingDay === null) editingDay = data.today_dow;
     } catch (e) {
       toastr.error(e.message ?? 'Não deu pra carregar o horário.');
@@ -116,6 +121,27 @@
       onChanged?.();
     } catch (e) {
       toastr.error(e.message ?? 'Não deu pra mudar o dia.');
+    }
+  }
+
+  async function saveCapacity() {
+    savingCapacity = true;
+    try {
+      await api.post('/restaurants/hours_save.php', {
+        token: staffToken(),
+        body: { slot_capacity: Number(slotCapacity) },
+      });
+      toastr.success(
+        Number(slotCapacity) > 0
+          ? `Agendamento ligado: ${slotCapacity} pedido(s) por faixa de 30 min.`
+          : 'Agendamento desligado — a loja só recebe pedido pra agora.'
+      );
+      await load();
+      onChanged?.();
+    } catch (e) {
+      toastr.error(e.message ?? 'Não deu pra salvar a capacidade.');
+    } finally {
+      savingCapacity = false;
     }
   }
 
@@ -248,6 +274,20 @@
           </div>
         </div>
       {/if}
+
+      <div class="holidays">
+        <p class="holidays-title">Pedido agendado</p>
+        <p class="capacity-note">
+          Quantos pedidos agendados cabem em cada faixa de 30 min. Zero desliga o agendamento — a vaga é
+          da capacidade da sua cozinha, não do relógio.
+        </p>
+        <div class="capacity-row">
+          <input type="number" min="0" max="100" step="1" bind:value={slotCapacity} class="fuu-mono" />
+          <button type="button" class="btn-fuu-primary" disabled={savingCapacity} onclick={saveCapacity}>
+            {savingCapacity ? 'Salvando…' : 'Salvar capacidade'}
+          </button>
+        </div>
+      </div>
 
       <div class="holidays">
         <p class="holidays-title">Feriados e datas especiais</p>
@@ -496,6 +536,32 @@
   .editor-actions .btn-fuu-primary {
     width: auto;
     padding: 13px 22px;
+  }
+  .capacity-note {
+    font-size: 12.5px;
+    color: var(--fuu-ink-2);
+    line-height: 1.6;
+    margin: 0 0 12px;
+    max-width: 46em;
+  }
+  .capacity-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .capacity-row input {
+    width: 90px;
+    border: 1px solid var(--fuu-line-3);
+    border-radius: 9px;
+    padding: 12px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--fuu-ink-1);
+    background: var(--fuu-white);
+  }
+  .capacity-row .btn-fuu-primary {
+    width: auto;
+    padding: 12px 20px;
   }
   .holiday-list {
     display: flex;

@@ -34,7 +34,8 @@ $pdo = db();
 $sql = $scope === 'kds'
     ? "SELECT o.id, o.public_code, o.status, o.subtotal, o.delivery_fee, o.surge_fee, o.tip,
               o.discount, o.total, o.payment_method, o.change_for, o.machine_kind, o.created_at,
-              o.pickup_by_customer,
+              o.pickup_by_customer, o.scheduled_for,
+              lower(o.scheduled_for) AS scheduled_start,
               u.full_name AS customer_name,
               cu.full_name AS courier_name,
               (SELECT max(ev.created_at) FROM order_events ev
@@ -46,10 +47,19 @@ $sql = $scope === 'kds'
                         'notes', oi.notes) ORDER BY oi.id)
                  FROM order_items oi WHERE oi.order_id = o.id) AS items
        FROM orders o
+       JOIN restaurants r ON r.id = o.restaurant_id
        JOIN users u ON u.id = o.user_id
        LEFT JOIN couriers c ON c.id = o.courier_id
        LEFT JOIN users cu ON cu.id = c.user_id
        WHERE o.restaurant_id = :id AND o.status IN ('paid','preparing','ready')
+         -- 14.4: pedido agendado só entra na fila perto da faixa. Sem isto,
+         -- a cozinha faria às 15h a comida que o cliente pediu pras 21h --
+         -- e o mock é explícito: a vaga é da capacidade da cozinha, não do
+         -- relógio de quem pediu.
+         AND (
+           o.scheduled_for IS NULL
+           OR lower(o.scheduled_for) - make_interval(mins => r.prep_minutes + " . SLOT_PICKUP_MARGIN_MINUTES . ") <= now()
+         )
        ORDER BY o.created_at ASC"
     : "SELECT o.id, o.public_code, o.status, o.subtotal, o.delivery_fee, o.surge_fee, o.tip,
               o.discount, o.total, o.payment_method, o.change_for, o.machine_kind, o.created_at,

@@ -30,7 +30,7 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (dezenove migrações SQL), os módulos **identity**,
+A **fundação de banco** (vinte migrações SQL), os módulos **identity**,
 **catálogo + pedido + checkout**, **descoberta** (busca de loja e
 produto), **carrinho incremental**, **pagamentos** (cartão via Mercado
 Pago, Pix automático e manual, dinheiro, maquininha, validação humana do
@@ -192,6 +192,9 @@ api/v1/orders/               pedido e checkout
   cancel_quote.php             GET  ?id= — o que acontece se desfizer agora:
                                 taxa, valor de volta, canal, prazo e quem paga
                                 (telas 13.1 e 13.2); só lê
+  slots.php                    GET  ?restaurant_id= — as faixas de entrega dos
+                                próximos dias, com vaga real; diz também
+                                quando a loja não aceita agendamento (14.4)
   dispatch_status.php          GET  ?id= — a tela 15.1 inteira numa chamada:
                                 há quanto tempo procura entregador, quando o
                                 cancelamento automático entra, e quais saídas
@@ -256,6 +259,9 @@ lib/                          código compartilhado entre módulos
                                    replay, pros 5 métodos de pagamento
   store.php                     tempo de preparo que o cliente vê, com o
                                  acréscimo da fila calculado na leitura (11.2)
+  scheduling.php                faixas de entrega (14.4): geradas do horário
+                                 da loja, reserva de vaga em delivery_slots e
+                                 o horizonte de agendamento
   delivery.php                  frete e área de entrega (14.3): Haversine,
                                  tarifa da política e a cotação que o checkout
                                  refaz -- o frete deixou de vir do cliente
@@ -317,6 +323,10 @@ tests/
                                  resumo do dia, KDS e as transições da loja
                                  (aceitar, pronto, entregue ao motoboy),
                                  mais o isolamento entre lojas
+  smoke_schedule.sh             pedido agendado (14.4): faixas nascidas do
+                                 horário, vaga limitada pelo CHECK do banco,
+                                 horizonte de 4 dias no servidor e a cozinha
+                                 sem ver o pedido antes da hora
   smoke_address.sh              endereço com área e taxa (14.3): referência,
                                  cobertura no servidor, frete calculado (e o
                                  cliente não conseguindo forjar frete grátis),
@@ -371,6 +381,8 @@ db/
                                           das 42 tabelas originais, sem
                                           coluna de nota agregada em
                                           restaurants, ver seção própria)
+    020_scheduling.up.sql / .down.sql     restaurants.slot_capacity e o índice
+                                           dos pedidos agendados (14.4)
     019_delivery_area.up.sql / .down.sql  addresses.reference e a tarifa de
                                            entrega na política (14.3)
     018_store_ops.up.sql / .down.sql      store_pauses, holiday_overrides,
@@ -767,7 +779,7 @@ puro: CRUD de endereços completo e cartão salvo via Mercado Pago.
   (confirmado por query direta no banco, não só pela resposta da API),
   troca de padrão e remoção.
 
-## Front-end (`web/`) — Fases 1 a 6, 7.1, 8, 9, 10, 12, 13, 14.1, 14.2 e 15.1, decisões
+## Front-end (`web/`) — Fases 1 a 6, 7.1, 8, 9, 10, 12, 13, 14, 15.1, decisões
 
 Svelte 5 + Vite, Bootstrap 5, Bootstrap Icons, `sweetalert` (não
 `sweetalert2` — o pacote `sweetalert` na versão 2.x do npm *é* a
@@ -814,6 +826,9 @@ web/
         OrderChat.svelte                14.2 — chat de três pontas (cliente e loja)
       screens/
         AuthFlow.svelte                 orquestra a Fase 10: 10.1 -> 10.2 -> 10.3
+        ScheduleScreen.svelte           14.4 — "quando você quer receber?":
+                                         faixa com vaga real, antes da escolha
+                                         do pagamento
         HelpScreen.svelte               14.1 — central de ajuda: assunto é o
                                          pedido de agora, e cada atalho
                                          responde antes de abrir chamado
@@ -1469,6 +1484,63 @@ backend. Os dois fecham aqui, sobre tabelas que existem desde a migração
   R$ 68,40 no carrinho, e a conversa indo do app do cliente pro KDS da loja
   e voltando por resposta rápida, com "lida" aparecendo.
 
+## Pedido agendado (Fase 14.4) — decisões de implementação
+
+"Faixa com vaga limitada pela capacidade real da cozinha, não pelo relógio.
+Cobrança só no início do preparo — agendar sem cobrar evita estorno em massa
+se a loja não abrir."
+
+Duas peças de banco existiam desde a migração `004` e estavam sem uso:
+`orders.scheduled_for` (tstzrange) e `delivery_slots`, com
+`CHECK (taken <= capacity)`.
+
+- **Quem garante "3 vagas" é o CHECK do banco, não um `if`.** Dois clientes
+  apertando ao mesmo tempo na última vaga é exatamente o caso em que o `if`
+  perde: a reserva é um `INSERT ... ON CONFLICT DO UPDATE SET taken = taken
+  + 1`, e o CHECK que já existia desde a 004 é quem devolve o erro. O PHP só
+  traduz a violação em `409 slot_full`. O teste cobre os três clientes na
+  faixa de duas vagas.
+- **A capacidade é declarada pela loja, porque só ela sabe.** Migração `020`
+  acrescenta `restaurants.slot_capacity`, editável na tela de horário (11.4).
+  Zero -- o padrão -- significa "essa loja não aceita agendamento", não "cabe
+  zero pedido", e a tela do cliente diz isso com essas palavras. Derivar a
+  capacidade de histórico seria inventar: quantos pedidos cabem numa faixa de
+  30 min depende de fogão e de gente, não do que já foi vendido.
+- **As faixas nascem do horário declarado, não de um relógio fixo.** Loja que
+  fecha às 15h não oferece faixa às 16h; feriado (18.3) zera o dia; turno que
+  atravessa a meia-noite gera faixa depois das 00h. Faixa que já começou não
+  aparece -- a cozinha não volta no tempo.
+- **O horizonte de 4 dias é do SERVIDOR, não só da tela.** Achado pelo teste:
+  uma loja aberta 24h tem faixa "válida" em qualquer data do calendário, e a
+  primeira versão aceitou um pedido agendado para **2030** vindo direto pela
+  API. A tela nunca ofereceria; a requisição passava. Agora o checkout recusa
+  com `slot_too_far`.
+- **A cozinha não vê o pedido antes da hora.** O KDS (11.1) filtra pedido
+  agendado até faltar o preparo da loja mais dez minutos pra faixa. Sem isso,
+  a cozinha faria às 15h a comida que o cliente marcou pras 21h -- que é
+  justamente o oposto do que a tela promete. Quando entra na fila, entra
+  marcado com a hora combinada, porque ela manda mais que a ordem de chegada.
+- **"Cobrança só no início do preparo" é verdade em dinheiro e maquininha, e
+  a tela não finge que é nos outros.** Nesses dois métodos nada é cobrado até
+  a entrega -- a promessa do mock é literal. Em cartão e Pix, cobrar depois
+  exigiria re-cobrança com cartão guardado (a Fase 6.2 guarda, mas
+  `payments/pay.php` ainda não cobra com cartão salvo) ou pedir o pagamento
+  na hora por push (7.2, que não existe). Então a cobrança acontece no
+  checkout, e a tela escreve qual dos dois é o caso.
+- **"Cancelar sem taxa até 1 h antes" cai de graça do que já existia.** Pedido
+  agendado fica em `paid` até a cozinha começar, e `refund_plan()` já não
+  cobra taxa antes do preparo (Fase 13). O teste confere: cotação com
+  `fee: 0` e `free_cancel: true`.
+- **A previsão de entrega some quando há hora combinada.** Mostrar "chega
+  entre 19:10 e 19:25" num pedido marcado pras 21h seria contar uma história
+  diferente da que o cliente comprou.
+- **Validado com banco e navegador reais.** `tests/smoke_schedule.sh` cobre
+  capacidade zero não oferecendo faixa, a loja ligando o agendamento,
+  faixas só futuras, a reserva derrubando a vaga na listagem, o horizonte e a
+  faixa passada recusados, a terceira pessoa vendo `slot_full` com o banco
+  intacto, a cozinha sem o pedido antes da hora e com ele depois, o
+  cancelamento sem taxa, e a loja desligando o agendamento.
+
 ## Endereço, área de entrega e frete no servidor (Fase 14.3) — decisões
 
 "CEP preenche, pino corrige, ponto de referência salva a entrega. A área de
@@ -1949,9 +2021,9 @@ esse buraco e junta o KDS, que é a outra metade do mesmo trabalho.
 ```bash
 docker compose up -d
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
-bash db/migrate.sh up           # aplica as 19, em ordem
+bash db/migrate.sh up           # aplica as 20, em ordem
 bash db/migrate.sh down 3       # reverte as 3 últimas
-bash db/migrate.sh down 19      # reverte tudo
+bash db/migrate.sh down 20      # reverte tudo
 
 cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN se precisar
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
@@ -1970,6 +2042,7 @@ JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_dispatch.sh   # ped
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_store.sh      # loja operando a si mesma: pausa, cardápio, horário (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_help.sh       # central de ajuda: fluxo automático e chamado com prazo (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_address.sh    # endereço, área de entrega e frete no servidor (semeia sozinho)
+JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_schedule.sh   # pedido agendado: faixas, vaga e fila da cozinha (semeia sozinho)
 
 # O único processo de fundo do projeto (tela 15.1). Em produção é uma linha
 # no cron do cPanel, a cada minuto; localmente, roda à mão quando quiser ver
@@ -1988,13 +2061,13 @@ Os smoke tests semeiam dados próprios a cada execução, mas contam com um
 banco recém-migrado: rodar a suíte várias vezes no mesmo banco acumula
 lojas de teste e faz as asserções de contagem (ex.: "filtro de categoria
 trouxe 1 loja") falharem por dado velho, não por regressão. `bash
-db/migrate.sh down 19 && bash db/migrate.sh up` devolve o banco ao zero.
+db/migrate.sh down 20 && bash db/migrate.sh up` devolve o banco ao zero.
 
 `MERCADOPAGO_MODE=fake` é o padrão quando `MERCADOPAGO_ACCESS_TOKEN` não
 está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
 de conta sandbox pra rodar nada disto localmente.
 
-As dezenove migrações foram validadas de ponta a ponta (`up` completo, `down`
+As vinte migrações foram validadas de ponta a ponta (`up` completo, `down`
 completo em ordem reversa, `up` de novo) contra um PostgreSQL 16 real com
 `pg_cron` instalado, incluindo um teste funcional de `advance_order()`
 confirmando que transições legais avançam o pedido e transições ilegais
@@ -2134,8 +2207,7 @@ checando `boundingBox()` via Playwright, não só lendo o código.
    semanal (9.6 e 9.7), as telas de configuração da Fase 10 (10.4 formas de
    pagamento da loja, 10.5 políticas do admin, 10.6 devolução de maquininha),
    a exportação contábil da 12.3, a ocorrência de entrega e o
-   reembolso do admin (13.3 e 13.4), o resto do suporte (14.3 mapa, 14.4
-   agendamento) e o que falta da Fase 15 (rodadas,
+   reembolso do admin (13.3 e 13.4) e o que falta da Fase 15 (rodadas,
    raio crescente e `dispatch_attempts`, a aprovação de entregador da 15.2 e
    as campanhas da 15.3 -- a 15.1 está construída, ver seção própria).
 2. **Cálculo de frete no servidor.** FEITO na Fase 14.3 (migração 019):
