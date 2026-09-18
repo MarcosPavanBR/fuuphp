@@ -126,9 +126,27 @@ api/v1/admin/               painel da plataforma (Fase 12), role 'admin'
                                  POST resolve com contrapartida no livro
   reports.php                   GET ?days= — GMV, mix de pagamento, custo de
                                  entrega por pedido, perda por fraude
+  couriers.php                  GET fila de análise de entregador (15.2) /
+                                 POST aprova (cria couriers + o login de CPF e
+                                 código de acesso), recusa ou pede correção
+  campaigns.php                 GET campanhas com gasto, teto e quem paga /
+                                 POST cria com teto obrigatório, e com
+                                 dry_run devolve só a projeção (15.3)
   policy.php                    GET política atual + histórico / POST publica
                                  uma VERSÃO NOVA (nunca edita a anterior)
-api/v1/couriers/            app do entregador (Fase 8 e 9), role 'courier'
+api/v1/couriers/            app do entregador (Fase 8, 9 e 15.2)
+  apply.php                     POST — candidatura (15.2). "A chave Pix tem
+                                 que ser sua" é regra aqui: chave que é CPF ou
+                                 telefone é conferida com os dados da pessoa
+  application.php               GET  — a tela 15.2: documentos enviados, o que
+                                 falta e o que a gente consegue (e não
+                                 consegue) conferir sozinho
+  apply_document.php            POST multipart — documento da candidatura, com
+                                 MIME real e sha256; arquivo repetido em outra
+                                 candidatura é barrado
+  submit_application.php        POST — manda pra análise; exige documentos
+                                 completos e grava o aceite do contrato
+                                 versionado em `consents`
   me.php                        GET  — turno, saldo em espécie, teto da política
                                  e a corrida em andamento, numa chamada só
   shift.php                     POST — abre/fecha turno (um aberto por vez)
@@ -259,6 +277,8 @@ lib/                          código compartilhado entre módulos
                                    replay, pros 5 métodos de pagamento
   store.php                     tempo de preparo que o cliente vê, com o
                                  acréscimo da fila calculado na leitura (11.2)
+  coupons.php                   cupons (15.3): quem paga o desconto no livro,
+                                 tamanho do público e projeção com ticket real
   scheduling.php                faixas de entrega (14.4): geradas do horário
                                  da loja, reserva de vaga em delivery_slots e
                                  o horizonte de agendamento
@@ -323,6 +343,11 @@ tests/
                                  resumo do dia, KDS e as transições da loja
                                  (aceitar, pronto, entregue ao motoboy),
                                  mais o isolamento entre lojas
+  smoke_growth.sh               entrada de entregador (15.2) e campanhas
+                                 (15.3): chave Pix de outro recusada, fila de
+                                 análise, aprovação criando entregador e
+                                 login, teto que desativa o cupom sozinho e o
+                                 livro com quem pagou o desconto
   smoke_schedule.sh             pedido agendado (14.4): faixas nascidas do
                                  horário, vaga limitada pelo CHECK do banco,
                                  horizonte de 4 dias no servidor e a cozinha
@@ -1484,6 +1509,83 @@ backend. Os dois fecham aqui, sobre tabelas que existem desde a migração
   R$ 68,40 no carrinho, e a conversa indo do app do cliente pro KDS da loja
   e voltando por resposta rápida, com "lida" aparecendo.
 
+## Entrada de entregador e campanhas (Fase 15.2 e 15.3) — decisões
+
+Os dois fecham a Fase 15. Um é como alguém ENTRA na plataforma para
+entregar; o outro é de que bolso sai o desconto.
+
+### 15.2 — Onboarding do entregador
+
+"Documento por documento com verificação automática visível. A regra 'chave
+Pix tem que ser sua' é antifraude, e dizer isso na tela evita 90% das
+tentativas."
+
+- **A regra da chave Pix é código, não texto.** Chave que é CPF tem que bater
+  com o CPF da candidatura; chave que é telefone, com o telefone; e-mail, com
+  o e-mail da conta. Chave aleatória não dá pra conferir aqui -- a
+  titularidade é do banco, na transferência -- e a resposta diz isso em vez
+  de fingir que conferiu.
+- **Candidatar-se exige conta, e isso não é burocracia:** `couriers.user_id`
+  é `NOT NULL`, então aprovar sem pessoa cadastrada seria impossível. A
+  entrada é pelo mesmo OTP do app do cliente; o login de CPF + código de
+  acesso do app do entregador é o que a APROVAÇÃO cria.
+- **Aprovar é o ato que cria o entregador.** Antes disso, entrar na
+  plataforma dependia de `INSERT` manual no banco (era assim que os smoke
+  tests semeavam entregador). Agora a aprovação cria `couriers` (com o id da
+  candidatura, como a migração 007 manda), promove o usuário a `courier` e
+  gera o código de acesso -- mostrado UMA vez a quem aprovou, porque não há
+  integração de WhatsApp e fingir que mandamos seria pior.
+- **Candidatura incompleta não entra na fila.** Faltando documento, o envio é
+  recusado com a lista do que falta: revisor abrindo e fechando candidatura
+  incompleta é o que faz "análise em até 48 h" virar mentira.
+- **Arquivo repetido em outra candidatura é barrado** por sha256 -- a mesma
+  CNH tentando virar dois entregadores é o caso clássico, e a checagem é de
+  uma linha.
+- **O aceite do contrato é registro, não checkbox:** vai pra `consents` com
+  IP, e a VERSÃO fica em `courier_applications.contract_version`. É isso que
+  faz "contrato versionado" ser verdade.
+- **O que o mock mostra e não foi construído:** o match facial e o liveness
+  ("rosto confere · 96%") precisam de um provedor de visão, que não está na
+  cláusula zero. `face_match` fica nulo, a conferência da selfie é humana, e
+  a tela diz isso em vez de estampar uma porcentagem inventada. O aviso por
+  WhatsApp também não existe -- o resultado aparece na própria tela.
+
+### 15.3 — Cupons e campanhas
+
+"A coluna que falta em quase todo painel: **quem paga o desconto**."
+
+- **`coupons.payer` deixou de ser rótulo.** A tabela já tinha os três valores
+  desde a migração 008, mas o resgate não mexia no livro: o desconto saía do
+  total e ninguém ficava devendo a ninguém. Agora cada resgate lança em
+  `ledger_entries` com `origin = 'coupon'` -- `store_receivable` quando a loja
+  banca, `platform_expense` quando somos nós, metade de cada no 50/50 (o
+  centavo ímpar fica com a plataforma, e está escrito por quê).
+- **O teto desativa o cupom sozinho.** O `CHECK (spent <= budget_cap)` já
+  impedia passar; o que faltava era desligar ao ENCOSTAR, pra ninguém
+  descobrir no fechamento. O teste leva um cupom de teto R$ 10 até o limite e
+  confere que o próximo cliente não consegue mais aplicar.
+- **A projeção é pedida ao servidor antes de criar** (`dry_run`), porque usa
+  ticket médio dos últimos 90 dias e a comissão vigente -- números que o
+  navegador não tem. Quando não há pedido suficiente, a resposta diz isso em
+  vez de projetar em cima de zero. O "se 3 de 10 voltarem a pedir" do mock
+  fica de fora: é previsão de comportamento, e não há dado de recompra.
+- **O tamanho do público é consulta, não cadastro.** "Sem pedir há 15 dias" é
+  um `NOT EXISTS` em `orders`; não existe (nem precisa existir) tabela de
+  segmentação.
+- **O que o mock promete e ficou de fora, com o motivo:** "cupom de loja ela
+  cria sozinha no painel, dentro do teto que você liberar aqui". O cupom de
+  loja existe (sai do repasse dela), mas quem cria ainda é a plataforma --
+  deixar a loja criar exige um teto por loja na política, que não existe; sem
+  ele, "dentro do teto que você liberar" não teria o que respeitar.
+- **Validado com banco e navegador reais.** `tests/smoke_growth.sh` cobre as
+  duas telas ponta a ponta: chave Pix de outro CPF recusada, moto sem placa
+  barrada, candidatura sem documento sem ir pra análise, README recusado como
+  foto de CNH, aceite de contrato registrado, fila do admin fechada pra
+  cliente, recusa sem motivo barrada, aprovação criando entregador + login
+  que REALMENTE entra no app (`couriers/me.php` responde), campanha sem teto
+  recusada, projeção sem gravar nada, código duplicado barrado, os dois
+  lançamentos de R$ 5,00 no livro e o cupom desativado ao encostar no teto.
+
 ## Pedido agendado (Fase 14.4) — decisões de implementação
 
 "Faixa com vaga limitada pela capacidade real da cozinha, não pelo relógio.
@@ -2043,6 +2145,7 @@ JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_store.sh      # loj
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_help.sh       # central de ajuda: fluxo automático e chamado com prazo (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_address.sh    # endereço, área de entrega e frete no servidor (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_schedule.sh   # pedido agendado: faixas, vaga e fila da cozinha (semeia sozinho)
+JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_growth.sh     # entrada de entregador e campanhas com teto (semeia sozinho)
 
 # O único processo de fundo do projeto (tela 15.1). Em produção é uma linha
 # no cron do cPanel, a cada minuto; localmente, roda à mão quando quiser ver
@@ -2199,17 +2302,18 @@ checando `boundingBox()` via Playwright, não só lendo o código.
 1. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
    para Svelte + Bootstrap — Fases 1 a 6 prontas, mais o painel da loja
    (7.3, 9.3 e 11.1), o app do entregador (8.1 a 8.7 e 9.1/9.2/9.4), o acesso
-   do cliente (10.1 a 10.3), o caminho do erro (13.1 e 13.2), o chat do
-   pedido (14.2) e o painel da plataforma (12.1 a 12.3 e a política da 10.5);
-   faltam
-   a fila de upload offline e o push (o resto de 7.1 e o 7.2 inteiro), a
-   conciliação de maquininha e o netting
-   semanal (9.6 e 9.7), as telas de configuração da Fase 10 (10.4 formas de
-   pagamento da loja, 10.5 políticas do admin, 10.6 devolução de maquininha),
-   a exportação contábil da 12.3, a ocorrência de entrega e o
-   reembolso do admin (13.3 e 13.4) e o que falta da Fase 15 (rodadas,
-   raio crescente e `dispatch_attempts`, a aprovação de entregador da 15.2 e
-   as campanhas da 15.3 -- a 15.1 está construída, ver seção própria).
+   do cliente (10.1 a 10.3), o resto do app da loja (11.2 a 11.4), o caminho
+   do erro (13.1 e 13.2), a Fase 14 inteira (14.1 ajuda, 14.2 chat, 14.3
+   endereço com área e frete no servidor, 14.4 agendamento), a Fase 15.1 a
+   15.3 e o painel da plataforma (12.1 a 12.3 e a política da 10.5);
+   faltam a fila de upload offline e o push (o resto de 7.1 e o 7.2 inteiro),
+   a conciliação de maquininha e o netting semanal (9.6 e 9.7), duas telas de
+   configuração da Fase 10 (10.4 formas de pagamento da loja e 10.6 devolução
+   de maquininha), a exportação contábil em CSV que a 12.3 promete (os
+   números dela estão na tela), a ocorrência de entrega com o reembolso do
+   admin (13.3 e 13.4) e o que falta da Fase 15 -- rodadas, raio crescente e
+   `dispatch_attempts` (15.1, 15.2 e 15.3 estão construídas, cada uma com
+   seção própria acima).
 2. **Cálculo de frete no servidor.** FEITO na Fase 14.3 (migração 019):
    `orders/checkout.php` e `orders/create.php` calculam o frete da tarifa da
    política e recusam endereço fora do raio; o valor que vier no corpo é

@@ -12,11 +12,16 @@
   import RideScreen from './lib/screens/courier/RideScreen.svelte';
   import SettleScreen from './lib/screens/courier/SettleScreen.svelte';
   import EarningsScreen from './lib/screens/courier/EarningsScreen.svelte';
+  import ApplyScreen from './lib/screens/courier/ApplyScreen.svelte';
 
   // App do entregador (Fase 8 + 9), numa página própria: o terceiro público
   // do projeto, no terceiro bundle. "Aplicativo separado, feito para ser
   // usado com uma mão, no sol, de moto parada."
   let logged = $state(isCourierAuthenticated());
+  // 15.2 — quem ainda não é entregador entra por aqui. É uma tela do mesmo
+  // app porque é onde a pessoa procura: "quero entregar" não está no app de
+  // pedir comida.
+  let applying = $state(false);
   let me = $state(null);
   let offers = $state([]);
   let tab = $state('home');
@@ -62,8 +67,10 @@
   let ride = $derived(me?.current_order ?? null);
 </script>
 
-{#if !logged}
-  <CourierLogin onLoggedIn={() => (logged = true)} />
+{#if applying}
+  <ApplyScreen onBack={() => (applying = false)} />
+{:else if !logged}
+  <CourierLogin onLoggedIn={() => (logged = true)} onApply={() => (applying = true)} />
 {:else}
   <div class="app">
     <header class="top">

@@ -210,6 +210,17 @@ try {
         ]);
         $pdo->prepare('UPDATE coupons SET spent = spent + :amount WHERE id = :id')
             ->execute(['amount' => $cart['discount'], 'id' => $coupon['id']]);
+
+        // Tela 15.3 — "o desconto entra como linha própria no pedido E no
+        // ledger, com a conta de quem pagou". Sem isto, `coupons.payer` era
+        // um rótulo bonito que não movia dinheiro nenhum.
+        record_coupon_ledger($pdo, $coupon, $cart, (float) $cart['discount'], (string) $claims['sub']);
+
+        // "Estourado, o cupom desativa sozinho -- nada de descobrir no
+        // fechamento." O CHECK within_budget impede passar do teto; isto
+        // aqui é o que faz o cupom sumir da vitrine ao ENCOSTAR nele.
+        $pdo->prepare('UPDATE coupons SET active = false WHERE id = :id AND spent >= budget_cap')
+            ->execute(['id' => $coupon['id']]);
     }
 
     $pdo->commit();

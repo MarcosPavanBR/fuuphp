@@ -196,6 +196,13 @@ jobs:
           MERCADOPAGO_MODE: fake
         run: bash tests/smoke_schedule.sh
 
+      - name: Smoke test -- entrada de entregador e campanhas (Fase 15.2 e 15.3)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_growth.sh
+
       - name: Instalar Node 22
         uses: actions/setup-node@v4
         with:

@@ -6,7 +6,7 @@
   // Tela 10.7, lado do entregador — "entregador usa CPF + código, porque
   // troca de celular com frequência". Sem senha: o código é o segredo, e o
   // servidor guarda só o hash dele (partner_accounts.access_code_hash).
-  let { onLoggedIn } = $props();
+  let { onLoggedIn, onApply } = $props();
 
   let cpf = $state('');
   let code = $state('');
@@ -88,9 +88,28 @@
   <p class="note">
     Cada aparelho fica vinculado ao primeiro login. Trocou de celular? O suporte libera.
   </p>
+
+  <!-- 15.2 — quem ainda não entrega começa por aqui. O CPF e o código de
+       acesso deste formulário só existem depois da candidatura aprovada. -->
+  <button type="button" class="apply-link" onclick={onApply}>
+    Ainda não sou entregador — quero me candidatar
+  </button>
 </div>
 
 <style>
+  .apply-link {
+    display: block;
+    width: 100%;
+    background: none;
+    border: none;
+    margin-top: 18px;
+    font-family: var(--fuu-font-body);
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--fuu-white);
+    text-decoration: underline;
+    min-height: var(--fuu-tap-operator);
+  }
   .login {
     min-height: 100vh;
     background: var(--fuu-white);

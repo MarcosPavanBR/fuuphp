@@ -7,6 +7,7 @@
   import DisputeQueue from './lib/screens/admin/DisputeQueue.svelte';
   import ReportsScreen from './lib/screens/admin/ReportsScreen.svelte';
   import PolicyScreen from './lib/screens/admin/PolicyScreen.svelte';
+  import CampaignsScreen from './lib/screens/admin/CampaignsScreen.svelte';
 
   // Painel da plataforma (Fase 12 + tela 10.5). Quarto bundle, quarto
   // público: quem opera o negócio, não quem usa o app.
@@ -63,6 +64,9 @@
           Ocorrências {#if openDisputes > 0}<span class="count alert">{openDisputes}</span>{/if}
         </button>
         <button type="button" class:on={tab === 'reports'} onclick={() => (tab = 'reports')}>Relatórios</button>
+        <button type="button" class:on={tab === 'campaigns'} onclick={() => (tab = 'campaigns')}>
+          Campanhas
+        </button>
         <button type="button" class:on={tab === 'policy'} onclick={() => (tab = 'policy')}>Políticas</button>
       </nav>
 
@@ -78,6 +82,8 @@
         <DisputeQueue data={disputes} onRefresh={pull} />
       {:else if tab === 'reports'}
         <ReportsScreen />
+      {:else if tab === 'campaigns'}
+        <CampaignsScreen />
       {:else}
         <PolicyScreen />
       {/if}
