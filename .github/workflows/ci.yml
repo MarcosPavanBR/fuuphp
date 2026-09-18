@@ -113,27 +113,27 @@ jobs:
           MERCADOPAGO_MODE: fake
         run: bash tests/smoke_payments.sh
 
-      - name: Smoke test -- acompanhamento pós-pedido (Fase 5: timeline, SSE, avaliação)
+      - name: "Smoke test -- acompanhamento pós-pedido (Fase 5: timeline, SSE, avaliação)"
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
           JWT_SECRET: ci-test-secret
         run: bash tests/smoke_tracking.sh
 
-      - name: Smoke test -- conta (Fase 6: endereços e cartões salvos)
+      - name: "Smoke test -- conta (Fase 6: endereços e cartões salvos)"
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
           JWT_SECRET: ci-test-secret
           MERCADOPAGO_MODE: fake
         run: bash tests/smoke_account.sh
 
-      - name: Smoke test -- painel da loja (Fase 7.3 + 11.1: fila de Pix e KDS)
+      - name: "Smoke test -- painel da loja (Fase 7.3 + 11.1: fila de Pix e KDS)"
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
           JWT_SECRET: ci-test-secret
           MERCADOPAGO_MODE: fake
         run: bash tests/smoke_panel.sh
 
-      - name: Smoke test -- caminho do erro (Fase 13: cancelamento, recusa, reembolso)
+      - name: "Smoke test -- caminho do erro (Fase 13: cancelamento, recusa, reembolso)"
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
           JWT_SECRET: ci-test-secret
