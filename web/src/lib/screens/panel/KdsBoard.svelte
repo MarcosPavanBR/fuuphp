@@ -92,6 +92,34 @@
       busyId = null;
     }
   }
+
+  // 15.1 — retirada não tem motoboy no meio: entregar a sacola na mão do
+  // cliente encerra o pedido. São duas transições porque a máquina de status
+  // não tem atalho de 'ready' pra 'delivered' -- e não deveria ter: a sacola
+  // sai da bancada e chega ao dono em dois momentos, mesmo que separados por
+  // três segundos. As duas ficam na linha do tempo do cliente.
+  async function handoffToCustomer(order) {
+    busyId = order.id;
+    try {
+      for (const to of ['delivering', 'delivered']) {
+        await api.post('/orders/status.php', {
+          token: staffToken(),
+          body: { order_id: order.id, to },
+        });
+      }
+      toastr.success(`#${order.public_code} entregue no balcão.`);
+      onRefresh();
+    } catch (e) {
+      const message =
+        e instanceof ApiError && e.code === 'illegal_transition'
+          ? 'Esse pedido já mudou de estado em outro aparelho — atualizando a tela.'
+          : (e.message ?? 'Não deu pra mudar o pedido de coluna.');
+      toastr.error(message);
+      if (e instanceof ApiError && e.code === 'illegal_transition') onRefresh();
+    } finally {
+      busyId = null;
+    }
+  }
 </script>
 
 <div class="board">
@@ -195,7 +223,20 @@
           <span class="code fuu-mono">#{order.public_code}</span>
           <span class="method plain">{methodLabel(order)}</span>
         </div>
-        {#if order.courier_name}
+        {#if order.pickup_by_customer}
+          <!-- 15.1 — ninguém aceitou a corrida e o cliente veio buscar. A
+               cozinha PRECISA ver isso: a sacola fica no balcão esperando
+               uma pessoa, não uma moto. -->
+          <p class="courier pickup-text"><strong>RETIRADA</strong> — o cliente vem buscar</p>
+          <button
+            type="button"
+            class="handoff"
+            disabled={busyId === order.id}
+            onclick={() => handoffToCustomer(order)}
+          >
+            Entregue ao cliente
+          </button>
+        {:else if order.courier_name}
           <p class="courier"><strong>{order.courier_name}</strong> a caminho</p>
           <button
             type="button"
@@ -423,6 +464,13 @@
   }
   .waiting-text {
     color: var(--fuu-ink-4);
+  }
+  .pickup-text {
+    color: var(--fuu-leaf-dark);
+  }
+  .pickup-text strong {
+    font-family: var(--fuu-font-mono);
+    letter-spacing: 0.06em;
   }
   .empty {
     font-size: 13px;

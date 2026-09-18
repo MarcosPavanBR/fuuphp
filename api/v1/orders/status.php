@@ -36,6 +36,15 @@ $allowedTargetsByRole = [
     'restaurant_staff' => ['preparing', 'ready', 'delivering', 'cancelled', 'rejected'],
 ];
 $allowed = $allowedTargetsByRole[$role] ?? [];
+
+// 15.1 — pedido que virou retirada não tem entregador pra fechar a corrida.
+// Quem entrega a sacola na mão do cliente é a loja, no balcão, então é ela
+// que pode registrar 'delivered' -- e SÓ nesse caso: em pedido com entrega,
+// quem confirma que chegou é quem chegou.
+if ($role === 'restaurant_staff' && $order['pickup_by_customer'] === true) {
+    $allowed[] = 'delivered';
+}
+
 if (!in_array($to, $allowed, true)) {
     error_response(403, 'forbidden', "Esse papel não pode pedir a transição para \"{$to}\".");
 }
@@ -58,7 +67,14 @@ $actorKind = $role === 'restaurant_staff' ? 'store' : 'customer';
 // A causa do reembolso vem de QUEM desfez, não do texto do motivo: cliente
 // cancelando é 'customer_cancel', loja recusando pedido já aceito é
 // 'store_reject' -- e é isso que decide de qual bolso sai o estorno.
-$cause = $to === 'rejected' || $role === 'restaurant_staff' ? 'store_reject' : 'customer_cancel';
+$cause = match (true) {
+    $to === 'rejected' || $role === 'restaurant_staff' => 'store_reject',
+    // Tela 15.1: cancelar um pedido pronto que ninguém aceitou não é
+    // desistência do cliente, é falha nossa de despacho -- e por isso a
+    // devolução é integral e quem paga a comida já feita somos nós.
+    $order['status'] === 'ready' && $order['courier_id'] === null && $order['no_courier_since'] !== null => 'no_courier',
+    default => 'customer_cancel',
+};
 
 // O plano tem que ser calculado ANTES da transição: depois o pedido já está
 // 'cancelled' e a taxa (que depende de a cozinha ter começado) seria sempre

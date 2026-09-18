@@ -24,7 +24,12 @@
     api
       .get('/orders/cancel_quote.php', { auth: true, query: { id: orderId } })
       .then((data) => {
-        if (alive) quote = data;
+        if (!alive) return;
+        quote = data;
+        // 15.1 — quando quem falhou fomos nós, o motivo já está escrito e não
+        // há o que escolher: a tela não vai pedir explicação a quem esperou
+        // quinze minutos por um entregador que não apareceu.
+        if (data.no_courier) reason = data.reasons[0].code;
       })
       .catch((e) => {
         if (alive) loadError = e.message ?? 'Não deu pra calcular o cancelamento.';
@@ -86,7 +91,12 @@
       </div>
       <button type="button" class="keep" onclick={onClose}>Voltar</button>
     {:else}
-      {#if quote.quote.fee > 0}
+      {#if quote.no_courier}
+        <div class="ok-note">
+          <strong>A falha é nossa.</strong> Nenhum entregador aceitou a corrida, então a devolução é
+          integral, sem taxa — inclusive a comida, que a loja recebe por nossa conta.
+        </div>
+      {:else if quote.quote.fee > 0}
         <div class="warn">
           <strong>A cozinha já começou.</strong> Cancelar agora cobra uma taxa de
           {money(quote.quote.fee)} — o restaurante já gastou os insumos.
@@ -97,20 +107,22 @@
         </div>
       {/if}
 
-      <p class="section-label">POR QUE ESTÁ CANCELANDO?</p>
-      <div class="reasons">
-        {#each quote.reasons as option (option.code)}
-          <button
-            type="button"
-            class="reason"
-            class:on={reason === option.code}
-            onclick={() => (reason = option.code)}
-          >
-            <i class={`bi ${reason === option.code ? 'bi-record-circle' : 'bi-circle'}`}></i>
-            {option.label}
-          </button>
-        {/each}
-      </div>
+      {#if !quote.no_courier}
+        <p class="section-label">POR QUE ESTÁ CANCELANDO?</p>
+        <div class="reasons">
+          {#each quote.reasons as option (option.code)}
+            <button
+              type="button"
+              class="reason"
+              class:on={reason === option.code}
+              onclick={() => (reason = option.code)}
+            >
+              <i class={`bi ${reason === option.code ? 'bi-record-circle' : 'bi-circle'}`}></i>
+              {option.label}
+            </button>
+          {/each}
+        </div>
+      {/if}
 
       <div class="money">
         <div class="kv">

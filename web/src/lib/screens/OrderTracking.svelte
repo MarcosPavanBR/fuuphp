@@ -6,6 +6,7 @@
   import { parsePgTimestamp } from '../datetime.js';
   import ReviewScreen from './ReviewScreen.svelte';
   import CancelDialog from './CancelDialog.svelte';
+  import NoCourierPanel from './NoCourierPanel.svelte';
   import OrderChat from '../components/OrderChat.svelte';
 
   // Fase 5 — pós-pedido e acompanhamento (5.1 Aprovado, 5.2 Em análise,
@@ -24,6 +25,7 @@
   let showReview = $state(false);
   let showCancel = $state(false);
   let showChat = $state(false);
+  let dispatch = $state(null);
   let now = $state(Date.now());
   let evtSource;
   let clockInterval;
@@ -69,38 +71,71 @@
     // lógica de retry aqui.
   }
 
+  async function reload() {
+    const data = await api.get('/orders/show.php', { auth: true, query: { id: orderId } });
+    order = data.order;
+    events = data.events;
+    review = data.review;
+    return data;
+  }
+
   onMount(() => {
     connect();
     clockInterval = setInterval(() => (now = Date.now()), 1000);
-    api
-      .get('/orders/show.php', { auth: true, query: { id: orderId } })
-      .then((data) => {
-        order = data.order;
-        events = data.events;
-        review = data.review;
-        return api.get('/restaurants/show.php', { query: { id: data.order.restaurant_id } });
-      })
+    reload()
+      .then((data) => api.get('/restaurants/show.php', { query: { id: data.order.restaurant_id } }))
       .then((data) => (restaurant = data.restaurant))
       .catch(() => {});
   });
   onDestroy(() => {
     evtSource?.close();
     clearInterval(clockInterval);
+    clearInterval(dispatchInterval);
   });
 
-  // Enquanto o diálogo de cancelamento está aberto, a conexão de tempo real
-  // é fechada: o modal cobre a tela inteira (não há o que atualizar atrás
-  // dele) e ele precisa de duas chamadas HTTP -- a cotação e a confirmação.
-  // Sob `php -S`, que atende uma requisição por vez, manter o SSE aberto
-  // fazia a cotação esperar os 25s da janela do stream; medido em 23,5 s com
-  // o navegador antes desta linha existir.
+  // Tela 15.1 — pronto, sem entregador designado e sem virar retirada: é o
+  // estado em que a tela deixa de ser "acompanhamento" e vira "e agora?".
+  let awaitingCourier = $derived(
+    order?.status === 'ready' && order?.courier_id === null && order?.pickup_by_customer !== true
+  );
+
+  // Enquanto o diálogo de cancelamento ou a tela de despacho estão no ar, a
+  // conexão de tempo real é fechada. Dois motivos, um por caso: o modal cobre
+  // a tela inteira (não há o que atualizar atrás dele), e o despacho é
+  // perguntado por polling de qualquer jeito -- aceitar uma corrida não passa
+  // por advance_order, então o SSE nem saberia avisar. Some o efeito prático
+  // sob `php -S`, que atende uma requisição por vez: com o stream aberto, a
+  // cotação de cancelamento esperava os 25 s da janela (medido: 23,5 s).
   $effect(() => {
-    if (showCancel) {
+    if (showCancel || awaitingCourier) {
       evtSource?.close();
       evtSource = undefined;
     } else if (order && !evtSource) {
       connect();
     }
+  });
+
+  let dispatchInterval;
+  async function refreshDispatch() {
+    try {
+      const data = await api.get('/orders/dispatch_status.php', { auth: true, query: { id: orderId } });
+      dispatch = data;
+      // Deixou de procurar (alguém aceitou, ou virou retirada): o estado
+      // completo do pedido volta a ser o que manda na tela.
+      if (!data.searching) await reload();
+    } catch {
+      /* rede caindo não tira a tela do ar: a próxima rodada tenta de novo */
+    }
+  }
+
+  $effect(() => {
+    if (!awaitingCourier) {
+      dispatch = null;
+      return;
+    }
+    refreshDispatch();
+    dispatchInterval = setInterval(refreshDispatch, 8000);
+    return () => clearInterval(dispatchInterval);
   });
 
   let remainingSeconds = $derived(
@@ -110,6 +145,17 @@
   );
   let remainingLabel = $derived(
     `${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(remainingSeconds % 60).padStart(2, '0')}`
+  );
+
+  // "Pizzaria Nonna · pronto desde 20:12" (15.1): a hora é o mesmo carimbo
+  // que faz o relógio da procura correr, não a hora de agora.
+  let readySinceLabel = $derived(
+    order?.no_courier_since
+      ? parsePgTimestamp(order.no_courier_since).toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : null
   );
 
   // Sem motor de logística real (Fase 8/9), é uma janela fixa a partir da
@@ -168,6 +214,38 @@
         </p>
         <p class="hero-note">Esse pedido não pode ser retomado — monte um novo pra tentar de novo.</p>
       </div>
+    {:else if order.pickup_by_customer && ['preparing', 'ready'].includes(order.status)}
+      <!-- 15.1 — a saída que salvou o pedido. Depois de escolhida, a tela
+           para de falar em entrega: não há mais entrega. -->
+      <div class="hero pickup">
+        <i class="bi bi-bag-check"></i>
+        <h1 class="fuu-display">
+          {order.status === 'ready' ? 'Pronto para retirada' : 'Preparando para retirada'}
+        </h1>
+        <p class="hero-text">
+          Você retira {restaurant ? `na ${restaurant.name}` : 'na loja'} — a entrega saiu do pedido.
+        </p>
+        <p class="hero-note">Mostre o código #{order.public_code} no balcão.</p>
+      </div>
+    {:else if awaitingCourier}
+      <div class="ready-head">
+        <p class="ready-code">Pedido #{order.public_code}</p>
+        <p class="ready-sub">
+          {restaurant?.name ?? 'Loja'}{readySinceLabel ? ` · pronto desde ${readySinceLabel}` : ''}
+        </p>
+      </div>
+      {#if dispatch}
+        <NoCourierPanel
+          {dispatch}
+          onCancel={() => (showCancel = true)}
+          onAction={(data) => {
+            if (data?.order) order = data.order;
+            refreshDispatch();
+          }}
+        />
+      {:else}
+        <p class="loading">Vendo como está o despacho…</p>
+      {/if}
     {:else if ['preparing', 'ready', 'delivering'].includes(order.status)}
       <div class="hero tracking">
         <div class="map-placeholder">
@@ -285,6 +363,28 @@
   }
   .hero.delivered i {
     color: var(--fuu-leaf);
+  }
+  .hero.pickup i {
+    color: var(--fuu-leaf-dark);
+  }
+  /* 15.1 — o cabeçalho branco do mock: código do pedido e "pronto desde",
+     coladinho no topo, porque o assunto da tela está logo abaixo. */
+  .ready-head {
+    background: var(--fuu-white);
+    border-bottom: 1px solid var(--fuu-line-3);
+    margin: 0 -20px 16px;
+    padding: 14px 18px;
+  }
+  .ready-code {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--fuu-ink-1);
+    margin: 0;
+  }
+  .ready-sub {
+    font-size: 11.5px;
+    color: var(--fuu-ink-2);
+    margin: 2px 0 0;
   }
   .hero h1 {
     font-size: 21px;

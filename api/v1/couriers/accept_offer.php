@@ -71,7 +71,7 @@ try {
     // orders.courier_id não passa pelo advance_order(): não é mudança de
     // status, é atribuição de responsável. O status continua 'ready' até a
     // loja entregar a sacola em mãos (tela 11.1).
-    $pdo->prepare('UPDATE orders SET courier_id = :courier WHERE id = :id')
+    $pdo->prepare('UPDATE orders SET courier_id = :courier, no_courier_since = NULL WHERE id = :id')
         ->execute(['courier' => $courierId, 'id' => $offer['order_id']]);
 
     $pdo->commit();

@@ -52,7 +52,27 @@ function ensure_offer(PDO $pdo, array $order): ?array
         'ttl' => OFFER_TTL_SECONDS,
     ]);
 
+    // A partir daqui o pedido está pronto e sem ninguém pra levar -- é o
+    // relógio da tela 15.1 que começa a correr.
+    mark_no_courier($pdo, (int) $order['id'], true);
+
     return $insert->fetch();
+}
+
+/**
+ * Marca (ou limpa) o relógio de "pronto e sem ninguém pra levar".
+ *
+ * Tela 15.1 — "o momento que mais gera ticket e ninguém desenha". O carimbo
+ * começa quando o pedido fica pronto sem entregador designado, e some no
+ * instante em que alguém aceita: é ele que decide quando a tela muda de
+ * "procurando" pra "está mais difícil que o normal", e quando o cancelamento
+ * automático entra.
+ */
+function mark_no_courier(PDO $pdo, int $orderId, bool $waiting): void
+{
+    $pdo->prepare(
+        'UPDATE orders SET no_courier_since = :value WHERE id = :id'
+    )->execute(['value' => $waiting ? date('c') : null, 'id' => $orderId]);
 }
 
 /**

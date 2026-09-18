@@ -30,19 +30,31 @@ if ($order === null) {
 }
 authorize_order_access($order, $claims);
 
-// A legalidade de verdade é a do banco (advance_order); aqui só se sabe se
-// vale a pena mostrar o botão. 'ready' fica de fora de propósito: a comida
-// está na bancada esperando o entregador, e a função do banco não permite
-// essa transição.
-$cancellable = ['pending_payment', 'pending_verification', 'paid', 'preparing', 'delivering'];
-$canCancel = in_array((string) $order['status'], $cancellable, true);
-
-// A mesma rota serve as duas telas: 13.1 (cliente cancela) e 13.2 (loja
-// recusa pedido já aceito). A causa sai do papel de quem perguntou, igual ao
-// que status.php faz na hora de gravar -- é ela que zera a taxa quando quem
-// desiste é a loja ("recusar tem custo", e o custo não é do cliente).
+// A mesma rota serve três telas: 13.1 (cliente cancela), 13.2 (loja recusa
+// pedido já aceito) e o "Cancelar e receber tudo de volta" da 15.1. A causa
+// sai do papel de quem perguntou e do estado do pedido, igual ao que
+// status.php faz na hora de gravar -- é ela que zera a taxa quando quem
+// desiste é a loja ("recusar tem custo", e o custo não é do cliente) e
+// quando quem falhou fomos nós.
 $isStore = ($claims['role'] ?? null) === 'restaurant_staff';
-$cause = $isStore ? 'store_reject' : 'customer_cancel';
+
+// Tela 15.1 — pedido pronto que ninguém aceitou. Não é desistência do
+// cliente: é despacho nosso que não achou ninguém.
+$noCourier = (string) $order['status'] === 'ready'
+    && $order['courier_id'] === null
+    && $order['no_courier_since'] !== null;
+
+// A legalidade de verdade é a do banco (advance_order); aqui só se sabe se
+// vale a pena mostrar o botão. 'ready' só entra pelo caminho da 15.1 -- com
+// entregador designado a comida está a caminho, e aí não se cancela por aqui.
+$cancellable = ['pending_payment', 'pending_verification', 'paid', 'preparing', 'delivering'];
+$canCancel = in_array((string) $order['status'], $cancellable, true) || ($noCourier && !$isStore);
+
+$cause = match (true) {
+    $isStore => 'store_reject',
+    $noCourier => 'no_courier',
+    default => 'customer_cancel',
+};
 $plan = refund_plan($order, policy_for_order($pdo, $order), $cause);
 
 $restaurantStmt = $pdo->prepare('SELECT name FROM restaurants WHERE id = :id');
@@ -56,6 +68,12 @@ $customerReasons = [
     ['code' => 'mistake', 'label' => 'Pedi por engano'],
     ['code' => 'wrong_address', 'label' => 'Endereço errado'],
     ['code' => 'changed_mind', 'label' => 'Não quero mais'],
+];
+// Na 15.1 não há motivo a escolher: o motivo é nosso, não dele. Perguntar
+// "por que está cancelando?" a quem esperou 15 minutos por um entregador que
+// não veio seria cobrar explicação de quem já foi prejudicado.
+$noCourierReasons = [
+    ['code' => 'no_courier', 'label' => 'Nenhum entregador aceitou a corrida'],
 ];
 $storeReasons = [
     ['code' => 'out_of_stock', 'label' => 'Item acabou agora'],
@@ -75,7 +93,12 @@ $response = [
         'restaurant_name' => $restaurantStmt->fetchColumn(),
     ],
     'quote' => $plan,
-    'reasons' => $isStore ? $storeReasons : $customerReasons,
+    'no_courier' => $noCourier && !$isStore,
+    'reasons' => match (true) {
+        $isStore => $storeReasons,
+        $noCourier => $noCourierReasons,
+        default => $customerReasons,
+    },
 ];
 
 // Tela 13.2 — "Recusar tem custo e a tela mostra qual." A taxa de recusa é

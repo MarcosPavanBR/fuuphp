@@ -30,7 +30,7 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (doze migrações SQL), os módulos **identity**,
+A **fundação de banco** (dezessete migrações SQL), os módulos **identity**,
 **catálogo + pedido + checkout**, **descoberta** (busca de loja e
 produto), **carrinho incremental**, **pagamentos** (cartão via Mercado
 Pago, Pix automático e manual, dinheiro, maquininha, validação humana do
@@ -151,6 +151,16 @@ api/v1/orders/               pedido e checkout
   cancel_quote.php             GET  ?id= — o que acontece se desfizer agora:
                                 taxa, valor de volta, canal, prazo e quem paga
                                 (telas 13.1 e 13.2); só lê
+  dispatch_status.php          GET  ?id= — a tela 15.1 inteira numa chamada:
+                                há quanto tempo procura entregador, quando o
+                                cancelamento automático entra, e quais saídas
+                                existem PARA ESTE pedido (com o motivo escrito
+                                quando alguma não está disponível); só lê
+  dispatch_action.php          POST — as saídas da 15.1: 'boost' (surge no
+                                pedido + bônus na oferta, só em pedido que
+                                paga na entrega) e 'pickup' (cliente retira,
+                                frete zera e volta). Cancelar continua em
+                                status.php, a porta única
   track.php                     GET  ?id= — SSE (Fase 5.3): snapshot na
                                  hora + evento ao vivo por LISTEN/NOTIFY,
                                  ver seção própria abaixo
@@ -175,6 +185,11 @@ api/v1/profile/
   update.php                    POST — completa o cadastro (tela 10.3): nome,
                                  e-mail, CPF validado e data de nascimento;
                                  409 se CPF/e-mail já for de outra conta
+bin/                          processos de linha de comando (cron), não rotas
+  auto_cancel_no_courier.php    varre pedidos prontos há mais tempo que o
+                                 prazo da política sem entregador, cancela e
+                                 devolve integral (a promessa escrita da tela
+                                 15.1). Uma linha no cron, a cada minuto
 lib/                          código compartilhado entre módulos
   bootstrap.php                 carrega .env, CORS (dev), registra handler de erro, requires
   db.php                          PDO (DATABASE_URL → pgsql DSN) + pg_bool() +
@@ -201,7 +216,9 @@ lib/                          código compartilhado entre módulos
   refunds.php                   rotas de estorno por método, quem paga por
                                  causa e gravação idempotente (Fase 13)
   dispatch.php                  despacho mínimo (uma oferta por pedido pronto),
-                                 saldos do entregador e escrita no livro
+                                 o relógio de "pronto e sem ninguém pra levar"
+                                 (tela 15.1), saldos do entregador e escrita
+                                 no livro
   pix.php                         gera o Pix "copia e cola" (BR Code/EMV) —
                                    CRC16 conferido contra o vetor de teste
                                    padrão do algoritmo antes de entrar em uso
@@ -251,6 +268,11 @@ tests/
                                  resumo do dia, KDS e as transições da loja
                                  (aceitar, pronto, entregue ao motoboy),
                                  mais o isolamento entre lojas
+  smoke_dispatch.sh             pedido pronto sem entregador (15.1): relógio,
+                                 turbo chegando na oferta, turbo negado em
+                                 pedido pago, retirada com devolução parcial,
+                                 cancelamento integral por falha de despacho e
+                                 a varredura do auto-cancel
   support/random_cnpj.php       CNPJ aleatório com dígito verificador válido,
                                  pra seed de teste não colidir entre scripts
   support/random_cpf.php        idem pra CPF (users.cpf é UNIQUE)
@@ -288,6 +310,9 @@ db/
                                           das 42 tabelas originais, sem
                                           coluna de nota agregada em
                                           restaurants, ver seção própria)
+    017_no_courier.up.sql / .down.sql     orders.pickup_by_customer +
+                                           no_courier_since e a transição
+                                           ('ready','cancelled') (tela 15.1)
     016_admin.up.sql / .down.sql          disputes sem pedido obrigatório,
                                            restaurants.rejected_at (tela 12.1)
     015_delivery_proof.up.sql / .down.sql orders.delivery_code + delivery_proofs
@@ -676,7 +701,7 @@ puro: CRUD de endereços completo e cartão salvo via Mercado Pago.
   (confirmado por query direta no banco, não só pela resposta da API),
   troca de padrão e remoção.
 
-## Front-end (`web/`) — Fases 1 a 6, 7.1, 8, 9, 10, 12, 13 e 14.2, decisões
+## Front-end (`web/`) — Fases 1 a 6, 7.1, 8, 9, 10, 12, 13, 14.2 e 15.1, decisões
 
 Svelte 5 + Vite, Bootstrap 5, Bootstrap Icons, `sweetalert` (não
 `sweetalert2` — o pacote `sweetalert` na versão 2.x do npm *é* a
@@ -724,6 +749,10 @@ web/
       screens/
         AuthFlow.svelte                 orquestra a Fase 10: 10.1 -> 10.2 -> 10.3
         CancelDialog.svelte             13.1 — taxa e estorno antes de confirmar
+                                         (e a devolução integral da 15.1)
+        NoCourierPanel.svelte           15.1 — pronto e sem entregador: relógio,
+                                         turbo, retirada e cancelar com tudo de
+                                         volta; vive dentro de OrderTracking
         LoginScreen.svelte              10.1 — telefone ou e-mail, código de uso único
         OtpScreen.svelte                10.2 — seis caixas, reenvio, WhatsApp
         SignupScreen.svelte             10.3 — cadastro com base legal por bloco
@@ -1371,6 +1400,105 @@ backend. Os dois fecham aqui, sobre tabelas que existem desde a migração
   R$ 68,40 no carrinho, e a conversa indo do app do cliente pro KDS da loja
   e voltando por resposta rápida, com "lida" aparecendo.
 
+## Sem entregador disponível (Fase 15.1) — decisões de implementação
+
+"O momento que mais gera ticket e ninguém desenha: em vez de 'aguarde', três
+saídas concretas e a promessa escrita de cancelamento automático com
+devolução integral. A comida já feita é paga pela plataforma, não pela loja."
+
+Até aqui, um pedido que ficava pronto e não era aceito por ninguém ficava
+pronto para sempre: a oferta existia (Fase 8), mas o cliente via só "Pronto,
+aguarda entregador" e não tinha saída nenhuma. Esta tela é o contrário disso.
+
+- **A promessa da tela exigiu abrir a máquina de estados.** `('ready',
+  'cancelled')` não existia na lista de transições da migração `004` -- e sem
+  ela as duas promessas centrais da 15.1 ("Cancelar e receber tudo de volta"
+  e "passados 15 min cancelamos sozinhos") são recusadas pelo banco, porque
+  as duas acontecem com o pedido em `ready`. A 004 fechava `ready` de
+  propósito ("a comida está na bancada esperando o entregador"); o caso que
+  faltava era exatamente o inverso: a comida na bancada e ninguém vindo
+  buscar. A migração `017` acrescenta só essa transição, e o `down` devolve a
+  lista idêntica à da 004.
+- **O relógio é uma coluna, não um `SELECT` derivado.**
+  `orders.no_courier_since` é carimbado quando o pedido vira oferta sem
+  entregador e limpo no instante em que alguém aceita (ou quando vira
+  retirada). Dava pra derivar de `order_events` toda vez, mas quem lê isso é
+  uma varredura que roda a cada minuto -- uma coluna indexada vale mais que
+  um subselect por linha. É esse carimbo que decide o "há 6 min", a barra de
+  progresso, a troca de "chamando quem está por perto" pra "está mais difícil
+  que o normal" (um terço do prazo) e a hora de cancelar sozinho.
+- **Turbinar o frete só existe onde o dinheiro ainda não andou.** No mock,
+  quem paga os R$ 4,00 a mais é o cliente. Isso é honesto em dinheiro e
+  maquininha, que pagam na entrega; em pedido já pago no cartão ou no Pix,
+  cobrar a mais exigiria uma segunda transação no Mercado Pago, que este
+  módulo não faz. Então a opção aparece desabilitada com o motivo escrito na
+  própria tela -- não some, e não mente.
+- **Turbinar mexe em DOIS lugares, na mesma transação.** `orders.surge_fee`
+  (o cliente paga) e `offers.bonus` (o entregador vê). Só o primeiro seria
+  cobrar sem oferecer nada; só o segundo seria prometer dinheiro que ninguém
+  pagou. A oferta ainda ganha mais 5 minutos de validade, porque valor novo
+  precisa de tempo pra ser visto.
+- **Retirar na loja é uma devolução PARCIAL, e isso mudou `record_refund`.**
+  Zerar `delivery_fee`/`surge_fee` muda o total (coluna gerada) e devolve o
+  frete de quem já tinha pago -- mas o cliente continua tendo pago a comida.
+  A função ganhou um parâmetro `partial` que impede o `payments.status` de
+  virar `refunded`: devolver o frete não desfaz a cobrança do pedido.
+- **Cancelar aqui é falha nossa, e a conta é nossa.** A causa é `no_courier`,
+  que `refund_payer()` já mapeava pra `platform`, e `refund_plan()` não cobra
+  taxa nenhuma -- mesmo com a cozinha já tendo terminado, que é o único caso
+  em que a taxa existiria. Também não se pergunta o motivo: a tela de
+  cancelamento troca os quatro motivos fechados por um só, já marcado, porque
+  cobrar explicação de quem esperou quinze minutos por um entregador que não
+  veio seria absurdo.
+- **O cancelamento automático é PHP em cron, não `pg_cron`** --
+  `bin/auto_cancel_no_courier.php`, uma linha no cron do cPanel a cada
+  minuto. O timeout do Pix (migração `009`) pode viver dentro do banco porque
+  lá nada foi cobrado; aqui a varredura precisa decidir dinheiro, e quem sabe
+  por onde o estorno volta, quanto volta e de que bolso sai é
+  `lib/refunds.php`. Reescrever essa tabela em PL/pgSQL criaria uma segunda
+  fonte de verdade sobre o dinheiro, e as duas iam divergir no primeiro
+  ajuste. O prazo lido é o da política congelada em cada pedido, não a de
+  agora: encurtar o prazo hoje não pode cancelar mais cedo o pedido de ontem.
+- **A retirada precisou aparecer na cozinha e ganhar quem a feche.** O KDS
+  mostra `RETIRADA — o cliente vem buscar` no lugar do nome do entregador: a
+  sacola fica no balcão esperando uma pessoa, não uma moto. E como não há
+  entregador pra encerrar a corrida, a loja passou a poder registrar
+  `delivered` -- só em pedido de retirada. Em pedido com entrega, quem
+  confirma que chegou continua sendo quem chegou.
+- **O que o mock diz e não foi construído, com o motivo:**
+  - *"Chuva na região e muitos pedidos ao mesmo tempo"* — não existe clima
+    nem densidade de pedidos em lugar nenhum da especificação. Inventar uma
+    desculpa é pior que não dar nenhuma; a tela diz o que é verdade (há
+    quanto tempo procura).
+  - *"Costuma achar entregador em 2 min"* — é uma estatística, e não há
+    histórico de despacho pra medir. No lugar, a mecânica verdadeira: o valor
+    a mais aparece na hora pra quem está com o app aberto.
+  - *"Avisamos assim que alguém aceitar"* — seria push (7.2), que não existe.
+    A tela se atualiza sozinha enquanto está aberta, e é isso que ela diz.
+  - *`dispatch_attempts`, raio crescente e rodadas* — o despacho continua
+    sendo uma rodada só (`lib/dispatch.php`). O surge por pedido existe agora
+    porque a tela precisa dele; o resto da Fase 15 não.
+  - *"· 1,2 km de você"* — essa existe: `restaurants.lat/lng` (migração
+    `010`) e o endereço do cliente dão a distância real, em Haversine no SQL.
+    Quando a loja não tem coordenada cadastrada, a linha aparece sem a
+    distância, em vez de com um número inventado.
+- **O SSE dá lugar ao polling enquanto essa tela está no ar.** Aceitar uma
+  corrida não passa por `advance_order`, então o stream de tempo real nem
+  saberia avisar. Fechar o `EventSource` tem o efeito colateral bom de
+  desbloquear o `php -S`, que atende uma requisição por vez -- o mesmo motivo
+  documentado no diálogo de cancelamento.
+- **Validado com banco e navegador reais.** `tests/smoke_dispatch.sh` cobre o
+  relógio começando e parando, o turbo chegando na oferta do entregador, o
+  turbo negado em pedido pago, a retirada com devolução parcial sem marcar o
+  pagamento como estornado, o fechamento da retirada pela loja (e a recusa do
+  mesmo em pedido com entrega), o cancelamento integral por `no_courier`, a
+  varredura cancelando o vencido e não encostando em quem está no prazo, e os
+  403/404 de pedido alheio. No Playwright: a tela da 15.1 com o contador
+  andando de segundo em segundo, o turbo subindo o total de R$ 58,10 pra
+  R$ 62,10, a opção desabilitada com o motivo escrito no pedido de cartão, a
+  retirada devolvendo R$ 6,90 e virando "Pronto para retirada", e o KDS da
+  loja fechando esse pedido no balcão.
+
 ## App do entregador e caixa (Fase 8 e 9) — decisões de implementação
 
 O terceiro público do projeto, no terceiro bundle (`entregador.html`).
@@ -1421,10 +1549,11 @@ offline."
   ninguém sabe se é o certo.
 - **Despacho mínimo, e assumido como tal.** `lib/dispatch.php` cria UMA oferta
   quando o pedido fica pronto, com o frete do pedido e bônus zero. A Fase 15
-  desenha rodadas, raio crescente, surge e `dispatch_attempts` -- nada disso
-  existe aqui, e inventar bônus seria prometer dinheiro que ninguém decidiu
-  pagar. A tabela `offers` já é a da especificação, então a Fase 15 substitui
-  a função sem migrar nada.
+  desenha rodadas, raio crescente, surge e `dispatch_attempts`: dessas, só o
+  surge por pedido passou a existir (a tela 15.1 precisa dele, e o bônus
+  agora tem de onde vir -- o cliente que turbinou). Rodadas, raio e
+  `dispatch_attempts` continuam fora. A tabela `offers` já é a da
+  especificação, então o resto da Fase 15 substitui a função sem migrar nada.
 - **O que o mock mostra e o app não tem:** navegação com áudio e o endereço
   escrito da loja (o esquema só tem `lat`/`lng` de restaurante -- logradouro
   só existe em `addresses`, que é do cliente); telefone da loja (não há
@@ -1532,9 +1661,9 @@ esse buraco e junta o KDS, que é a outra metade do mesmo trabalho.
 ```bash
 docker compose up -d
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
-bash db/migrate.sh up           # aplica as 16, em ordem
+bash db/migrate.sh up           # aplica as 17, em ordem
 bash db/migrate.sh down 3       # reverte as 3 últimas
-bash db/migrate.sh down 16      # reverte tudo
+bash db/migrate.sh down 17      # reverte tudo
 
 cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN se precisar
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
@@ -1549,6 +1678,12 @@ JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_cancel.sh     # can
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_courier.sh    # entregador e baixa de espécie (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_support.sh    # chat do pedido e cupons (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_admin.sh      # painel da plataforma (semeia sozinho)
+JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_dispatch.sh   # pedido sem entregador: turbo, retirada, auto-cancel (semeia sozinho)
+
+# O único processo de fundo do projeto (tela 15.1). Em produção é uma linha
+# no cron do cPanel, a cada minuto; localmente, roda à mão quando quiser ver
+# um pedido vencido ser cancelado:
+php bin/auto_cancel_no_courier.php     # cancela pedido pronto há 15 min sem entregador
 
 php -S localhost:8080                  # API, num terminal
 cd web && npm install && npm run dev   # front-end Svelte, noutro terminal
@@ -1562,13 +1697,13 @@ Os smoke tests semeiam dados próprios a cada execução, mas contam com um
 banco recém-migrado: rodar a suíte várias vezes no mesmo banco acumula
 lojas de teste e faz as asserções de contagem (ex.: "filtro de categoria
 trouxe 1 loja") falharem por dado velho, não por regressão. `bash
-db/migrate.sh down 16 && bash db/migrate.sh up` devolve o banco ao zero.
+db/migrate.sh down 17 && bash db/migrate.sh up` devolve o banco ao zero.
 
 `MERCADOPAGO_MODE=fake` é o padrão quando `MERCADOPAGO_ACCESS_TOKEN` não
 está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
 de conta sandbox pra rodar nada disto localmente.
 
-As doze migrações foram validadas de ponta a ponta (`up` completo, `down`
+As dezessete migrações foram validadas de ponta a ponta (`up` completo, `down`
 completo em ordem reversa, `up` de novo) contra um PostgreSQL 16 real com
 `pg_cron` instalado, incluindo um teste funcional de `advance_order()`
 confirmando que transições legais avançam o pedido e transições ilegais
@@ -1710,8 +1845,9 @@ checando `boundingBox()` via Playwright, não só lendo o código.
    o resto do app do restaurante (11.2 a 11.4: pausar loja, cardápio,
    horário), a exportação contábil da 12.3, a ocorrência de entrega e o
    reembolso do admin (13.3 e 13.4), o resto do suporte (14.1 central de
-   ajuda, 14.3 mapa, 14.4 agendamento) e o dispatch completo (15, incluindo
-   a aprovação de entregador da 15.2 e as campanhas da 15.3).
+   ajuda, 14.3 mapa, 14.4 agendamento) e o que falta da Fase 15 (rodadas,
+   raio crescente e `dispatch_attempts`, a aprovação de entregador da 15.2 e
+   as campanhas da 15.3 -- a 15.1 está construída, ver seção própria).
 2. **Cálculo de frete no servidor.** `orders/checkout.php` (e
    `orders/create.php`, desde antes) recebem `delivery_fee` no corpo da
    requisição em vez de calcular — é a única parte do dinheiro que ainda

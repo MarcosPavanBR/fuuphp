@@ -134,7 +134,7 @@ function refund_payer(string $cause, string $channel): string
  * total): refunds.amount tem CHECK (amount > 0), então "estorno de zero" não
  * é uma linha na tabela, é a ausência dela.
  */
-function record_refund(PDO $pdo, array $order, array $plan, ?string $decidedBy): ?array
+function record_refund(PDO $pdo, array $order, array $plan, ?string $decidedBy, bool $partial = false): ?array
 {
     $existing = $pdo->prepare('SELECT * FROM refunds WHERE order_id = :id ORDER BY id LIMIT 1');
     $existing->execute(['id' => $order['id']]);
@@ -171,9 +171,11 @@ function record_refund(PDO $pdo, array $order, array $plan, ?string $decidedBy):
     $refund = $insert->fetch();
 
     // O pagamento só vira 'refunded' quando o dinheiro realmente volta pelo
-    // mesmo caminho. Crédito em carteira não desfaz a cobrança original, e
-    // por isso não mexe no status do pagamento.
-    if ($paymentId !== false && in_array($plan['channel'], ['gateway', 'pix_return', 'acquirer_void'], true)) {
+    // mesmo caminho E por inteiro. Devolução parcial (o frete de um pedido
+    // que virou retirada, por exemplo) não desfaz a cobrança: o cliente
+    // continua tendo pago a comida. Crédito em carteira também não mexe,
+    // porque não desfaz a cobrança original.
+    if (!$partial && $paymentId !== false && in_array($plan['channel'], ['gateway', 'pix_return', 'acquirer_void'], true)) {
         $pdo->prepare("UPDATE payments SET status = 'refunded' WHERE id = :id")
             ->execute(['id' => $paymentId]);
     }

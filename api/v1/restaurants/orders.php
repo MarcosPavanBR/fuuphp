@@ -34,6 +34,7 @@ $pdo = db();
 $sql = $scope === 'kds'
     ? "SELECT o.id, o.public_code, o.status, o.subtotal, o.delivery_fee, o.surge_fee, o.tip,
               o.discount, o.total, o.payment_method, o.change_for, o.machine_kind, o.created_at,
+              o.pickup_by_customer,
               u.full_name AS customer_name,
               cu.full_name AS courier_name,
               (SELECT max(ev.created_at) FROM order_events ev
