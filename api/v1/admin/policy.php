@@ -48,6 +48,11 @@ $editable = [
     'withhold_unsettled' => 'bool',
     'require_cash_photo' => 'bool',
     'new_store_online_only_days' => 'int',
+    // Tarifa de entrega (14.3): é política da plataforma, não número do
+    // cliente. Fica aqui, versionada junto com comissão e teto de espécie.
+    'delivery_base_fee' => 'numeric',
+    'delivery_per_km' => 'numeric',
+    'delivery_max_km' => 'nullable_numeric',
 ];
 
 $values = [];
@@ -59,6 +64,9 @@ foreach ($editable as $field => $type) {
     $raw = $body[$field];
     $values[$field] = match ($type) {
         'numeric' => round((float) $raw, 2),
+        // Raio vazio é "sem limite declarado", que é diferente de zero --
+        // zero seria "não entregamos em lugar nenhum".
+        'nullable_numeric' => ($raw === null || $raw === '') ? null : round((float) $raw, 2),
         'int' => (int) $raw,
         'bool' => (bool) $raw,
     };
@@ -69,6 +77,12 @@ if ($values['commission_bps'] < 0 || $values['commission_bps'] > 3000) {
 }
 if ($values['cash_ceiling'] < 0 || $values['cancel_fee'] < 0) {
     error_response(422, 'invalid_amount', 'Valores não podem ser negativos.');
+}
+if ($values['delivery_base_fee'] < 0 || $values['delivery_per_km'] < 0) {
+    error_response(422, 'invalid_amount', 'Tarifa de entrega não pode ser negativa.', fields: ['delivery_base_fee' => 'inválido']);
+}
+if ($values['delivery_max_km'] !== null && $values['delivery_max_km'] <= 0) {
+    error_response(422, 'invalid_max_km', 'Raio de entrega precisa ser maior que zero — deixe em branco para não ter limite.', fields: ['delivery_max_km' => 'inválido']);
 }
 
 $methods = $body['enabled_methods'] ?? null;
@@ -81,6 +95,9 @@ $params = [
     'withhold_unsettled' => pg_bool((bool) $values['withhold_unsettled']),
     'require_cash_photo' => pg_bool((bool) $values['require_cash_photo']),
     'new_store_online_only_days' => $values['new_store_online_only_days'],
+    'delivery_base_fee' => $values['delivery_base_fee'],
+    'delivery_per_km' => $values['delivery_per_km'],
+    'delivery_max_km' => $values['delivery_max_km'],
     'created_by' => $adminId,
 ];
 
@@ -99,12 +116,14 @@ $stmt = $pdo->prepare(
        (version, cash_ceiling, cash_settle_deadline, allow_partial_settle, withhold_unsettled,
         require_cash_photo, commission_bps, courier_payout_dow, store_debit_dow,
         pos_return_deadline, allow_courier_own_pos, enabled_methods,
-        new_store_online_only_days, no_courier_timeout, cancel_fee, created_by)
+        new_store_online_only_days, no_courier_timeout, cancel_fee,
+        delivery_base_fee, delivery_per_km, delivery_max_km, created_by)
      SELECT (SELECT MAX(version) + 1 FROM platform_policies),
             :cash_ceiling, cash_settle_deadline, :allow_partial_settle, :withhold_unsettled,
             :require_cash_photo, :commission_bps, courier_payout_dow, store_debit_dow,
             pos_return_deadline, allow_courier_own_pos, {$methodsSql},
-            :new_store_online_only_days, no_courier_timeout, :cancel_fee, :created_by
+            :new_store_online_only_days, no_courier_timeout, :cancel_fee,
+            :delivery_base_fee, :delivery_per_km, :delivery_max_km, :created_by
      FROM platform_policies WHERE version = (SELECT MAX(version) FROM platform_policies)
      RETURNING *"
 );

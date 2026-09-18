@@ -31,9 +31,9 @@ psql_run <<SQL
 INSERT INTO users (id, role, full_name, email)
 VALUES ('${STAFF_USER_ID}', 'restaurant_staff', 'Staff Help Smoke', 'staff-help-${STAMP}@test.com');
 
-INSERT INTO platform_policies (version, enabled_methods, cancel_fee, created_by)
+INSERT INTO platform_policies (version, enabled_methods, cancel_fee, delivery_base_fee, created_by)
   SELECT (SELECT COALESCE(MAX(version), 0) + 1 FROM platform_policies),
-         ARRAY['mp_card','pix_auto','pix_manual','cash','pos_machine']::payment_method[], 10.00, id
+         ARRAY['mp_card','pix_auto','pix_manual','cash','pos_machine']::payment_method[], 10.00, 6.90, id
   FROM users WHERE email = 'staff-help-${STAMP}@test.com';
 
 INSERT INTO restaurants (id, name, cnpj, city_ibge_code, is_open, approved_at, prep_minutes)
@@ -83,7 +83,7 @@ paid_order() { # $1 método -> id do pedido pago
   [ "$method" = "cash" ] && extra=',"change_for":100.00'
   local id
   id=$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: application/json" "${AUTH[@]}" \
-    -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR_ID},\"payment_method\":\"${method}\",\"delivery_fee\":6.90${extra}}" \
+    -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR_ID},\"payment_method\":\"${method}\"${extra}}" \
     | jq -er '.order.id')
   local body='{"order_id":'"$id"'}'
   [ "$method" = "mp_card" ] && body='{"order_id":'"$id"',"card_token":"APRO-token-help"}'

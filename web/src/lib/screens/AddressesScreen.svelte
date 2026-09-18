@@ -2,22 +2,45 @@
   import { api, ApiError } from '../api.js';
   import { toastr } from '../toastr.js';
 
-  // Tela 6.1 — Endereços salvos. "CRUD com endereço padrão; taxa sempre
-  // recalculada no PHP para o cliente não forjar frete grátis." A taxa por
-  // endereço não é mostrada aqui: não existe cálculo de frete por
-  // bairro/distância em nenhum endpoint deste backend ainda (orders/checkout.php
-  // recebe delivery_fee do corpo da requisição, não calcula) -- mostrar um
-  // valor de exemplo fixo, como o mock desenha ("Taxa R$ 6,90"), seria
-  // inventar um número que o sistema não sustenta. Registrado em
-  // "Próximos passos" no README.
+  // Telas 6.1 (endereços salvos) e 14.3 (novo endereço com mapa).
+  //
+  // "CEP preenche, pino corrige, ponto de referência salva a entrega. A área
+  // de cobertura é validada no servidor e a taxa aparece antes de salvar —
+  // não na hora de pagar."
+  //
+  // A taxa agora aparece de verdade: `addresses/quote.php` devolve distância,
+  // cobertura e frete calculados pelo servidor -- o MESMO cálculo que o
+  // checkout refaz. Antes desta tela o frete vinha no corpo da requisição de
+  // checkout, e mostrar "R$ 6,90" aqui seria inventar um número.
   let { location, onBack } = $props();
+
+  // "Casa / Trabalho / Outro" do mock. `label` é texto livre no banco; as
+  // três pastilhas são só os atalhos mais usados, e "Outro" abre o campo.
+  const LABELS = ['Casa', 'Trabalho', 'Outro'];
 
   let addresses = $state(null);
   let editingId = $state(null);
   let creating = $state(false);
   let busy = $state(false);
 
-  let form = $state({ label: '', street: '', number: '', complement: '', neighborhood: '', postalCode: '' });
+  let form = $state({
+    label: '',
+    street: '',
+    number: '',
+    complement: '',
+    reference: '',
+    neighborhood: '',
+    postalCode: '',
+    lat: null,
+    lng: null,
+  });
+  let quote = $state(null);
+
+  function money(v) {
+    return `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
+  }
+  let quoteBusy = $state(false);
+  let locating = $state(false);
 
   async function load() {
     try {
@@ -31,13 +54,72 @@
   load();
 
   function resetForm() {
-    form = { label: '', street: '', number: '', complement: '', neighborhood: '', postalCode: '' };
+    form = {
+      label: '',
+      street: '',
+      number: '',
+      complement: '',
+      reference: '',
+      neighborhood: '',
+      postalCode: '',
+      lat: null,
+      lng: null,
+    };
+    quote = null;
+  }
+
+  // Coordenada do endereço: a do aparelho quando a pessoa deixa, senão a da
+  // praça escolhida na Fase 1. Não há provedor de mapa na cláusula zero, então
+  // não há pino pra arrastar -- o que existe é isto, e a tela diz qual das
+  // duas está valendo em vez de fingir precisão de rua.
+  let effectiveLat = $derived(form.lat ?? location?.lat ?? location?.city?.lat ?? -22.9056);
+  let effectiveLng = $derived(form.lng ?? location?.lng ?? location?.city?.lng ?? -47.0608);
+
+  async function refreshQuote() {
+    quoteBusy = true;
+    try {
+      quote = await api.get('/addresses/quote.php', {
+        auth: true,
+        query: {
+          lat: effectiveLat,
+          lng: effectiveLng,
+          city_ibge_code: location?.city?.ibge ?? '3509502',
+        },
+      });
+    } catch (e) {
+      quote = null;
+      toastr.error(e.message ?? 'Não deu pra conferir a área de entrega.');
+    } finally {
+      quoteBusy = false;
+    }
+  }
+
+  function useMyPosition() {
+    if (!navigator.geolocation) {
+      toastr.warning('Esse aparelho não dá a localização.');
+      return;
+    }
+    locating = true;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        form.lat = pos.coords.latitude;
+        form.lng = pos.coords.longitude;
+        locating = false;
+        toastr.success('Posição usada para calcular a entrega.');
+        refreshQuote();
+      },
+      () => {
+        locating = false;
+        toastr.warning('Não deu pra usar a localização — a taxa fica pela praça escolhida.');
+      }
+    );
   }
 
   function startCreate() {
     resetForm();
     creating = true;
     editingId = null;
+    refreshQuote();
   }
 
   function startEdit(a) {
@@ -46,8 +128,11 @@
       street: a.street,
       number: a.number ?? '',
       complement: a.complement ?? '',
+      reference: a.reference ?? '',
       neighborhood: a.neighborhood ?? '',
       postalCode: a.postal_code,
+      lat: a.lat === undefined ? null : Number(a.lat),
+      lng: a.lng === undefined ? null : Number(a.lng),
     };
     editingId = a.id;
     creating = false;
@@ -102,13 +187,14 @@
           street: form.street.trim(),
           number: form.number.trim() || undefined,
           complement: form.complement.trim() || undefined,
+          reference: form.reference.trim() || undefined,
           neighborhood: form.neighborhood.trim() || undefined,
           city: location?.city?.name ?? 'Campinas',
           city_ibge_code: location?.city?.ibge ?? '3509502',
           state: location?.uf ?? 'SP',
           postal_code: form.postalCode,
-          lat: location?.lat ?? location?.city?.lat ?? -22.9056,
-          lng: location?.lng ?? location?.city?.lng ?? -47.0608,
+          lat: effectiveLat,
+          lng: effectiveLng,
           is_default: addresses?.length === 0,
         },
       });
@@ -133,6 +219,7 @@
           street: form.street.trim(),
           number: form.number.trim() || null,
           complement: form.complement.trim() || null,
+          reference: form.reference.trim() || null,
           neighborhood: form.neighborhood.trim() || null,
           postal_code: form.postalCode,
         },
@@ -212,6 +299,7 @@
             </div>
             <p class="street">{a.street}{a.number ? `, ${a.number}` : ''}{a.complement ? ` · ${a.complement}` : ''}</p>
             <p class="city">{a.neighborhood ? `${a.neighborhood} · ` : ''}{a.city}/{a.state} · {a.postal_code.replace(/(\d{5})(\d{3})/, '$1-$2')}</p>
+            {#if a.reference}<p class="city ref"><i class="bi bi-signpost"></i> {a.reference}</p>{/if}
             <div class="address-actions">
               {#if !a.is_default}
                 <button type="button" class="action" onclick={() => makeDefault(a)}>Tornar padrão</button>
@@ -238,14 +326,75 @@
           bind:value={form.postalCode}
           onblur={lookupCep}
         />
-        {#if cepLookupBusy}<p class="hint">Buscando pelo CEP…</p>{/if}
-        <input type="text" placeholder="Rótulo (Casa, Trabalho...)" bind:value={form.label} />
+        <!-- O aviso fica SEMPRE no DOM, só invisível: quando ele aparecia e
+             sumia, a busca do CEP disparada no blur empurrava os botões pra
+             baixo entre o mousedown e o mouseup, e o primeiro toque em
+             "Salvar endereço" se perdia. Achado no teste com navegador. -->
+        <p class="hint cep-hint" class:on={cepLookupBusy}>Buscando pelo CEP…</p>
         <input type="text" placeholder="Rua" bind:value={form.street} />
         <div class="field-row">
           <input type="text" placeholder="Número" bind:value={form.number} />
           <input type="text" placeholder="Complemento" bind:value={form.complement} />
         </div>
         <input type="text" placeholder="Bairro" bind:value={form.neighborhood} />
+        <!-- 14.3 — "ponto de referência (ajuda o entregador)". Fica junto do
+             endereço porque é ele que evita a ligação na hora da entrega. -->
+        <input type="text" placeholder="Ponto de referência (ajuda o entregador)" bind:value={form.reference} />
+
+        <div class="labels">
+          {#each LABELS as name (name)}
+            <button
+              type="button"
+              class="label-chip"
+              class:on={form.label === name}
+              onclick={() => (form.label = form.label === name ? '' : name)}
+            >
+              {#if name === 'Casa'}<i class="bi bi-house-door-fill"></i>{/if}
+              {name}
+            </button>
+          {/each}
+        </div>
+        {#if form.label === 'Outro'}
+          <input type="text" placeholder="Como você chama esse endereço?" bind:value={form.label} />
+        {/if}
+
+        <!-- O mock desenha um mapa com pino arrastável. Não há provedor de
+             mapas na cláusula zero, então não há mapa nem pino: o que dá pra
+             fazer de verdade é usar a posição do aparelho, e a tela diz qual
+             coordenada está valendo. -->
+        <div class="geo">
+          <button type="button" class="geo-btn" disabled={locating} onclick={useMyPosition}>
+            <i class="bi bi-crosshair"></i> {locating ? 'Localizando…' : 'Usar minha posição'}
+          </button>
+          <span class="geo-note">
+            {form.lat === null ? 'usando o centro da praça escolhida' : 'usando a posição do aparelho'}
+          </span>
+        </div>
+
+        {#if quoteBusy}
+          <p class="hint">Conferindo a área de entrega…</p>
+        {:else if quote}
+          <div class="coverage" class:out={!quote.in_area}>
+            <i class={`bi ${quote.in_area ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill'}`}></i>
+            <div>
+              <p class="coverage-title">
+                {quote.in_area
+                  ? `Dentro da área de entrega de ${quote.stores_covering} ${quote.stores_covering === 1 ? 'loja' : 'lojas'}`
+                  : 'Fora da área de entrega das lojas desta praça'}
+              </p>
+              <p class="coverage-sub">
+                {#if quote.tariff.base > 0 || quote.tariff.per_km > 0}
+                  Taxa: {money(quote.tariff.base)}
+                  {#if quote.tariff.per_km > 0}+ {money(quote.tariff.per_km)}/km{/if}
+                  {#if quote.nearest}· loja mais perto a {String(quote.nearest.distance_km).replace('.', ',')} km{/if}
+                {:else}
+                  A plataforma ainda não publicou tarifa de entrega — o frete sai zero.
+                {/if}
+              </p>
+            </div>
+          </div>
+        {/if}
+
         <div class="form-actions">
           <button type="button" class="btn-fuu-primary" disabled={busy} onclick={submitCreate}>
             {busy ? 'Salvando…' : 'Salvar endereço'}
@@ -265,6 +414,92 @@
 </div>
 
 <style>
+  .labels {
+    display: flex;
+    gap: 8px;
+    margin: 4px 0 2px;
+  }
+  .label-chip {
+    font-family: var(--fuu-font-body);
+    font-size: 12.5px;
+    font-weight: 700;
+    background: var(--fuu-line-5);
+    border: none;
+    color: var(--fuu-ink-2);
+    padding: 10px 16px;
+    border-radius: var(--fuu-radius-pill);
+  }
+  .label-chip.on {
+    background: var(--fuu-red);
+    color: var(--fuu-white);
+  }
+  .geo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 4px 0;
+  }
+  .geo-btn {
+    background: var(--fuu-white);
+    border: 1px solid var(--fuu-line-3);
+    border-radius: 9px;
+    padding: 10px 14px;
+    font-family: var(--fuu-font-body);
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--fuu-ink-1);
+  }
+  .geo-btn i {
+    color: var(--fuu-red);
+  }
+  .geo-note {
+    font-size: 11px;
+    color: var(--fuu-ink-5);
+  }
+  .coverage {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    background: var(--fuu-leaf-tint);
+    border-radius: 10px;
+    padding: 12px;
+    margin: 4px 0;
+  }
+  .coverage.out {
+    background: var(--fuu-wait-bg);
+  }
+  .coverage i {
+    color: var(--fuu-leaf);
+    margin-top: 2px;
+  }
+  .coverage.out i {
+    color: var(--fuu-wait-text);
+  }
+  .coverage-title {
+    font-size: 12.5px;
+    font-weight: 800;
+    color: var(--fuu-leaf-dark);
+    margin: 0;
+  }
+  .coverage.out .coverage-title {
+    color: var(--fuu-wait-text);
+  }
+  .coverage-sub {
+    font-size: 11.5px;
+    color: var(--fuu-ink-2);
+    margin: 2px 0 0;
+    line-height: 1.5;
+  }
+  .ref {
+    color: var(--fuu-ink-4);
+  }
+  .cep-hint {
+    visibility: hidden;
+  }
+  .cep-hint.on {
+    visibility: visible;
+  }
   .addresses-screen {
     padding: 12px 20px 40px;
   }

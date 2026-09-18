@@ -41,10 +41,10 @@ INSERT INTO users (id, role, full_name, email) VALUES
   ('${COURIER_USER_ID}', 'courier',          'Jonas R. Souza',      'jonas-${STAMP}@test.com'),
   ('${RIVAL_USER_ID}',   'courier',          'Rival do Jonas',      'rival-${STAMP}@test.com');
 
-INSERT INTO platform_policies (version, enabled_methods, cash_ceiling, created_by)
+INSERT INTO platform_policies (version, enabled_methods, cash_ceiling, delivery_base_fee, created_by)
   SELECT (SELECT COALESCE(MAX(version), 0) + 1 FROM platform_policies),
          ARRAY['mp_card','pix_auto','pix_manual','cash','pos_machine']::payment_method[],
-         300.00, id
+         300.00, 7.00, id
   FROM users WHERE email = 'staff-courier-${STAMP}@test.com';
 
 INSERT INTO restaurants (id, name, cnpj, city_ibge_code, is_open, approved_at, lat, lng)
@@ -119,7 +119,7 @@ ADDR_ID=$(curl -s -X POST "$BASE/addresses/create.php" -H "Content-Type: applica
 curl -s -X POST "$BASE/cart/add_item.php" -H "Content-Type: application/json" "${AUTH[@]}" \
   -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"menu_item_id\":${ITEM_ID},\"quantity\":1}" >/dev/null
 ORDER_ID=$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: application/json" "${AUTH[@]}" \
-  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR_ID},\"payment_method\":\"cash\",\"change_for\":100.00,\"delivery_fee\":7.00}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR_ID},\"payment_method\":\"cash\",\"change_for\":100.00}" \
   | jq -er '.order.id') || fail "checkout falhou"
 curl -s -X POST "$BASE/payments/pay.php" -H "Content-Type: application/json" \
   -H "X-Idempotency-Key: $(gen_uuid)" "${AUTH[@]}" -d "{\"order_id\":${ORDER_ID}}" >/dev/null

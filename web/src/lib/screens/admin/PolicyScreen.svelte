@@ -29,6 +29,12 @@
       cancel_fee: Number(c.cancel_fee),
       commission_bps: Number(c.commission_bps),
       new_store_online_only_days: Number(c.new_store_online_only_days),
+      delivery_base_fee: Number(c.delivery_base_fee ?? 0),
+      delivery_per_km: Number(c.delivery_per_km ?? 0),
+      // Vazio = sem raio declarado, que é diferente de zero.
+      delivery_max_km: c.delivery_max_km === null || c.delivery_max_km === undefined
+        ? ''
+        : Number(c.delivery_max_km),
       allow_partial_settle: c.allow_partial_settle === true,
       methods: String(c.enabled_methods).replace(/[{}"]/g, '').split(',').filter(Boolean),
     };
@@ -60,6 +66,9 @@
           cancel_fee: form.cancel_fee,
           commission_bps: form.commission_bps,
           new_store_online_only_days: form.new_store_online_only_days,
+          delivery_base_fee: form.delivery_base_fee,
+          delivery_per_km: form.delivery_per_km,
+          delivery_max_km: form.delivery_max_km === '' ? null : form.delivery_max_km,
           allow_partial_settle: form.allow_partial_settle,
           enabled_methods: form.methods,
         },
@@ -110,6 +119,28 @@
         <span>Dias de só-online para loja nova</span>
         <input type="number" step="1" min="0" bind:value={form.new_store_online_only_days} />
         <small>Dinheiro e maquininha entram pelo histórico, não por negociação.</small>
+      </label>
+
+      <!-- 14.3 — a tarifa de entrega é política da plataforma, não número que
+           o app do cliente manda. Enquanto estiver zerada, o frete é zero:
+           inventar um valor padrão seria cobrar do cliente um número que
+           ninguém decidiu. -->
+      <label class="field">
+        <span>Frete — valor base</span>
+        <input type="number" step="0.50" min="0" bind:value={form.delivery_base_fee} />
+        <small>Cobrado em todo pedido com entrega, antes da distância.</small>
+      </label>
+
+      <label class="field">
+        <span>Frete — por quilômetro</span>
+        <input type="number" step="0.10" min="0" bind:value={form.delivery_per_km} />
+        <small>Distância em linha reta entre a loja e o endereço (sem roteamento).</small>
+      </label>
+
+      <label class="field">
+        <span>Raio máximo de entrega (km)</span>
+        <input type="number" step="0.5" min="0" placeholder="sem limite" bind:value={form.delivery_max_km} />
+        <small>Em branco = sem limite. O checkout recusa endereço fora do raio.</small>
       </label>
     </div>
 

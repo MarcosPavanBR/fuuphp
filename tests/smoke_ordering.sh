@@ -29,8 +29,8 @@ INSERT INTO users (id, role, full_name, email)
   SELECT '${STAFF_USER_ID}', 'restaurant_staff', 'Staff Smoke', 'staff-smoke@test.com'
   WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'staff-smoke@test.com');
 
-INSERT INTO platform_policies (version, enabled_methods, created_by)
-  SELECT 1, ARRAY['mp_card','pix_auto','pix_manual','cash','pos_machine']::payment_method[], id
+INSERT INTO platform_policies (version, enabled_methods, delivery_base_fee, created_by)
+  SELECT 1, ARRAY['mp_card','pix_auto','pix_manual','cash','pos_machine']::payment_method[], 8.00, id
   FROM users ORDER BY created_at LIMIT 1
   ON CONFLICT (version) DO NOTHING;
 
@@ -89,10 +89,13 @@ BELOW=$(curl -s -X POST "$BASE/orders/create.php" -H "Content-Type: application/
 
 echo "== checkout válido, com variação (preço tem que somar certo) =="
 ORDER=$(curl -s -X POST "$BASE/orders/create.php" -H "Content-Type: application/json" -H "Authorization: Bearer $ACCESS" \
-  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR_ID},\"payment_method\":\"mp_card\",\"delivery_fee\":8,\"items\":[{\"menu_item_id\":${ITEM_ID},\"quantity\":2,\"variant_ids\":[${VARIANT_ID}]}]}")
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR_ID},\"payment_method\":\"mp_card\",\"items\":[{\"menu_item_id\":${ITEM_ID},\"quantity\":2,\"variant_ids\":[${VARIANT_ID}]}]}")
 ORDER_ID=$(echo "$ORDER" | jq -er '.order.id') || fail "checkout não criou pedido: $ORDER"
 [ "$(echo "$ORDER" | jq -r '.order.status')" = "pending_payment" ] || fail "pedido não avançou pra pending_payment: $ORDER"
 [ "$(echo "$ORDER" | jq -r '.order.subtotal')" = "102.00" ] || fail "subtotal errado (esperava 102.00, 2x(45+6)): $ORDER"
+# O frete não vem mais do corpo (14.3): sai da tarifa da política semeada
+# acima (base R$ 8,00, sem valor por km).
+[ "$(echo "$ORDER" | jq -r '.order.delivery_fee')" = "8.00" ] || fail "frete não veio da política: $ORDER"
 [ "$(echo "$ORDER" | jq -r '.order.total')" = "110.00" ] || fail "total errado (esperava 110.00 = 102+8 frete): $ORDER"
 
 echo "== login de loja =="

@@ -87,10 +87,16 @@ if ($paymentMethod === 'pos_machine' && !in_array($machineKind, ['debit', 'credi
     error_response(422, 'machine_kind_required', 'Informe machine_kind: debit ou credit.', fields: ['machine_kind' => 'obrigatório']);
 }
 
-$deliveryFee = isset($body['delivery_fee']) ? round((float) $body['delivery_fee'], 2) : 0.0;
-if ($deliveryFee < 0) {
-    error_response(422, 'invalid_delivery_fee', 'Frete inválido.');
+// Tela 14.3 — "a taxa aparece antes de salvar, não na hora de pagar", e
+// "área de cobertura validada no servidor". O frete NÃO vem mais do corpo da
+// requisição: é calculado aqui, do mesmo jeito que preço de item, mínimo e
+// comissão sempre foram. Era o último número do dinheiro que confiava no
+// cliente -- bastava mandar delivery_fee: 0 pra não pagar entrega.
+$quote = delivery_quote_for($pdo, (string) $restaurantId, $addressId, $policy);
+if (!$quote['in_area']) {
+    error_response(409, 'out_of_delivery_area', $quote['reason'], detail: 'endereço fora do raio de entrega');
 }
+$deliveryFee = (float) $quote['fee'];
 $tip = isset($body['tip']) ? round((float) $body['tip'], 2) : 0.0;
 if ($tip < 0) {
     error_response(422, 'invalid_tip', 'Gorjeta inválida.');

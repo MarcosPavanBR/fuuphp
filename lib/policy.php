@@ -51,6 +51,13 @@ function resolve_policy(PDO $pdo, string $restaurantId): array
         // dia do pedido, e mudar a política depois não pode reescrever o que
         // já foi combinado (tela 13.1).
         'cancel_fee' => (float) ($policy['cancel_fee'] ?? 0),
+        // Tarifa de entrega entra no snapshot pelo mesmo motivo que a taxa de
+        // cancelamento: o cliente concorda com o frete do dia do pedido, e
+        // republicar a política amanhã não pode reescrever o que já foi
+        // cobrado (tela 14.3).
+        'delivery_base_fee' => (float) ($policy['delivery_base_fee'] ?? 0),
+        'delivery_per_km' => (float) ($policy['delivery_per_km'] ?? 0),
+        'delivery_max_km' => $policy['delivery_max_km'] === null ? null : (float) $policy['delivery_max_km'],
         'no_courier_timeout_seconds' => pg_interval_to_seconds((string) $policy['no_courier_timeout']),
     ];
 

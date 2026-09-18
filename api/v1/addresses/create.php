@@ -31,8 +31,8 @@ if (strlen($state) !== 2) {
 
 $pdo = db();
 $stmt = $pdo->prepare(
-    'INSERT INTO addresses (user_id, label, street, number, complement, neighborhood, city, city_ibge_code, state, postal_code, lat, lng, is_default)
-     VALUES (:user_id, :label, :street, :number, :complement, :neighborhood, :city, :city_ibge_code, :state, :postal_code, :lat, :lng, :is_default)
+    'INSERT INTO addresses (user_id, label, street, number, complement, reference, neighborhood, city, city_ibge_code, state, postal_code, lat, lng, is_default)
+     VALUES (:user_id, :label, :street, :number, :complement, :reference, :neighborhood, :city, :city_ibge_code, :state, :postal_code, :lat, :lng, :is_default)
      RETURNING id'
 );
 $stmt->execute([
@@ -41,6 +41,10 @@ $stmt->execute([
     'street' => $body['street'],
     'number' => $body['number'] ?? null,
     'complement' => $body['complement'] ?? null,
+    // 14.3 — "ponto de referência (ajuda o entregador)". Não é complemento:
+    // complemento identifica a unidade e vai no cupom; referência é
+    // instrução pra quem entrega.
+    'reference' => $body['reference'] ?? null,
     'neighborhood' => $body['neighborhood'] ?? null,
     'city' => $body['city'],
     'city_ibge_code' => $body['city_ibge_code'],

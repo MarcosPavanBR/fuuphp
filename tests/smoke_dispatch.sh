@@ -14,6 +14,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PORT=8107
 BASE="http://127.0.0.1:${PORT}/api/v1"
 CITY="3550308"
+# O frete não é mais mandado pelo cliente (14.3): é a tarifa base da
+# política semeada abaixo, e o teste confere que ela chegou ao pedido.
 FREIGHT="6.90"
 
 fail() { echo "FALHOU: $1" >&2; cat /tmp/smoke-dispatch-server.log >&2 2>/dev/null || true; exit 1; }
@@ -38,10 +40,10 @@ INSERT INTO users (id, role, full_name, email) VALUES
   ('${STAFF_USER_ID}',   'restaurant_staff', 'Staff Dispatch Smoke', 'staff-dispatch-${STAMP}@test.com'),
   ('${COURIER_USER_ID}', 'courier',          'Entregador Tardio',    'tardio-${STAMP}@test.com');
 
-INSERT INTO platform_policies (version, enabled_methods, cancel_fee, no_courier_timeout, created_by)
+INSERT INTO platform_policies (version, enabled_methods, cancel_fee, no_courier_timeout, delivery_base_fee, created_by)
   SELECT (SELECT COALESCE(MAX(version), 0) + 1 FROM platform_policies),
          ARRAY['mp_card','pix_auto','pix_manual','cash','pos_machine']::payment_method[],
-         15.00, interval '15 min', id
+         15.00, interval '15 min', 6.90, id
   FROM users WHERE email = 'staff-dispatch-${STAMP}@test.com';
 
 INSERT INTO restaurants (id, name, cnpj, city_ibge_code, is_open, approved_at, lat, lng)
@@ -98,7 +100,7 @@ ready_order() {
   [ "$method" = "cash" ] && extra=',"change_for":100.00'
   local id
   id=$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: application/json" "${AUTH[@]}" \
-    -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR_ID},\"payment_method\":\"${method}\",\"delivery_fee\":${FREIGHT}}" \
+    -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR_ID},\"payment_method\":\"${method}\"}" \
     | jq -er '.order.id') || fail "checkout $method falhou"
   local body='{"order_id":'"$id"'}'
   [ "$method" = "mp_card" ] && body='{"order_id":'"$id"',"card_token":"APRO-token-dispatch"}'
@@ -113,6 +115,8 @@ ready_order() {
 
 echo "== pedido pronto sem entregador começa o relógio e vira oferta =="
 O_CASH=$(ready_order cash)
+[ "$(query "SELECT delivery_fee FROM orders WHERE id=${O_CASH}")" = "${FREIGHT}" ] \
+  || fail "o frete do pedido não veio da tarifa da política"
 [ "$(query "SELECT no_courier_since IS NOT NULL FROM orders WHERE id=${O_CASH}")" = "t" ] \
   || fail "o relógio da 15.1 não começou quando o pedido ficou pronto"
 [ "$(query "SELECT count(*) FROM offers WHERE order_id=${O_CASH} AND state='open'")" = "1" ] \

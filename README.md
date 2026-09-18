@@ -30,7 +30,7 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (dezoito migrações SQL), os módulos **identity**,
+A **fundação de banco** (dezenove migrações SQL), os módulos **identity**,
 **catálogo + pedido + checkout**, **descoberta** (busca de loja e
 produto), **carrinho incremental**, **pagamentos** (cartão via Mercado
 Pago, Pix automático e manual, dinheiro, maquininha, validação humana do
@@ -142,7 +142,11 @@ api/v1/couriers/            app do entregador (Fase 8 e 9), role 'courier'
   earnings.php                  GET  — o livro de lançamentos, não um resumo
   settle_intent.php             POST — intenção de baixa: código de 6 dígitos
                                  (só o hash fica), valor congelado, 10 min
-api/v1/addresses/           endereços do cliente autenticado (Fase 6.1)
+api/v1/addresses/           endereços do cliente autenticado (Fase 6.1 e 14.3)
+  quote.php                     GET  ?lat=&lng=|?address_id= (+restaurant_id) —
+                                 área e taxa ANTES de salvar: com loja, o frete
+                                 exato que o checkout vai refazer; sem loja,
+                                 quantas lojas da praça alcançam aquele ponto
   create.php                   POST — cadastra endereço
   list.php                     GET  — lista os do usuário logado
   update.php                    POST — edita campos e/ou troca o padrão
@@ -252,6 +256,9 @@ lib/                          código compartilhado entre módulos
                                    replay, pros 5 métodos de pagamento
   store.php                     tempo de preparo que o cliente vê, com o
                                  acréscimo da fila calculado na leitura (11.2)
+  delivery.php                  frete e área de entrega (14.3): Haversine,
+                                 tarifa da política e a cotação que o checkout
+                                 refaz -- o frete deixou de vir do cliente
   support.php                   central de ajuda (14.1): SLA por categoria e
                                  os quatro fluxos automáticos, que respondem
                                  do estado real do pedido de quem perguntou
@@ -310,6 +317,10 @@ tests/
                                  resumo do dia, KDS e as transições da loja
                                  (aceitar, pronto, entregue ao motoboy),
                                  mais o isolamento entre lojas
+  smoke_address.sh              endereço com área e taxa (14.3): referência,
+                                 cobertura no servidor, frete calculado (e o
+                                 cliente não conseguindo forjar frete grátis),
+                                 tarifa versionada e snapshot congelado
   smoke_help.sh                 central de ajuda (14.1): os quatro atalhos
                                  respondidos do estado real do pedido, chamado
                                  com prazo por categoria, sem duplicar e sem
@@ -360,6 +371,8 @@ db/
                                           das 42 tabelas originais, sem
                                           coluna de nota agregada em
                                           restaurants, ver seção própria)
+    019_delivery_area.up.sql / .down.sql  addresses.reference e a tarifa de
+                                           entrega na política (14.3)
     018_store_ops.up.sql / .down.sql      store_pauses, holiday_overrides,
                                            restaurants.prep_minutes e o job
                                            que abre/fecha a loja (11.2 a 11.4)
@@ -1456,6 +1469,70 @@ backend. Os dois fecham aqui, sobre tabelas que existem desde a migração
   R$ 68,40 no carrinho, e a conversa indo do app do cliente pro KDS da loja
   e voltando por resposta rápida, com "lida" aparecendo.
 
+## Endereço, área de entrega e frete no servidor (Fase 14.3) — decisões
+
+"CEP preenche, pino corrige, ponto de referência salva a entrega. A área de
+cobertura é validada no servidor e a taxa aparece antes de salvar — não na
+hora de pagar."
+
+Esta tela fecha, de quebra, o buraco que o próprio README vinha apontando em
+"Próximos passos": **o frete era o único número do dinheiro que ainda vinha
+do cliente**. `orders/checkout.php` e `orders/create.php` aceitavam
+`delivery_fee` no corpo -- bastava mandar `0` para não pagar entrega, num
+projeto onde preço de item, mínimo de pedido, comissão e total sempre foram
+decididos no servidor.
+
+- **A tarifa virou política versionada, não constante no código.** Migração
+  `019` acrescenta `delivery_base_fee`, `delivery_per_km` e `delivery_max_km`
+  a `platform_policies`, e a tela 10.5 (admin) passa a editá-los. Entram no
+  `policy_snapshot` do pedido pelo mesmo motivo que a taxa de cancelamento:
+  republicar a política amanhã não pode reescrever o frete de um pedido de
+  ontem -- e o teste prova isso.
+- **Os três nascem zerados, e isso é a decisão.** Inventar "R$ 5,00 +
+  R$ 1,50/km" na migração seria cobrar do cliente um número que ninguém
+  decidiu. Enquanto a plataforma não publicar tarifa, o frete é zero, e a
+  tela do endereço diz isso com todas as letras em vez de esconder.
+- **Distância é Haversine, e o README assume o que isso significa.** Linha
+  reta subestima a rota real de moto. Roteamento exige provedor de mapas, que
+  não está na cláusula zero; inflar o número "pra compensar" seria tarifa
+  inventada. Fica a menor distância possível, documentada.
+- **Loja sem coordenada não bloqueia o pedido.** `restaurants.lat/lng` é
+  nullable desde a migração `010`. Bloquear o checkout por causa de um
+  cadastro que não é do cliente o puniria por erro alheio; cobrar por km sem
+  saber os km seria pior. Cobra-se a base, e a resposta diz que a distância é
+  desconhecida.
+- **Raio vazio é "sem limite", não zero.** Zero seria "não entregamos em
+  lugar nenhum", e o endpoint do admin recusa zero explicitamente com essa
+  frase. Fora do raio, o checkout responde `out_of_delivery_area` com o
+  motivo escrito -- a distância medida e o limite, os dois no texto.
+- **Ponto de referência é coluna nova, não complemento.** Complemento
+  identifica a unidade (apto, bloco) e vai no cupom; referência é instrução
+  pra quem entrega ("portão cinza ao lado da padaria"). Enfiar as duas no
+  mesmo campo faz uma sumir.
+- **O mapa do mock não existe, e a tela diz o que existe no lugar.** Não há
+  provedor de mapas na cláusula zero, então não há pino pra arrastar. O que
+  dá pra fazer de verdade é usar a posição do aparelho (Geolocation, a mesma
+  API da 1.3) -- e a tela mostra qual das duas coordenadas está valendo, a do
+  aparelho ou o centro da praça escolhida.
+- **Um bug de verdade achado no navegador, não no teste de API.** O aviso
+  "Buscando pelo CEP…" aparecia e sumia num `{#if}`, e a busca dispara no
+  `blur` do campo. Tocar em "Salvar endereço" logo depois de digitar o CEP
+  disparava o blur, o aviso entrava no fluxo do documento e empurrava o botão
+  pra baixo ENTRE o mousedown e o mouseup -- o clique não completava, e o
+  formulário ficava aberto sem erro nenhum. O aviso agora fica sempre no DOM
+  (invisível), com o espaço reservado.
+- **Validado com banco e navegador reais.** `tests/smoke_address.sh` cobre a
+  referência gravada e devolvida, a taxa calculada antes de salvar, o
+  endereço a 11 km recusado pelo raio de 5, a cobertura por praça (com a loja
+  sem coordenada corretamente fora da conta), o checkout ignorando
+  `delivery_fee: 0` mandado pelo cliente, o pedido fora do raio barrado, a
+  loja sem coordenada cobrando só a base, o endereço alheio não cotável, a
+  tarifa nova valendo no pedido seguinte E o snapshot do pedido antigo
+  intacto, mais tarifa negativa e raio zero recusados. No Playwright: o
+  painel verde "Dentro da área de entrega de 2 lojas · Taxa: R$ 4,00 +
+  R$ 1,50/km · loja mais perto a 0,2 km", as pastilhas Casa/Trabalho/Outro, e
+  o endereço salvo com a referência aparecendo na lista.
+
 ## Central de ajuda (Fase 14.1) — decisões de implementação
 
 "Os quatro atalhos cobrem a maior parte dos tickets reais de delivery — cada
@@ -1872,9 +1949,9 @@ esse buraco e junta o KDS, que é a outra metade do mesmo trabalho.
 ```bash
 docker compose up -d
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
-bash db/migrate.sh up           # aplica as 18, em ordem
+bash db/migrate.sh up           # aplica as 19, em ordem
 bash db/migrate.sh down 3       # reverte as 3 últimas
-bash db/migrate.sh down 18      # reverte tudo
+bash db/migrate.sh down 19      # reverte tudo
 
 cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN se precisar
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
@@ -1892,6 +1969,7 @@ JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_admin.sh      # pai
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_dispatch.sh   # pedido sem entregador: turbo, retirada, auto-cancel (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_store.sh      # loja operando a si mesma: pausa, cardápio, horário (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_help.sh       # central de ajuda: fluxo automático e chamado com prazo (semeia sozinho)
+JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_address.sh    # endereço, área de entrega e frete no servidor (semeia sozinho)
 
 # O único processo de fundo do projeto (tela 15.1). Em produção é uma linha
 # no cron do cPanel, a cada minuto; localmente, roda à mão quando quiser ver
@@ -1910,13 +1988,13 @@ Os smoke tests semeiam dados próprios a cada execução, mas contam com um
 banco recém-migrado: rodar a suíte várias vezes no mesmo banco acumula
 lojas de teste e faz as asserções de contagem (ex.: "filtro de categoria
 trouxe 1 loja") falharem por dado velho, não por regressão. `bash
-db/migrate.sh down 18 && bash db/migrate.sh up` devolve o banco ao zero.
+db/migrate.sh down 19 && bash db/migrate.sh up` devolve o banco ao zero.
 
 `MERCADOPAGO_MODE=fake` é o padrão quando `MERCADOPAGO_ACCESS_TOKEN` não
 está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
 de conta sandbox pra rodar nada disto localmente.
 
-As dezoito migrações foram validadas de ponta a ponta (`up` completo, `down`
+As dezenove migrações foram validadas de ponta a ponta (`up` completo, `down`
 completo em ordem reversa, `up` de novo) contra um PostgreSQL 16 real com
 `pg_cron` instalado, incluindo um teste funcional de `advance_order()`
 confirmando que transições legais avançam o pedido e transições ilegais
@@ -2060,15 +2138,11 @@ checando `boundingBox()` via Playwright, não só lendo o código.
    agendamento) e o que falta da Fase 15 (rodadas,
    raio crescente e `dispatch_attempts`, a aprovação de entregador da 15.2 e
    as campanhas da 15.3 -- a 15.1 está construída, ver seção própria).
-2. **Cálculo de frete no servidor.** `orders/checkout.php` (e
-   `orders/create.php`, desde antes) recebem `delivery_fee` no corpo da
-   requisição em vez de calcular — é a única parte do dinheiro que ainda
-   confia no cliente, contra o princípio que o resto do projeto segue
-   (`price_line()`, `min_order`, total como coluna gerada). O mock da Fase
-   6.1 mostra taxa por endereço ("Taxa R$ 6,90 · 25–35 min"), que depende
-   exatamente disso existir. Precisa de uma regra de preço (por bairro? por
-   distância? tabela por loja?) que a especificação não define — decisão de
-   produto antes de código.
+2. **Cálculo de frete no servidor.** FEITO na Fase 14.3 (migração 019):
+   `orders/checkout.php` e `orders/create.php` calculam o frete da tarifa da
+   política e recusam endereço fora do raio; o valor que vier no corpo é
+   ignorado. Ver a seção própria acima.
+
 3. **Cartão salvo ainda não paga.** `cards/*` guarda o cartão (Fase 6.2),
    mas `payments/pay.php` só aceita um `card_token` novo a cada compra —
    pagar com cartão salvo exige o fluxo de CVV + token de uso único que o

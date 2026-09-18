@@ -27,7 +27,7 @@ if ($existing === false) {
     error_response(404, 'address_not_found', 'Endereço não encontrado.');
 }
 
-$fields = ['label', 'street', 'number', 'complement', 'neighborhood', 'city', 'city_ibge_code', 'state', 'postal_code', 'lat', 'lng'];
+$fields = ['label', 'street', 'number', 'complement', 'reference', 'neighborhood', 'city', 'city_ibge_code', 'state', 'postal_code', 'lat', 'lng'];
 $updates = [];
 foreach ($fields as $field) {
     if (array_key_exists($field, $body)) {

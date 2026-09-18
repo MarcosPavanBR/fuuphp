@@ -84,10 +84,14 @@ if ($paymentMethod === 'cash' && $changeFor !== null && $changeFor < $subtotal) 
     error_response(422, 'invalid_change_for', 'Troco precisa ser maior ou igual ao subtotal.', fields: ['change_for' => 'inválido']);
 }
 
-$deliveryFee = isset($body['delivery_fee']) ? round((float) $body['delivery_fee'], 2) : 0.0;
-if ($deliveryFee < 0) {
-    error_response(422, 'invalid_delivery_fee', 'Frete inválido.');
+// Tela 14.3 — o frete é calculado aqui, não recebido. Mesma regra do
+// checkout do carrinho (orders/checkout.php): era o último número do
+// dinheiro que confiava no cliente.
+$quote = delivery_quote_for($pdo, (string) $restaurantId, (int) $addressId, $policy);
+if (!$quote['in_area']) {
+    error_response(409, 'out_of_delivery_area', $quote['reason'], detail: 'endereço fora do raio de entrega');
 }
+$deliveryFee = (float) $quote['fee'];
 $tip = isset($body['tip']) ? round((float) $body['tip'], 2) : 0.0;
 if ($tip < 0) {
     error_response(422, 'invalid_tip', 'Gorjeta inválida.');
