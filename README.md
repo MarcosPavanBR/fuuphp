@@ -105,6 +105,19 @@ api/v1/restaurants/         catálogo, descoberta (público, exceto orders.php
                                  se a loja abre agora
   holiday.php                   POST — feriado/data especial como exceção de um
                                  dia (fechado ou faixa própria), ou remoção
+api/v1/support/             central de ajuda do cliente (Fase 14.1)
+  home.php                      GET  — a tela inteira: pedido em andamento
+                                 como assunto, os quatro atalhos com seu SLA,
+                                 os chamados de quem perguntou e o tempo médio
+                                 de resposta medido das conversas reais
+  answer.php                    GET  ?topic= — o "fluxo automático antes de
+                                 chamar gente": lê o pedido e responde do
+                                 estado dele (preparo real, comprovante na
+                                 fila, estorno já registrado, 15.1 em curso)
+  ticket.php                    POST — abre o chamado com prazo por categoria
+                                 e deixa a primeira mensagem na conversa do
+                                 pedido; apertar o mesmo atalho de novo não
+                                 cria um segundo chamado
 api/v1/admin/               painel da plataforma (Fase 12), role 'admin'
   guard.php                     require_admin(): a porta única do painel
   restaurants.php               GET fila de análise / POST aprova ou recusa
@@ -239,6 +252,9 @@ lib/                          código compartilhado entre módulos
                                    replay, pros 5 métodos de pagamento
   store.php                     tempo de preparo que o cliente vê, com o
                                  acréscimo da fila calculado na leitura (11.2)
+  support.php                   central de ajuda (14.1): SLA por categoria e
+                                 os quatro fluxos automáticos, que respondem
+                                 do estado real do pedido de quem perguntou
   refunds.php                   rotas de estorno por método, quem paga por
                                  causa e gravação idempotente (Fase 13)
   dispatch.php                  despacho mínimo (uma oferta por pedido pronto),
@@ -294,6 +310,10 @@ tests/
                                  resumo do dia, KDS e as transições da loja
                                  (aceitar, pronto, entregue ao motoboy),
                                  mais o isolamento entre lojas
+  smoke_help.sh                 central de ajuda (14.1): os quatro atalhos
+                                 respondidos do estado real do pedido, chamado
+                                 com prazo por categoria, sem duplicar e sem
+                                 vazar pedido alheio
   smoke_store.sh                a loja operando a si mesma (11.2 a 11.4):
                                  pausa com motivo e volta automática, tempo
                                  de preparo, esgotar/publicar item, horário
@@ -734,7 +754,7 @@ puro: CRUD de endereços completo e cartão salvo via Mercado Pago.
   (confirmado por query direta no banco, não só pela resposta da API),
   troca de padrão e remoção.
 
-## Front-end (`web/`) — Fases 1 a 6, 7.1, 8, 9, 10, 12, 13, 14.2 e 15.1, decisões
+## Front-end (`web/`) — Fases 1 a 6, 7.1, 8, 9, 10, 12, 13, 14.1, 14.2 e 15.1, decisões
 
 Svelte 5 + Vite, Bootstrap 5, Bootstrap Icons, `sweetalert` (não
 `sweetalert2` — o pacote `sweetalert` na versão 2.x do npm *é* a
@@ -781,6 +801,9 @@ web/
         OrderChat.svelte                14.2 — chat de três pontas (cliente e loja)
       screens/
         AuthFlow.svelte                 orquestra a Fase 10: 10.1 -> 10.2 -> 10.3
+        HelpScreen.svelte               14.1 — central de ajuda: assunto é o
+                                         pedido de agora, e cada atalho
+                                         responde antes de abrir chamado
         CancelDialog.svelte             13.1 — taxa e estorno antes de confirmar
                                          (e a devolução integral da 15.1)
         NoCourierPanel.svelte           15.1 — pronto e sem entregador: relógio,
@@ -1433,6 +1456,62 @@ backend. Os dois fecham aqui, sobre tabelas que existem desde a migração
   R$ 68,40 no carrinho, e a conversa indo do app do cliente pro KDS da loja
   e voltando por resposta rápida, com "lida" aparecendo.
 
+## Central de ajuda (Fase 14.1) — decisões de implementação
+
+"Os quatro atalhos cobrem a maior parte dos tickets reais de delivery — cada
+um abre um fluxo automático antes de chamar gente." E, antes disso: "ajuda
+começa no pedido em andamento, não numa lista de perguntas."
+
+- **O fluxo automático é a parte que importa, e não é texto fixo.** Cada
+  atalho lê o estado real do pedido de quem perguntou e responde com ele:
+  "meu pedido está atrasado" num pedido em preparo devolve o tempo de preparo
+  que a loja informou (11.2) e avisa se a fila já subiu o número; no mesmo
+  pedido pronto sem entregador, devolve as três saídas da 15.1 e manda pra
+  tela; "paguei o Pix" olha `payment_proofs` e diz se o comprovante está na
+  fila e quanto falta do prazo; "onde está meu estorno" lê `refunds` e
+  responde com valor, canal e prazo reais. Uma FAQ genérica no lugar disso
+  seria a mesma tela com metade do valor.
+- **Item errado é o único que o banco não pode conferir sozinho, e a tela
+  admite isso.** Só quem abriu a sacola sabe o que faltou. O "fluxo
+  automático" ali é dizer o que vai acontecer em seguida, não fingir que
+  conferiu.
+- **O chamado nasce com prazo, e o prazo é por categoria.** `sla_due_at` sai
+  de uma tabela escrita num lugar só (`lib/support.php`): 15 min pra pedido
+  atrasado e Pix não confirmado, 30 min pra item errado, um dia útil pra
+  estorno. Os valores não estão na especificação -- o critério registrado é o
+  custo de esperar: comida esfriando e dinheiro parado são minutos; estorno
+  depende de banco e adquirente, que são dias.
+- **Um chamado aberto por categoria e pedido.** Apertar duas vezes o mesmo
+  atalho é a mesma pessoa com o mesmo problema: a segunda mensagem entra no
+  chamado que já existe, e a resposta diz isso. Sem essa regra, a fila de
+  suporte enche de duplicatas justamente quando está lenta.
+- **A mensagem do chamado vai pra conversa DO PEDIDO (14.2).** Suporte que
+  não enxerga a conversa vira o ping-pong de "qual o número do pedido?" que a
+  Fase 14 existe pra matar. Quando não há pedido ligado, a resposta devolve
+  `message_delivered: false` e a tela diz isso -- não existe caixa de entrada
+  avulsa na especificação, e fingir que alguém já leu seria pior.
+- **O "tempo médio de resposta agora" é medido, não prometido.** Sai das
+  mensagens reais dos últimos sete dias: quanto tempo, em média, a loja (ou o
+  suporte, ou o entregador) levou pra responder a primeira mensagem do
+  cliente. É da plataforma inteira porque é isso que a frase promete a quem
+  ainda não escreveu. Sem conversa no período, a linha some. E vem em
+  segundos: arredondar pra minuto transformava resposta rápida em "0 min",
+  que se lê como "ninguém responde".
+- **O código do chamado é sorteado, não sequencial.** "#T-8841" sequencial
+  contaria pro cliente quantos chamados a plataforma inteira já teve.
+- **Validado com banco e navegador reais.** `tests/smoke_help.sh` cobre a
+  ajuda sem pedido nenhum (que não inventa assunto), o atalho inexistente
+  recusado, o preparo real aparecendo na resposta de atraso, o pedido pronto
+  sem entregador virando as saídas da 15.1, o comprovante na fila
+  reconhecido, o estorno real com valor e rota, o chamado sem mensagem
+  barrado, o prazo de 30 min gravado no banco, a mensagem entrando na
+  conversa do pedido, o segundo toque reaproveitando o chamado, e os 403/404
+  de pedido e chamado alheios. No Playwright: a central aberta pelo perfil
+  com o pedido de agora no topo, o atalho de atraso respondendo com as saídas
+  da 15.1, o chamado T-…-alguma-coisa aparecendo em "SEUS ATENDIMENTOS", o
+  segundo toque dizendo que o chamado já existia, e o botão "falar sobre este
+  pedido" caindo no acompanhamento.
+
 ## A loja operando a si mesma (Fase 11.2 a 11.4) — decisões
 
 Até aqui o painel deixava a loja atender pedido, mas não SER uma loja: ela
@@ -1812,6 +1891,7 @@ JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_support.sh    # cha
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_admin.sh      # painel da plataforma (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_dispatch.sh   # pedido sem entregador: turbo, retirada, auto-cancel (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_store.sh      # loja operando a si mesma: pausa, cardápio, horário (semeia sozinho)
+JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_help.sh       # central de ajuda: fluxo automático e chamado com prazo (semeia sozinho)
 
 # O único processo de fundo do projeto (tela 15.1). Em produção é uma linha
 # no cron do cPanel, a cada minuto; localmente, roda à mão quando quiser ver
@@ -1976,8 +2056,8 @@ checando `boundingBox()` via Playwright, não só lendo o código.
    semanal (9.6 e 9.7), as telas de configuração da Fase 10 (10.4 formas de
    pagamento da loja, 10.5 políticas do admin, 10.6 devolução de maquininha),
    a exportação contábil da 12.3, a ocorrência de entrega e o
-   reembolso do admin (13.3 e 13.4), o resto do suporte (14.1 central de
-   ajuda, 14.3 mapa, 14.4 agendamento) e o que falta da Fase 15 (rodadas,
+   reembolso do admin (13.3 e 13.4), o resto do suporte (14.3 mapa, 14.4
+   agendamento) e o que falta da Fase 15 (rodadas,
    raio crescente e `dispatch_attempts`, a aprovação de entregador da 15.2 e
    as campanhas da 15.3 -- a 15.1 está construída, ver seção própria).
 2. **Cálculo de frete no servidor.** `orders/checkout.php` (e

@@ -9,7 +9,8 @@
   //
   // "Endereços salvos", "Formas de pagamento" e "Configurações" abrem as
   // telas da Fase 6 de verdade (AddressesScreen/PaymentMethods/SettingsScreen).
-  let { onLoggedOut, onOpenOrders, onOpenAddresses, onOpenPaymentMethods, onOpenSettings } = $props();
+  let { onLoggedOut, onOpenOrders, onOpenAddresses, onOpenPaymentMethods, onOpenSettings, onOpenHelp } =
+    $props();
 
   let stats = $state(null);
 
@@ -77,6 +78,10 @@
     </button>
     <button type="button" onclick={() => notPortedYet('Notas e comprovantes')}>
       <span>Notas e comprovantes</span>
+      <i class="bi bi-chevron-right"></i>
+    </button>
+    <button type="button" onclick={onOpenHelp}>
+      <span>Ajuda</span>
       <i class="bi bi-chevron-right"></i>
     </button>
     <button type="button" onclick={onOpenSettings}>

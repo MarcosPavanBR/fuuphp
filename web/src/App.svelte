@@ -10,6 +10,7 @@
   import AddressesScreen from './lib/screens/AddressesScreen.svelte';
   import PaymentMethods from './lib/screens/PaymentMethods.svelte';
   import SettingsScreen from './lib/screens/SettingsScreen.svelte';
+  import HelpScreen from './lib/screens/HelpScreen.svelte';
   import RestaurantPage from './lib/screens/RestaurantPage.svelte';
   import CartDrawer from './lib/screens/CartDrawer.svelte';
   import PaymentFlow from './lib/screens/PaymentFlow.svelte';
@@ -183,6 +184,7 @@
           onOpenAddresses={() => (tab = 'addresses')}
           onOpenPaymentMethods={() => (tab = 'payment_methods')}
           onOpenSettings={() => (tab = 'settings')}
+          onOpenHelp={() => (tab = 'help')}
         />
       {:else if tab === 'addresses'}
         <AddressesScreen {location} onBack={() => (tab = 'profile')} />
@@ -190,6 +192,12 @@
         <PaymentMethods onBack={() => (tab = 'profile')} />
       {:else if tab === 'settings'}
         <SettingsScreen onBack={() => (tab = 'profile')} />
+      {:else if tab === 'help'}
+        <!-- 14.1 — a ajuda abre o pedido em vez de responder por ele: toda
+             saída dela leva pro acompanhamento, onde está a conversa. -->
+        <!-- openTracking, não openOrder: a ajuda conhece o id do pedido, não
+             a linha inteira dele. -->
+        <HelpScreen onBack={() => (tab = 'profile')} onOpenOrder={openTracking} />
       {/if}
     </div>
     <BottomNav active={tab} onNavigate={(t) => (tab = t)} />
