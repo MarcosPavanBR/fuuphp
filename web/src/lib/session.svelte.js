@@ -2,15 +2,19 @@
 // componente (Svelte 5). Login de verdade contra o módulo identity já
 // existente (api/v1/auth/otp_*.php) -- não é mock.
 //
-// A Fase 10 (login com OTP e cadastro com LGPD) ainda não tem tela
-// própria. As telas da Fase 2 que precisam de usuário logado (pedidos,
-// perfil, fidelidade) usam QuickLogin.svelte -- um formulário mínimo com a
-// MESMA chamada de API que a tela de verdade vai usar depois, sem o design
-// completo da Fase 10.
+// As telas da Fase 10 (AuthFlow -> LoginScreen, OtpScreen, SignupScreen)
+// usam estas funções; quem precisa de usuário logado (pedidos, perfil,
+// carrinho) monta o AuthFlow no lugar do conteúdo.
 import { api, getStoredToken, storeToken } from './api.js';
 
 let accessToken = $state(getStoredToken());
 let user = $state(null);
+// Conta recém-criada pelo OTP ainda não passou pelo cadastro da tela 10.3
+// (CPF, e-mail, consentimentos). É estado de SESSÃO, não de tela: quem
+// decide se o cadastro aparece é este sinalizador, e não o instante em que
+// o token chegou -- senão a aba troca o fluxo pela tela dela no meio do
+// caminho e o cadastro nunca acontece.
+let pendingSignup = $state(false);
 
 export function isAuthenticated() {
   return accessToken !== null;
@@ -24,9 +28,17 @@ export function currentToken() {
   return accessToken;
 }
 
-export async function requestOtp({ phone, email, fullName, purpose }) {
+export function signupPending() {
+  return pendingSignup;
+}
+
+export function finishSignup() {
+  pendingSignup = false;
+}
+
+export async function requestOtp({ phone, email, fullName, purpose, channel }) {
   return api.post('/auth/otp_request.php', {
-    body: { purpose, phone, email, full_name: fullName },
+    body: { purpose, phone, email, full_name: fullName, channel },
   });
 }
 
@@ -36,6 +48,7 @@ export async function verifyOtp({ phone, email, code, purpose }) {
   });
   accessToken = data.access_token;
   storeToken(data.access_token);
+  pendingSignup = purpose === 'signup';
   await loadProfile();
   return data;
 }
@@ -50,5 +63,6 @@ export async function loadProfile() {
 export function logout() {
   accessToken = null;
   user = null;
+  pendingSignup = false;
   storeToken(null);
 }

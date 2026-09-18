@@ -3,7 +3,7 @@
   import { addToCart } from '../cart.svelte.js';
   import { isAuthenticated } from '../session.svelte.js';
   import { toastr } from '../toastr.js';
-  import QuickLogin from './QuickLogin.svelte';
+  import AuthFlow from '../screens/AuthFlow.svelte';
 
   // Tela 3.2 — Item, extras e observações. "Modal com transição fly do
   // Svelte; preço recalculado no servidor antes de virar item do pedido."
@@ -78,7 +78,7 @@
     <button type="button" class="close" onclick={onClose} aria-label="Fechar">
       <i class="bi bi-x-lg"></i>
     </button>
-    <QuickLogin onSuccess={() => (needsLogin = false)} />
+    <AuthFlow onSuccess={() => (needsLogin = false)} />
   {:else}
     <button type="button" class="close" onclick={onClose} aria-label="Fechar">
       <i class="bi bi-x-lg"></i>

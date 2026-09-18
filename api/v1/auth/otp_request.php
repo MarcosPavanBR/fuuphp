@@ -70,7 +70,18 @@ if (otp_requests_in_window($pdo, $userId, $purpose) >= OTP_MAX_REQUESTS_PER_WIND
 }
 
 $code = generate_otp_code();
+// A tela 10.2 oferece "receber por WhatsApp" quando o SMS não chega. Quem
+// entrou por telefone escolhe entre os dois; quem entrou por e-mail não
+// escolhe nada -- só existe um canal possível. A "ligação automática" que o
+// mock também cita ficou de fora: o enum de otp_codes.channel não prevê esse
+// canal, e inventar valor de enum pra caber numa tela é a ordem errada.
 $channel = $phone !== null ? 'sms' : 'email';
+if ($phone !== null && isset($body['channel'])) {
+    $channel = (string) $body['channel'];
+    if (!in_array($channel, ['sms', 'whatsapp'], true)) {
+        error_response(422, 'invalid_channel', 'Canal precisa ser sms ou whatsapp.', fields: ['channel' => 'inválido']);
+    }
+}
 
 $pdo->prepare(
     'INSERT INTO otp_codes (user_id, channel, code_hash, purpose, expires_at)

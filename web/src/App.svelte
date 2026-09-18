@@ -15,8 +15,8 @@
   import PaymentFlow from './lib/screens/PaymentFlow.svelte';
   import OrderTracking from './lib/screens/OrderTracking.svelte';
   import BottomNav from './lib/components/BottomNav.svelte';
-  import QuickLogin from './lib/components/QuickLogin.svelte';
-  import { isAuthenticated, loadProfile } from './lib/session.svelte.js';
+  import AuthFlow from './lib/screens/AuthFlow.svelte';
+  import { isAuthenticated, loadProfile, signupPending } from './lib/session.svelte.js';
 
   // Fase 1 (onboarding) -> Fase 2 (navegação principal, abas) -> Fase 3
   // (loja/item/carrinho, tela cheia por cima das abas -- o mock não mostra
@@ -78,6 +78,12 @@
   }
 
   const AUTH_REQUIRED_TABS = new Set(['loyalty', 'orders', 'profile']);
+
+  // A Fase 10 não acaba quando o token chega: quem cria conta ainda passa
+  // pelo cadastro (10.3), que só existe DEPOIS de estar autenticado. Por isso
+  // a condição tem duas partes -- sem conta, ou com conta recém-criada que
+  // ainda não completou o cadastro.
+  let authOpen = $derived((AUTH_REQUIRED_TABS.has(tab) && !isAuthenticated()) || signupPending());
 </script>
 
 {#if step === 'splash'}
@@ -105,8 +111,8 @@
 {:else}
   <div class="app-shell">
     <div class="app-content">
-      {#if AUTH_REQUIRED_TABS.has(tab) && !isAuthenticated()}
-        <QuickLogin onSuccess={() => {}} />
+      {#if authOpen}
+        <AuthFlow onSuccess={() => {}} onPartnerLogin={() => (window.location.href = '/painel.html')} />
       {:else if tab === 'home'}
         <Home {location} onOpenRestaurant={openRestaurant} onSearch={() => (tab = 'search')} />
       {:else if tab === 'search'}
@@ -148,5 +154,10 @@
   .app-content {
     flex: 1;
     overflow-y: auto;
+    /* Coluna flex pra tela curta (login, código) poder esticar até o rodapé
+       em vez de deixar faixa de fundo sobrando -- min-height:100% não resolve
+       dentro de um item flex sem altura definida. */
+    display: flex;
+    flex-direction: column;
   }
 </style>

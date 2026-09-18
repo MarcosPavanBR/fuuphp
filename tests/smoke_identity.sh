@@ -52,6 +52,46 @@ CONSENT=$(curl -s -X POST "$BASE/consent.php" -H "Content-Type: application/json
   -H "Authorization: Bearer $ACCESS" -d '{"kind":"terms","version":"1.0"}')
 [ "$(echo "$CONSENT" | jq -r '.recorded')" = "true" ] || fail "consent não gravou: $CONSENT"
 
+echo "== cadastro (tela 10.3): CPF, e-mail e data de nascimento =="
+PROFILE_BASE="http://127.0.0.1:${PORT}/api/v1/profile"
+CPF="$(php "$ROOT/tests/support/random_cpf.php")"
+UPD=$(curl -s -X POST "$PROFILE_BASE/update.php" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS" \
+  -d "{\"full_name\":\"Smoke Test Silva\",\"email\":\"smoke-$(date +%s%N)@test.com\",\"cpf\":\"$CPF\",\"birth_date\":\"1990-04-20\"}")
+[ "$(echo "$UPD" | jq -r '.user.full_name')" = "Smoke Test Silva" ] || fail "profile/update não gravou o nome: $UPD"
+[ "$(echo "$UPD" | jq -r '.user.birth_date')" = "1990-04-20" ] || fail "profile/update não gravou a data de nascimento: $UPD"
+[ "$(psql "$DATABASE_URL" -tAc "SELECT cpf FROM users WHERE phone='$PHONE'")" = "$CPF" ] || fail "CPF não foi gravado no banco"
+
+echo "== CPF inválido é barrado antes de chegar no banco =="
+BAD=$(curl -s -X POST "$PROFILE_BASE/update.php" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS" -d '{"cpf":"11111111111"}')
+[ "$(echo "$BAD" | jq -r '.code')" = "invalid_cpf" ] || fail "CPF inválido não foi barrado: $BAD"
+
+echo "== data de nascimento no futuro é barrada =="
+FUTURE=$(curl -s -X POST "$PROFILE_BASE/update.php" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS" -d '{"birth_date":"2099-01-01"}')
+[ "$(echo "$FUTURE" | jq -r '.code')" = "invalid_birth_date" ] || fail "data futura não foi barrada: $FUTURE"
+
+echo "== CPF de outra conta dá 409, não 500 =="
+PHONE2="119$(( RANDOM % 90000000 + 10000000 ))"
+CODE2=$(curl -s -X POST "$BASE/otp_request.php" -H "Content-Type: application/json" \
+  -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE2\",\"full_name\":\"Outro Smoke\"}" | jq -er '.dev_code')
+ACCESS2=$(curl -s -X POST "$BASE/otp_verify.php" -H "Content-Type: application/json" \
+  -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE2\",\"code\":\"$CODE2\"}" | jq -er '.access_token')
+DUP=$(curl -s -X POST "$PROFILE_BASE/update.php" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS2" -d "{\"cpf\":\"$CPF\"}")
+[ "$(echo "$DUP" | jq -r '.code')" = "cpf_in_use" ] || fail "CPF repetido não deu 409: $DUP"
+
+echo "== reenvio por WhatsApp (tela 10.2) usa o canal pedido =="
+WPP=$(curl -s -X POST "$BASE/otp_request.php" -H "Content-Type: application/json" \
+  -d "{\"purpose\":\"login\",\"phone\":\"$PHONE\",\"channel\":\"whatsapp\"}")
+[ "$(echo "$WPP" | jq -r '.channel')" = "whatsapp" ] || fail "canal whatsapp não foi respeitado: $WPP"
+[ "$(psql "$DATABASE_URL" -tAc "SELECT channel FROM otp_codes WHERE user_id=(SELECT id FROM users WHERE phone='$PHONE') ORDER BY created_at DESC LIMIT 1")" = "whatsapp" ] \
+  || fail "canal whatsapp não foi gravado em otp_codes"
+BADCH=$(curl -s -X POST "$BASE/otp_request.php" -H "Content-Type: application/json" \
+  -d "{\"purpose\":\"login\",\"phone\":\"$PHONE\",\"channel\":\"pombo-correio\"}")
+[ "$(echo "$BADCH" | jq -r '.code')" = "invalid_channel" ] || fail "canal inventado não foi barrado: $BADCH"
+
 echo "== refresh roda e devolve par novo =="
 ROT=$(curl -s -X POST "$BASE/refresh.php" -H "Content-Type: application/json" \
   -d "{\"refresh_token\":\"$REFRESH\"}")

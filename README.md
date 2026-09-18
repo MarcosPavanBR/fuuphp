@@ -48,7 +48,8 @@ existe.
 
 ```
 api/v1/auth/                módulo identity (endpoints, um arquivo por rota)
-  otp_request.php             POST — pede código (login/signup/phone_verify)
+  otp_request.php             POST — pede código (login/signup/phone_verify);
+                                aceita channel=sms|whatsapp quando é telefone
   otp_verify.php               POST — confirma código, emite access+refresh
   refresh.php                  POST — rotaciona refresh, detecta reuso
   partner_login.php            POST — loja (CNPJ+senha) / entregador (CPF+código)
@@ -134,6 +135,9 @@ api/v1/reviews/
 api/v1/profile/
   show.php                      GET  — usuário + estatísticas (pedidos, cupons;
                                  pontos de fidelidade fica null, ver README)
+  update.php                    POST — completa o cadastro (tela 10.3): nome,
+                                 e-mail, CPF validado e data de nascimento;
+                                 409 se CPF/e-mail já for de outra conta
 lib/                          código compartilhado entre módulos
   bootstrap.php                 carrega .env, CORS (dev), registra handler de erro, requires
   db.php                          PDO (DATABASE_URL → pgsql DSN) + pg_bool() +
@@ -196,6 +200,7 @@ tests/
                                  mais o isolamento entre lojas
   support/random_cnpj.php       CNPJ aleatório com dígito verificador válido,
                                  pra seed de teste não colidir entre scripts
+  support/random_cpf.php        idem pra CPF (users.cpf é UNIQUE)
 db/
   migrations/
     001_identity.up.sql / .down.sql      users, partner_accounts, otp_codes,
@@ -230,6 +235,7 @@ db/
                                           das 42 tabelas originais, sem
                                           coluna de nota agregada em
                                           restaurants, ver seção própria)
+    013_signup_profile.up.sql / .down.sql users.birth_date (opcional da tela 10.3)
     012_saved_cards.up.sql / .down.sql   saved_cards (Fase 6.2) +
                                           users.mp_customer_id -- também
                                           fora das 42 originais
@@ -613,16 +619,17 @@ puro: CRUD de endereços completo e cartão salvo via Mercado Pago.
   (confirmado por query direta no banco, não só pela resposta da API),
   troca de padrão e remoção.
 
-## Front-end (`web/`) — Fase 1 a Fase 6, decisões de implementação
+## Front-end (`web/`) — Fases 1 a 6 e 10, decisões de implementação
 
 Svelte 5 + Vite, Bootstrap 5, Bootstrap Icons, `sweetalert` (não
 `sweetalert2` — o pacote `sweetalert` na versão 2.x do npm *é* a
 biblioteca clássica, a mesma API `swal()` que o mock usa). Fase 1 (splash,
 seleção de estado, cidade+bairro), Fase 2 (home, busca, fidelidade,
 pedidos, perfil), Fase 3 (loja, item, carrinho), Fase 4 (pagamento), Fase 5
-(pós-pedido) e Fase 6 (conta, endereços, cartões, configurações) estão
-portadas, mais o painel da loja (Fase 7.3 e 11.1, em `painel.html`, com
-seção própria acima); as outras fases ainda não têm componente.
+(pós-pedido), Fase 6 (conta, endereços, cartões, configurações) e Fase 10.1
+a 10.3 (login e cadastro) estão portadas, mais o painel da loja (Fase 7.3 e
+11.1, em `painel.html`); as três têm seção própria adiante. As outras fases
+ainda não têm componente.
 
 ```
 web/
@@ -645,10 +652,13 @@ web/
         PhoneStatusBar.svelte          barra "9:41" que aparece em toda tela
         PhoneScreen.svelte              moldura de largura de celular
         BottomNav.svelte                5 abas (house/search/cart/star/person)
-        QuickLogin.svelte               login mínimo real (ver abaixo)
         QuickAddress.svelte             endereço mínimo real (ver Fase 4 abaixo)
         ItemModal.svelte                3.2 — variações, observação, preço ao vivo
       screens/
+        AuthFlow.svelte                 orquestra a Fase 10: 10.1 -> 10.2 -> 10.3
+        LoginScreen.svelte              10.1 — telefone ou e-mail, código de uso único
+        OtpScreen.svelte                10.2 — seis caixas, reenvio, WhatsApp
+        SignupScreen.svelte             10.3 — cadastro com base legal por bloco
         Splash.svelte                   1.1 — fade, avança sozinho
         StateSelector.svelte            1.2 — busca + lista com contagem de lojas
         CityPicker.svelte               1.3 — busca de cidade, bairro, SweetAlert
@@ -735,11 +745,11 @@ web/
 - **A aba Carrinho existe mas não abre nada** — avisa que é a Fase 3
   (cardápio/item/carrinho), ainda não portada, em vez de levar a uma tela
   vazia fingindo que funciona.
-- **Login é `QuickLogin.svelte`, um formulário mínimo de verdade** (chama
-  `/auth/otp_request.php` e `/otp_verify.php` reais), não a tela completa
-  da Fase 10 — que ainda não foi desenhada em componente. Ele gate as três
-  abas que precisam de usuário autenticado (fidelidade, pedidos, perfil) e
-  deixa isso visível na tela com um selo "login provisório".
+- **Login é o `AuthFlow` da Fase 10** (telas 10.1, 10.2 e 10.3, seção
+  própria abaixo). Ele fecha as três abas que precisam de usuário
+  autenticado (fidelidade, pedidos, perfil) e também é o que aparece dentro
+  do modal de item (3.2) quando alguém tenta montar um carrinho sem conta.
+  O `QuickLogin.svelte` provisório foi removido no mesmo commit.
 - **CORS entrou em `lib/bootstrap.php`** porque Fase 2 é a primeira vez
   que o front chama a API de verdade — Vite (porta 5173 em dev) e PHP
   (porta 8080) são origens diferentes pro navegador. `ALLOWED_ORIGIN` no
@@ -976,6 +986,72 @@ web/
   bandeira) → trocar padrão → configurações com os três toggles reais,
   incluindo o de promoções ligado manualmente e persistido.
 
+## Login e cadastro (Fase 10.1 a 10.3) — decisões de implementação
+
+O acesso do cliente saiu do provisório. Até aqui havia um `QuickLogin` de
+três campos com um selo "login provisório"; agora são as três telas
+desenhadas, com o mesmo backend de sempre (o módulo identity nunca foi
+mock).
+
+- **Um formulário só serve pra entrar e pra criar conta.** Quem digita um
+  telefone sem conta recebe `user_not_found` do servidor, e é aí que o
+  campo de nome aparece. Ninguém precisa escolher "entrar ou cadastrar"
+  antes de digitar nada: quem sabe a resposta é o banco, não a tela.
+- **O cadastro (10.3) é um passo do fluxo, não uma tela solta.** Ele só
+  existe depois do OTP -- a conta já foi criada com nome e telefone
+  verificados, e o que falta é CPF, e-mail e consentimentos. Quem já tinha
+  conta entra direto; pedir CPF a cada login seria pedir o mesmo dado duas
+  vezes, o oposto do "mínimo necessário" que a tela promete.
+- **"Conta recém-criada" é estado de sessão, não de tela.** Essa foi a
+  correção de um bug real que o Playwright pegou: com a condição escrita
+  como "não autenticado", a aba trocava o fluxo pela tela dela no instante
+  em que o token chegava, e o cadastro nunca aparecia. Agora
+  `session.svelte.js` guarda `pendingSignup`, ligado no `verifyOtp` com
+  `purpose=signup` e desligado quando o cadastro termina -- a aba e o modal
+  de item leem o mesmo sinal.
+- **Os três blocos de 10.3 são bases legais diferentes, e isso muda onde o
+  dado é gravado.** CPF vai pra `users` (obrigação legal, nota fiscal);
+  marketing e data de nascimento são consentimento, então viram registros
+  próprios em `consents` -- versão e IP em cada um. Aceitar os termos não
+  liga marketing junto: são três chamadas distintas a `consent.php`, que é
+  exatamente o que a tela promete ("sem consentimento embutido em aceite de
+  termos").
+- **`users.birth_date` é a única coluna nova** (migração `013`). Anulável
+  de propósito: quem não consente não preenche, e a ausência é a resposta
+  certa, não um valor padrão.
+- **CPF é validado no servidor, com dígito verificador** (`is_valid_cpf`,
+  que já existia) e é `UNIQUE` em `users` -- CPF de outra conta devolve 409
+  com a saída possível ("entre com ela"), não 500 cru.
+- **"Receber por WhatsApp" é um canal de verdade**, não um link decorativo:
+  `otp_codes.channel` já previa `whatsapp` no enum desde a migração `001`,
+  e `otp_request.php` passou a aceitar `channel`. O envio em si continua
+  sendo integração externa (hoje um `error_log`) em qualquer canal -- o que
+  o teste prova é que o canal pedido é o canal gravado. A "ligação
+  automática" que o mock também cita ficou de fora: o enum não prevê esse
+  canal, e inventar valor de enum pra caber numa tela é a ordem errada.
+- **Google e Apple aparecem desabilitados, com "em breve".** Não existe
+  OAuth neste backend nem tabela de identidade federada. Mesma escolha já
+  feita com o BitPay na tela 4.1: melhor um botão que diz o que é do que um
+  botão que não faz nada.
+- **As seis caixas do código são um input só.** Um campo por dígito quebra
+  colar o código, o preenchimento automático do SMS e o apagar pra trás. O
+  que se vê são seis caixas desenhadas sobre um input transparente com
+  `autocomplete="one-time-code"` -- o navegador continua tratando como um
+  campo de 6 dígitos.
+- **A tela de código não inventa o prazo.** O texto diz o que o servidor
+  realmente faz (5 minutos, 5 tentativas) e o contador de reenvio é local,
+  mas quem bloqueia é o backend: código errado zera as caixas e mostra a
+  mensagem que veio de lá, incluindo quantas tentativas restam.
+- **Validado com Postgres e navegador reais.** `tests/smoke_identity.sh`
+  ganhou o cadastro completo (CPF gravado, conferido por query direta),
+  CPF inválido barrado, data no futuro barrada, CPF de outra conta em 409 e
+  o canal WhatsApp indo parar em `otp_codes.channel`. No Playwright, numa
+  janela de 430px: alternar telefone/e-mail, máscara de telefone, o pivô
+  pra cadastro vindo do servidor, código errado rejeitado, cadastro com os
+  dois opcionais marcados, e depois sair e entrar de novo caindo direto no
+  perfil -- sem repetir o cadastro. As únicas respostas não-200 no console
+  são os três erros que o próprio teste provoca.
+
 ## Painel da loja (`web/painel.html`) — Fase 7.3 e 11.1
 
 O tablet do balcão. Até aqui `restaurants/approve_pix.php` existia e passava
@@ -1061,9 +1137,9 @@ esse buraco e junta o KDS, que é a outra metade do mesmo trabalho.
 ```bash
 docker compose up -d
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
-bash db/migrate.sh up           # aplica as 12, em ordem
+bash db/migrate.sh up           # aplica as 13, em ordem
 bash db/migrate.sh down 3       # reverte as 3 últimas
-bash db/migrate.sh down 12      # reverte tudo
+bash db/migrate.sh down 13      # reverte tudo
 
 cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN se precisar
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
@@ -1085,7 +1161,7 @@ Os smoke tests semeiam dados próprios a cada execução, mas contam com um
 banco recém-migrado: rodar a suíte várias vezes no mesmo banco acumula
 lojas de teste e faz as asserções de contagem (ex.: "filtro de categoria
 trouxe 1 loja") falharem por dado velho, não por regressão. `bash
-db/migrate.sh down 12 && bash db/migrate.sh up` devolve o banco ao zero.
+db/migrate.sh down 13 && bash db/migrate.sh up` devolve o banco ao zero.
 
 `MERCADOPAGO_MODE=fake` é o padrão quando `MERCADOPAGO_ACCESS_TOKEN` não
 está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
@@ -1163,6 +1239,12 @@ bloqueio de apagar em uso (409, não 500), dois cartões salvos com o mesmo
 troca de padrão e remoção. `tests/smoke_account.sh` roda tudo isso a cada
 push, no mesmo CI, em `MERCADOPAGO_MODE=fake`.
 
+O acesso do cliente também: cadastro completo com CPF gravado (conferido
+por query direta), CPF inválido barrado, data de nascimento no futuro
+barrada, CPF de outra conta em 409 e o canal WhatsApp indo parar em
+`otp_codes.channel`. `tests/smoke_identity.sh` roda tudo isso junto com o
+que já cobria de OTP e rotação de refresh.
+
 E o painel da loja: a fila de validação com itens, endereço e contagem de
 imagem repetida; o comprovante servido com autorização (401 sem token) e
 negado pra loja rival nos quatro caminhos; a aprovação levando o pedido pra
@@ -1196,10 +1278,12 @@ checando `boundingBox()` via Playwright, não só lendo o código.
 
 1. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
    para Svelte + Bootstrap — Fases 1 a 6 prontas, mais o painel da loja
-   (7.3 e 11.1); faltam PWA/offline e push (7.1 e 7.2), app do entregador
-   (8), fechamento de caixa (9), login e cadastro completos (10), o resto do
-   app do restaurante (11.2 a 11.4: pausar loja, cardápio, horário), painel
-   da plataforma (12), caminho do erro (13), suporte (14) e dispatch (15).
+   (7.3 e 11.1) e o acesso do cliente (10.1 a 10.3); faltam PWA/offline e
+   push (7.1 e 7.2), app do entregador (8), fechamento de caixa (9), as
+   telas de configuração da Fase 10 (10.4 formas de pagamento da loja, 10.5
+   políticas do admin, 10.6 devolução de maquininha), o resto do app do
+   restaurante (11.2 a 11.4: pausar loja, cardápio, horário), painel da
+   plataforma (12), caminho do erro (13), suporte (14) e dispatch (15).
 2. **Cálculo de frete no servidor.** `orders/checkout.php` (e
    `orders/create.php`, desde antes) recebem `delivery_fee` no corpo da
    requisição em vez de calcular — é a única parte do dinheiro que ainda
@@ -1250,7 +1334,12 @@ checando `boundingBox()` via Playwright, não só lendo o código.
     transação no Mercado Pago associada ao pagamento original, que este
     módulo não implementa (mesma simplificação de dinheiro/maquininha no
     módulo de pagamentos).
-12. **Busca por CEP (Fase 6.1) não pôde ser testada neste ambiente.** A
+12. **Login social (Google e Apple) não existe no backend.** A tela 10.1
+    mostra os dois botões, aqui desabilitados: não há OAuth nem tabela de
+    identidade federada no esquema, e `users` não tem como guardar um
+    `provider`/`subject` externo. Fazer isso direito é uma migração e um
+    fluxo de callback, não um botão.
+13. **Busca por CEP (Fase 6.1) não pôde ser testada neste ambiente.** A
     chamada ao ViaCEP é real, mas o ambiente de desenvolvimento bloqueia
     saída pra hosts fora da allowlist do proxy — só o caminho de falha
     (cai pro preenchimento manual) foi observado funcionando. Vale
