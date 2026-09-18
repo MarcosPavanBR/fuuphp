@@ -39,6 +39,26 @@ function require_auth_header_or_query(): array
     return require_auth();
 }
 
+/**
+ * Exige que quem está chamando seja a equipe de uma loja, e devolve o
+ * restaurant_id do token -- o mesmo padrão de require_courier() (Fase 8).
+ *
+ * O id vem do TOKEN, nunca do corpo da requisição: é o que impede uma loja
+ * de pausar, editar cardápio ou mudar horário da loja vizinha.
+ */
+function require_store_staff(array $claims): string
+{
+    if (($claims['role'] ?? null) !== 'restaurant_staff') {
+        error_response(403, 'forbidden', 'Só a equipe da loja acessa esta parte.');
+    }
+    $restaurantId = $claims['restaurant_id'] ?? null;
+    if ($restaurantId === null) {
+        error_response(403, 'forbidden', 'Esse login não está vinculado a uma loja.');
+    }
+
+    return (string) $restaurantId;
+}
+
 function client_ip(): ?string
 {
     $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? null;

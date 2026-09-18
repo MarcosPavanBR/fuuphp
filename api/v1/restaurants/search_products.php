@@ -28,6 +28,7 @@ $stmt = $pdo->prepare(
      JOIN restaurants r ON r.id = mi.restaurant_id
      WHERE r.city_ibge_code = :city_ibge_code
        AND r.is_open = true
+       AND (r.pause_until IS NULL OR r.pause_until <= now())
        AND mi.available = true
        AND mi.name ILIKE '%' || :query || '%'
      ORDER BY mi.name

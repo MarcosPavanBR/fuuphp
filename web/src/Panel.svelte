@@ -16,6 +16,9 @@
   import RejectDialog from './lib/screens/panel/RejectDialog.svelte';
   import PanelOverview from './lib/screens/panel/PanelOverview.svelte';
   import CashDesk from './lib/screens/panel/CashDesk.svelte';
+  import PauseScreen from './lib/screens/panel/PauseScreen.svelte';
+  import MenuScreen from './lib/screens/panel/MenuScreen.svelte';
+  import HoursScreen from './lib/screens/panel/HoursScreen.svelte';
   import OrderChat from './lib/components/OrderChat.svelte';
 
   // Painel da loja (telas 7.3 e 11.1). Roda numa página própria
@@ -31,6 +34,7 @@
   let selectedProof = $state(null);
   let rejecting = $state(null);
   let chatting = $state(null);
+  let storeState = $state(null);
   let lastSync = $state(null);
   let online = $state(true);
   let clock = $state(new Date());
@@ -59,17 +63,21 @@
       kds = kdsData.orders;
 
       if (withStats) {
-        const [statsData, recentData, settleData] = await Promise.all([
+        const [statsData, recentData, settleData, pauseData] = await Promise.all([
           api.get('/restaurants/stats.php', { token }),
           api.get('/restaurants/orders.php', {
             token,
             query: { id: staffRestaurantId(), scope: 'recent' },
           }),
           api.get('/restaurants/settlements.php', { token }),
+          api.get('/restaurants/pause_status.php', { token }),
         ]);
         stats = statsData.stats;
         recent = recentData.orders;
         settlements = settleData.settlements;
+        // O cabeçalho passa a dizer se a loja está recebendo pedido agora:
+        // até aqui dava pra passar o dia inteiro fechada sem ninguém notar.
+        storeState = { ...pauseData.store, paused: pauseData.pause !== null };
       }
       online = true;
       lastSync = new Date();
@@ -128,6 +136,17 @@
         <i class="bi bi-bag-heart-fill"></i>
         {staffRestaurantName() ?? 'Painel da loja'}
       </span>
+      {#if storeState}
+        <button
+          type="button"
+          class="state"
+          class:paused={storeState.paused}
+          class:closed={!storeState.is_open && !storeState.paused}
+          onclick={() => (tab = 'store')}
+        >
+          {storeState.paused ? 'pausada' : storeState.is_open ? 'recebendo pedidos' : 'fechada'}
+        </button>
+      {/if}
       {#if proofs.length > 0}
         <span class="badge-alert">{proofs.length} Pix esperando</span>
       {/if}
@@ -141,6 +160,15 @@
           Caixa
           {#if settlements.some((s) => s.state === 'open')}<span class="dot"></span>{/if}
         </button>
+        <!-- 11.2 a 11.4: a loja operando a si mesma. Ficam depois da cozinha
+             e do caixa de propósito -- são as abas que se abre uma vez por
+             dia, não a cada pedido. -->
+        <button type="button" class:active={tab === 'store'} onclick={() => (tab = 'store')}>
+          Loja
+          {#if storeState && (!storeState.is_open || storeState.paused)}<span class="dot"></span>{/if}
+        </button>
+        <button type="button" class:active={tab === 'menu'} onclick={() => (tab = 'menu')}>Cardápio</button>
+        <button type="button" class:active={tab === 'hours'} onclick={() => (tab = 'hours')}>Horário</button>
       </nav>
 
       <div class="meta">
@@ -166,6 +194,12 @@
       />
     {:else if tab === 'cash'}
       <CashDesk {settlements} onDone={() => pull({ withStats: true })} />
+    {:else if tab === 'store'}
+      <PauseScreen onChanged={() => pull({ withStats: true })} />
+    {:else if tab === 'menu'}
+      <MenuScreen />
+    {:else if tab === 'hours'}
+      <HoursScreen onChanged={() => pull({ withStats: true })} />
     {:else}
       <div class="overview-layout">
         <aside class="side">
@@ -231,6 +265,26 @@
   }
   .store i {
     color: var(--fuu-red);
+  }
+  .state {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--fuu-leaf);
+    background: var(--fuu-leaf-tint);
+    color: var(--fuu-leaf-dark);
+    font-family: var(--fuu-font-body);
+  }
+  .state.paused {
+    border-color: var(--fuu-wait-text);
+    background: var(--fuu-wait-bg);
+    color: var(--fuu-wait-text);
+  }
+  .state.closed {
+    border-color: var(--fuu-line-1);
+    background: var(--fuu-line-5);
+    color: var(--fuu-ink-4);
   }
   .badge-alert {
     background: var(--fuu-red);

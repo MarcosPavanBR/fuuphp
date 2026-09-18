@@ -30,7 +30,10 @@ $distanceExpr = ($lat !== null && $lng !== null)
        ELSE NULL END'
     : 'NULL';
 
+// `paused` sai junto com `is_open` porque são coisas diferentes pra quem
+// lê: loja fechada volta amanhã, loja pausada volta em minutos.
 $sql = "SELECT r.id, r.name, r.category, r.logo_key, r.is_open,
+               (r.pause_until IS NOT NULL AND r.pause_until > now()) AS paused,
                {$distanceExpr} AS distance_km
         FROM restaurants r
         WHERE r.city_ibge_code = :city_ibge_code
@@ -42,7 +45,11 @@ if ($lat !== null && $lng !== null) {
     $params['lng'] = $lng;
 }
 if ($openOnly) {
+    // Tela 11.2: "pausa esconde a loja do app e para novos pedidos". Sem a
+    // segunda linha, a loja pausada continuava na lista de "abertos agora" e
+    // o cliente só descobria no checkout, com o pedido montado.
     $sql .= ' AND r.is_open = true';
+    $sql .= ' AND (r.pause_until IS NULL OR r.pause_until <= now())';
 }
 if (is_string($category) && $category !== '') {
     $sql .= ' AND r.category = :category';

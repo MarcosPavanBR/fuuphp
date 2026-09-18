@@ -21,6 +21,7 @@
   let order = $state(null);
   let events = $state([]);
   let restaurant = $state(null);
+  let prepMinutes = $state(null);
   let review = $state(null);
   let showReview = $state(false);
   let showCancel = $state(false);
@@ -84,7 +85,10 @@
     clockInterval = setInterval(() => (now = Date.now()), 1000);
     reload()
       .then((data) => api.get('/restaurants/show.php', { query: { id: data.order.restaurant_id } }))
-      .then((data) => (restaurant = data.restaurant))
+      .then((data) => {
+        restaurant = data.restaurant;
+        prepMinutes = data.prep?.effective ?? null;
+      })
       .catch(() => {});
   });
   onDestroy(() => {
@@ -158,12 +162,19 @@
       : null
   );
 
-  // Sem motor de logística real (Fase 8/9), é uma janela fixa a partir da
-  // hora do pedido -- mesma simplificação documentada em PaymentSelector.svelte.
+  // O preparo agora é o tempo que a LOJA informou (tela 11.2), já com o
+  // acréscimo da fila quando ela ligou isso; a viagem continua sendo uma
+  // margem fixa, porque rota e trânsito ainda não existem em lugar nenhum.
+  // Sem resposta da loja, cai na janela antiga de 25–45 min.
+  const TRAVEL_MINUTES = 15;
   function etaWindow(createdAt) {
     const base = createdAt ? parsePgTimestamp(createdAt).getTime() : Date.now();
     const fmt = (ms) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    return `${fmt(base + 25 * 60000)} – ${fmt(base + 45 * 60000)}`;
+    const prep = prepMinutes;
+    if (prep === null) {
+      return `${fmt(base + 25 * 60000)} – ${fmt(base + 45 * 60000)}`;
+    }
+    return `${fmt(base + prep * 60000)} – ${fmt(base + (prep + TRAVEL_MINUTES) * 60000)}`;
   }
 
   function eventLabel(ev) {

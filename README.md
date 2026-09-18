@@ -30,7 +30,7 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (dezessete migrações SQL), os módulos **identity**,
+A **fundação de banco** (dezoito migrações SQL), os módulos **identity**,
 **catálogo + pedido + checkout**, **descoberta** (busca de loja e
 produto), **carrinho incremental**, **pagamentos** (cartão via Mercado
 Pago, Pix automático e manual, dinheiro, maquininha, validação humana do
@@ -81,6 +81,30 @@ api/v1/restaurants/         catálogo, descoberta (público, exceto orders.php
   confirm_settlement.php        POST — a loja conta, digita o código e confirma;
                                  os dois lançamentos nascem na mesma transação,
                                  divergência abre ocorrência e não lança nada
+  pause_status.php              GET  — tela 11.2 inteira: estado da loja, custo
+                                 estimado da pausa (pedidos e faturamento por
+                                 hora DESTA loja nesta faixa), horário de hoje
+                                 e quanto tempo já ficou pausada
+  pause.php                     POST — pausa curta (15/30/60 min, volta
+                                 sozinha), "fechar por hoje" ou voltar. Motivo
+                                 obrigatório; nenhum pedido muda de status
+  prep_time.php                 POST — tempo de preparo informado ao cliente e
+                                 o acréscimo automático por fila (11.2)
+  menu_admin.php                GET  — cardápio pelos olhos da loja: inclui o
+                                 indisponível e quanto cada item vendeu na
+                                 semana (de order_items, não de contador)
+  menu_availability.php         POST — "esgotar é um toque": só disponibilidade,
+                                 com o carimbo de quando esgotou
+  menu_item.php                 POST — publica item novo ou editado com suas
+                                 variações (substituídas em bloco, numa
+                                 transação); preço continua sendo do servidor
+  hours.php                     GET  — horário da semana, feriados futuros e o
+                                 histograma de pedidos por hora (11.4)
+  hours_save.php                POST — salva os dois turnos para os dias do
+                                 escopo escolhido numa transação só, e reavalia
+                                 se a loja abre agora
+  holiday.php                   POST — feriado/data especial como exceção de um
+                                 dia (fechado ou faixa própria), ou remoção
 api/v1/admin/               painel da plataforma (Fase 12), role 'admin'
   guard.php                     require_admin(): a porta única do painel
   restaurants.php               GET fila de análise / POST aprova ou recusa
@@ -213,6 +237,8 @@ lib/                          código compartilhado entre módulos
   idempotency.php                 idempotent_response(): X-Idempotency-Key
                                    grava a resposta e devolve a MESMA em
                                    replay, pros 5 métodos de pagamento
+  store.php                     tempo de preparo que o cliente vê, com o
+                                 acréscimo da fila calculado na leitura (11.2)
   refunds.php                   rotas de estorno por método, quem paga por
                                  causa e gravação idempotente (Fase 13)
   dispatch.php                  despacho mínimo (uma oferta por pedido pronto),
@@ -268,6 +294,10 @@ tests/
                                  resumo do dia, KDS e as transições da loja
                                  (aceitar, pronto, entregue ao motoboy),
                                  mais o isolamento entre lojas
+  smoke_store.sh                a loja operando a si mesma (11.2 a 11.4):
+                                 pausa com motivo e volta automática, tempo
+                                 de preparo, esgotar/publicar item, horário
+                                 por escopo, feriado e o job de abrir/fechar
   smoke_dispatch.sh             pedido pronto sem entregador (15.1): relógio,
                                  turbo chegando na oferta, turbo negado em
                                  pedido pago, retirada com devolução parcial,
@@ -310,6 +340,9 @@ db/
                                           das 42 tabelas originais, sem
                                           coluna de nota agregada em
                                           restaurants, ver seção própria)
+    018_store_ops.up.sql / .down.sql      store_pauses, holiday_overrides,
+                                           restaurants.prep_minutes e o job
+                                           que abre/fecha a loja (11.2 a 11.4)
     017_no_courier.up.sql / .down.sql     orders.pickup_by_customer +
                                            no_courier_since e a transição
                                            ('ready','cancelled') (tela 15.1)
@@ -1400,6 +1433,105 @@ backend. Os dois fecham aqui, sobre tabelas que existem desde a migração
   R$ 68,40 no carrinho, e a conversa indo do app do cliente pro KDS da loja
   e voltando por resposta rápida, com "lida" aparecendo.
 
+## A loja operando a si mesma (Fase 11.2 a 11.4) — decisões
+
+Até aqui o painel deixava a loja atender pedido, mas não SER uma loja: ela
+não podia pausar num aperto, não podia esgotar um item, não podia mudar o
+horário. `is_open` só mudava por `UPDATE` no banco, e o cardápio nascia do
+script de seed. Estas três telas fecham isso.
+
+- **Duas tabelas que o mock cita e a especificação não tinha.**
+  `store_pauses` ("motivo, autor, duração") e `holiday_overrides`, ambas na
+  migração `018`. Sem a primeira, pausar seria um campo sobrescrito sem
+  história: ninguém saberia quem pausou nem por quê, e o aviso "acima de 2 h
+  por dia a loja perde o selo" não teria como ser medido. Sem a segunda,
+  feriado seria editar o horário semanal na mão — e lembrar de desfazer na
+  quinta seguinte.
+- **Pausar não cancela nada, e o código prova isso.** O endpoint mexe em
+  `restaurants.is_open`/`pause_until` e em mais nada; nenhum pedido muda de
+  status. A tela mostra ao lado quantos pedidos estão em andamento e diz que
+  todos continuam, que é exatamente o que a pessoa quer saber antes de
+  apertar.
+- **O custo da pausa é o da PRÓPRIA loja, nesta faixa de horário.** Média das
+  últimas quatro semanas na mesma hora do dia: uma média do dia inteiro diria
+  que pausar às 20h custa o mesmo que às 15h, que é justamente a decisão
+  errada. E quando não há histórico nessa faixa, a tela diz isso em vez de
+  mostrar "≈ 0" — que seria lido como "pausar não custa nada".
+- **Pausa curta não fecha a loja; "fechar por hoje" fecha.** São estados
+  diferentes: pausa mantém `is_open = true` e bloqueia pelo carimbo
+  (`pause_until`), fechar por hoje zera `is_open` e carimba até a virada do
+  dia. A segunda parte é o que impede o job de horário de reabrir a loja no
+  minuto seguinte — e o teste cobre exatamente isso.
+- **A pausa passou a esconder a loja de verdade.** `restaurants/list.php` e
+  `search_products.php` filtravam só por `is_open`: a loja pausada continuava
+  na lista de "abertos agora" e o cliente só descobria no checkout, com o
+  pedido montado. Agora saem da lista, como o mock diz.
+- **Voltar não é abrir.** "Voltar a receber pedidos" apaga a pausa e chama
+  `apply_business_hours()`: quem decide se a loja está aberta continua sendo
+  o horário. Reabrir na marra às 3h da manhã porque alguém apertou um botão
+  seria aceitar pedido que ninguém vai preparar.
+- **O tempo de preparo saiu do front e virou dado da loja.** A previsão de
+  entrega do app do cliente era uma janela fixa de 25–45 min escrita no
+  `OrderTracking.svelte`, que ninguém na loja podia corrigir. Agora é
+  `restaurants.prep_minutes` + uma margem de viagem, e o "aumentar sozinho
+  quando a fila passar de 8 pedidos" é calculado na LEITURA
+  (`lib/store.php`), nunca gravado por cima do valor combinado — se fosse
+  gravado, a fila esvaziaria e o número normal da loja teria sumido.
+- **Esgotar tem rota própria.** É a ação mais frequente do dia e a única que
+  não passa por rascunho; mandá-la pelo mesmo endpoint de edição faria um
+  toque na lista carregar o risco de reenviar preço e descrição junto. O
+  carimbo `sold_out_at` é o que permite dizer "esgotada hoje" em vez de
+  "esgotada, sem saber desde quando".
+- **Variações são substituídas em bloco.** A tela manda a lista inteira como
+  ficou, e o endpoint apaga e reinsere dentro de uma transação. Casar uma a
+  uma exigiria ids estáveis numa tela onde a pessoa adiciona e remove linhas
+  livremente; e `order_items.variants_snapshot` guarda o que foi pedido, então
+  apagar uma variação não reescreve pedido nenhum do passado.
+- **Abrir e fechar é tarefa do `pg_cron`, não do atendente.**
+  `apply_business_hours()` roda a cada minuto: apaga pausa vencida e liga ou
+  desliga `is_open` pelo horário do dia, tratando turno que atravessa a
+  meia-noite (o de sexta 18:00–01:00 ainda é o turno de sexta à 00:30 de
+  sábado) e feriado como exceção que manda no dia inteiro. Salvar horário ou
+  cadastrar feriado chama a função na hora, senão a tela mostraria um estado
+  que já mudou.
+- **O fuso é fixo em `America/Sao_Paulo`, e isso está escrito na migração.**
+  `business_hours.opens/closes` são `time` sem fuso e não há coluna de fuso
+  por loja na especificação; comparar com `now()` cru (UTC) abriria toda loja
+  três horas cedo. Uma loja fora desse fuso pede uma coluna nova — decisão de
+  produto, não de migração.
+- **O que o mock mostra e não foi construído, com o motivo:**
+  - *"Publicar invalida o cache do cardápio no edge"* — o purge do Cloudflare
+    precisa de token de API, que não existe configurado aqui; a resposta
+    devolve `edge_purged: false` em vez de fingir. O service worker do PWA já
+    busca cardápio pela rede primeiro (Fase 7.1), então o cliente online vê o
+    preço novo assim que publica.
+  - *Rascunho no servidor* ("alterações não publicadas") — vive no navegador:
+    guardar rascunho pediria coluna ou tabela de versão que a especificação
+    não tem, e o efeito prático é o mesmo, porque o cliente só vê o que foi
+    publicado. Fechar o painel sem publicar avisa antes de descartar.
+  - *Foto do item* — `menu_items.photo_key` existe, mas não há endpoint de
+    upload de imagem de cardápio (o único upload do projeto é o comprovante
+    de Pix). O painel diz isso no lugar de um seletor que não sobe nada.
+  - *"Nova categoria"* — categoria é texto em `menu_items`, não tabela; um
+    botão próprio criaria categoria fantasma, sem item dentro. A tela explica
+    que ela nasce ao publicar um item com o nome dela.
+  - *"Fechar 30 min mais tarde na sexta rendeu +11 pedidos"* — é comparação
+    contrafactual: exigiria histórico de MUDANÇA de horário, que ninguém
+    guarda. Fica o pico real, que é medido.
+- **Validado com banco e navegador reais.** `tests/smoke_store.sh` cobre
+  pausa sem motivo barrada, pausa de 45 min recusada, loja pausada sumindo da
+  lista e barrando o checkout, "fechar por hoje" resistindo ao job, tempo de
+  preparo chegando ao cliente, esgotar/voltar com carimbo, item de outra loja
+  recusado (404), publicação com variações substituídas em bloco, horário
+  aplicado a cinco dias numa transação, último pedido depois do fechamento
+  recusado, turno que vira a madrugada aceito, o job abrindo a loja pelo
+  horário, feriado de hoje fechando e sua remoção reabrindo, e os 403 de quem
+  não é a loja. No Playwright: a pausa de 30 min com motivo, o sumiço da loja
+  da lista de abertos, o preparo indo de 30 a 40 min em dois cliques,
+  "Esgotada hoje" na linha, o rascunho marcado em vermelho e publicado, um
+  item novo com variação, o horário de seg a sex salvo de uma vez e o feriado
+  virando "fechada" no cabeçalho.
+
 ## Sem entregador disponível (Fase 15.1) — decisões de implementação
 
 "O momento que mais gera ticket e ninguém desenha: em vez de 'aguarde', três
@@ -1576,7 +1708,7 @@ offline."
   R$ 85,90 em espécie e R$ 7,50 a receber, código de baixa gerado e, do lado
   da loja, a confirmação com valor divergente abrindo ocorrência.
 
-## Painel da loja (`web/painel.html`) — Fase 7.3 e 11.1
+## Painel da loja (`web/painel.html`) — Fase 7.3 e 11.1 a 11.4
 
 O tablet do balcão. Até aqui `restaurants/approve_pix.php` existia e passava
 no smoke test, mas não tinha tela nenhuma: na prática, um pedido em Pix
@@ -1661,9 +1793,9 @@ esse buraco e junta o KDS, que é a outra metade do mesmo trabalho.
 ```bash
 docker compose up -d
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
-bash db/migrate.sh up           # aplica as 17, em ordem
+bash db/migrate.sh up           # aplica as 18, em ordem
 bash db/migrate.sh down 3       # reverte as 3 últimas
-bash db/migrate.sh down 17      # reverte tudo
+bash db/migrate.sh down 18      # reverte tudo
 
 cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN se precisar
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
@@ -1679,6 +1811,7 @@ JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_courier.sh    # ent
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_support.sh    # chat do pedido e cupons (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_admin.sh      # painel da plataforma (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_dispatch.sh   # pedido sem entregador: turbo, retirada, auto-cancel (semeia sozinho)
+JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_store.sh      # loja operando a si mesma: pausa, cardápio, horário (semeia sozinho)
 
 # O único processo de fundo do projeto (tela 15.1). Em produção é uma linha
 # no cron do cPanel, a cada minuto; localmente, roda à mão quando quiser ver
@@ -1697,13 +1830,13 @@ Os smoke tests semeiam dados próprios a cada execução, mas contam com um
 banco recém-migrado: rodar a suíte várias vezes no mesmo banco acumula
 lojas de teste e faz as asserções de contagem (ex.: "filtro de categoria
 trouxe 1 loja") falharem por dado velho, não por regressão. `bash
-db/migrate.sh down 17 && bash db/migrate.sh up` devolve o banco ao zero.
+db/migrate.sh down 18 && bash db/migrate.sh up` devolve o banco ao zero.
 
 `MERCADOPAGO_MODE=fake` é o padrão quando `MERCADOPAGO_ACCESS_TOKEN` não
 está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
 de conta sandbox pra rodar nada disto localmente.
 
-As dezessete migrações foram validadas de ponta a ponta (`up` completo, `down`
+As dezoito migrações foram validadas de ponta a ponta (`up` completo, `down`
 completo em ordem reversa, `up` de novo) contra um PostgreSQL 16 real com
 `pg_cron` instalado, incluindo um teste funcional de `advance_order()`
 confirmando que transições legais avançam o pedido e transições ilegais
@@ -1842,8 +1975,7 @@ checando `boundingBox()` via Playwright, não só lendo o código.
    conciliação de maquininha e o netting
    semanal (9.6 e 9.7), as telas de configuração da Fase 10 (10.4 formas de
    pagamento da loja, 10.5 políticas do admin, 10.6 devolução de maquininha),
-   o resto do app do restaurante (11.2 a 11.4: pausar loja, cardápio,
-   horário), a exportação contábil da 12.3, a ocorrência de entrega e o
+   a exportação contábil da 12.3, a ocorrência de entrega e o
    reembolso do admin (13.3 e 13.4), o resto do suporte (14.1 central de
    ajuda, 14.3 mapa, 14.4 agendamento) e o que falta da Fase 15 (rodadas,
    raio crescente e `dispatch_attempts`, a aprovação de entregador da 15.2 e
