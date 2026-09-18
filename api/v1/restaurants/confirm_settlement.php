@@ -78,6 +78,22 @@ try {
         'id' => $intent['id'],
     ]);
 
+    if (!$matches) {
+        // Ocorrência precisa existir em algum lugar pra alguém decidir: sem
+        // isso, "abre ocorrência" seria só uma palavra na tela. `disputes`
+        // já tem o tipo certo desde a migração 008, e o valor gravado é a
+        // DIFERENÇA -- é ela que está em disputa, não o total.
+        $pdo->prepare(
+            "INSERT INTO disputes (order_id, courier_id, restaurant_id, kind, risk, amount)
+             VALUES (NULL, :courier_id, :restaurant_id, 'cash_unsettled', :risk, :amount)"
+        )->execute([
+            'courier_id' => $intent['courier_id'],
+            'restaurant_id' => $restaurantId,
+            'risk' => abs($declared - $counted) >= 50 ? 'high' : 'medium',
+            'amount' => round(abs($declared - $counted), 2),
+        ]);
+    }
+
     if ($matches) {
         ledger_add(
             $pdo,

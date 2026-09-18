@@ -1,7 +1,7 @@
 name: ci
 
 # ADR-002 (Especificacao FUUDelivery, Parte I): migracoes versionadas rodam
-# no CI, nunca no cPanel. Este workflow aplica as quinze migracoes do zero,
+# no CI, nunca no cPanel. Este workflow aplica as dezesseis migracoes do zero,
 # reverte tudo e aplica de novo contra um PostgreSQL 16 real com pg_cron, e
 # depois roda o smoke test de cada modulo PHP sobre esse banco migrado.
 
@@ -49,18 +49,18 @@ jobs:
             sleep 2
           done
 
-      - name: Aplicar as 15 migracoes (up)
+      - name: Aplicar as 16 migracoes (up)
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
           bash db/migrate.sh up
 
-      - name: Reverter tudo e aplicar de novo (down 15, up) -- prova de que o round-trip fecha
+      - name: Reverter tudo e aplicar de novo (down 16, up) -- prova de que o round-trip fecha
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
         run: |
-          bash db/migrate.sh down 15
+          bash db/migrate.sh down 16
           bash db/migrate.sh up
 
       - name: Conferir que as tabelas do esquema existem
@@ -153,6 +153,13 @@ jobs:
           JWT_SECRET: ci-test-secret
           MERCADOPAGO_MODE: fake
         run: bash tests/smoke_support.sh
+
+      - name: Smoke test -- painel da plataforma (Fase 12 + política da 10.5)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_admin.sh
 
       - name: Instalar Node 22
         uses: actions/setup-node@v4

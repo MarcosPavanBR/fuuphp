@@ -81,6 +81,16 @@ api/v1/restaurants/         catálogo, descoberta (público, exceto orders.php
   confirm_settlement.php        POST — a loja conta, digita o código e confirma;
                                  os dois lançamentos nascem na mesma transação,
                                  divergência abre ocorrência e não lança nada
+api/v1/admin/               painel da plataforma (Fase 12), role 'admin'
+  guard.php                     require_admin(): a porta única do painel
+  restaurants.php               GET fila de análise / POST aprova ou recusa
+                                 (aprovar liga a trava de só-online por N dias)
+  disputes.php                  GET fila por risco e a galeria antifraude /
+                                 POST resolve com contrapartida no livro
+  reports.php                   GET ?days= — GMV, mix de pagamento, custo de
+                                 entrega por pedido, perda por fraude
+  policy.php                    GET política atual + histórico / POST publica
+                                 uma VERSÃO NOVA (nunca edita a anterior)
 api/v1/couriers/            app do entregador (Fase 8 e 9), role 'courier'
   me.php                        GET  — turno, saldo em espécie, teto da política
                                  e a corrida em andamento, numa chamada só
@@ -224,6 +234,9 @@ tests/
                                  de apagar endereço em uso) e cartões salvos
                                  (mp_customer_id reaproveitado entre
                                  cartões, troca de padrão, remoção)
+  smoke_admin.sh                painel da plataforma: aprovação com trava de
+                                 só-online, ocorrências com contrapartida no
+                                 livro, relatórios e política versionada
   smoke_support.sh              chat de três pontas (quem entra, o fechamento
                                  2 h depois da entrega) e cupom: mínimo,
                                  orçamento e um uso por CPF
@@ -275,6 +288,8 @@ db/
                                           das 42 tabelas originais, sem
                                           coluna de nota agregada em
                                           restaurants, ver seção própria)
+    016_admin.up.sql / .down.sql          disputes sem pedido obrigatório,
+                                           restaurants.rejected_at (tela 12.1)
     015_delivery_proof.up.sql / .down.sql orders.delivery_code + delivery_proofs
     014_cancellation.up.sql / .down.sql   platform_policies.cancel_fee (tela 13.1)
     013_signup_profile.up.sql / .down.sql users.birth_date (opcional da tela 10.3)
@@ -661,7 +676,7 @@ puro: CRUD de endereços completo e cartão salvo via Mercado Pago.
   (confirmado por query direta no banco, não só pela resposta da API),
   troca de padrão e remoção.
 
-## Front-end (`web/`) — Fases 1 a 6, 7.1, 8, 9, 10, 13 e 14.2, decisões
+## Front-end (`web/`) — Fases 1 a 6, 7.1, 8, 9, 10, 12, 13 e 14.2, decisões
 
 Svelte 5 + Vite, Bootstrap 5, Bootstrap Icons, `sweetalert` (não
 `sweetalert2` — o pacote `sweetalert` na versão 2.x do npm *é* a
@@ -671,9 +686,10 @@ pedidos, perfil), Fase 3 (loja, item, carrinho), Fase 4 (pagamento), Fase 5
 (pós-pedido), Fase 6 (conta, endereços, cartões, configurações) e Fase 10.1
 a 10.3 (login e cadastro) e Fase 13.1/13.2 (cancelar e recusar) estão
 portadas, mais o PWA com modo offline (7.1), o chat do pedido (14.2), o
-painel da loja (Fase 7.3, 9.3 e 11.1, em `painel.html`) e o app do entregador
-(Fase 8 e 9, em `entregador.html`); todos têm seção própria adiante. As
-outras fases ainda não têm componente.
+painel da loja (Fase 7.3, 9.3 e 11.1, em `painel.html`), o app do entregador
+(Fase 8 e 9, em `entregador.html`) e o painel da plataforma (Fase 12 e tela
+10.5, em `admin.html`); todos têm seção própria adiante. As outras fases
+ainda não têm componente.
 
 ```
 web/
@@ -746,6 +762,12 @@ web/
                                          fila de Pix fixa no canto
           RejectDialog.svelte           13.2 — recusar mostrando o custo real
           CashDesk.svelte               9.3 — conferir e confirmar a baixa de espécie
+        admin/                        painel da plataforma (entrada admin.html)
+          AdminLogin.svelte             login por OTP (admin é pessoa, não aparelho)
+          StoreQueue.svelte             12.1 — aprovar/recusar cadastro de loja
+          DisputeQueue.svelte           12.2 — ocorrências e galeria antifraude
+          ReportsScreen.svelte          12.3 — os números que mudam decisão
+          PolicyScreen.svelte           10.5 — política versionada da plataforma
         courier/                      app do entregador (entrada entregador.html)
           CourierLogin.svelte           10.7 — CPF + código, 2FA por aparelho
           CourierHome.svelte            8.1 — turno, saldo em espécie, teto
@@ -761,6 +783,8 @@ web/
                                  Cozinha/Visão geral/Caixa, atualização periódica
     Courier.svelte              raiz do app do entregador: login, corrida em
                                  andamento, abas Corridas/Ganhos
+    Admin.svelte                raiz do painel da plataforma: login por OTP e
+                                 abas Lojas/Ocorrências/Relatórios/Políticas
 ```
 
 - **`toastr` sem jQuery.** O pacote npm `toastr` declara "jQuery is
@@ -1188,6 +1212,70 @@ em lugar nenhum além da tabela `refunds`, vazia desde a migração `005`.
   "Cancelado"; a loja recusa pelo KDS com o custo na tela (estorno,
   entregador, taxa de recusa real). Zero erros de console.
 
+## Painel da plataforma (Fase 12 + tela 10.5) — decisões de implementação
+
+O quarto público do projeto, no quarto bundle (`admin.html`): quem opera o
+negócio. Fecha três coisas que estavam em aberto -- loja nova não tinha como
+ser aprovada, ocorrência de caixa não aparecia pra ninguém, e política só
+mudava por `INSERT` na mão.
+
+- **Admin não tem conta de parceiro: entra pelo mesmo OTP do cliente.** Loja e
+  entregador logam por aparelho (CNPJ+senha, CPF+código, 2FA por device);
+  admin é uma pessoa com conta, e o que muda é o papel no token. O front
+  confere o papel só pra não deixar alguém preso numa tela que daria 403 em
+  tudo -- quem barra de verdade é `require_admin()` a cada chamada.
+- **Aprovar loja não é carimbo: é a trava de só-online sendo ligada.** "Loja
+  nova nasce só-online por 30 dias -- a liberação de dinheiro e maquininha é
+  consequência do histórico, não de negociação." Aprovar grava
+  `online_only_until` com o prazo da política E limita
+  `restaurant_payment_settings.methods` aos métodos online. É o que o
+  checkout vai ler depois; não é conselho na tela.
+- **Recusar exige motivo**, porque a loja precisa saber o que corrigir --
+  `rejected_at`/`rejection_reason` entraram na migração `016`: antes, uma
+  loja recusada era indistinguível de uma que ninguém tinha olhado ainda.
+- **O alerta de sócio virou o sinal que este backend consegue dar de
+  verdade:** CNPJ de mesma raiz (8 primeiros dígitos) já cadastrado. O mock
+  fala em "sócio com histórico", mas não há base de sócios aqui, e um alerta
+  de histórico feito a partir de nada seria pior que nenhum alerta.
+- **Ocorrência agora existe como registro.** A divergência de caixa (tela 9.3)
+  marcava a intenção como `disputed` e parava aí -- ninguém via. Agora abre
+  uma linha em `disputes`, e o valor gravado é a DIFERENÇA, não o total: é
+  ela que está em disputa.
+- **`disputes.order_id` deixou de ser obrigatório** (migração `016`). Uma
+  divergência de fechamento é entre um entregador e uma loja num conjunto de
+  corridas, não num pedido -- exigir um pedido obrigaria a escolher um no
+  chute, e número escolhido no chute é pior que campo vazio. Entraram
+  `courier_id` e `restaurant_id`, com CHECK exigindo pelo menos um sujeito.
+- **Resolver ocorrência é contrapartida no livro, nunca edição de saldo.** A
+  tela pergunta de qual bolso sai o valor, e "ninguém — sem cobrança" é opção
+  explícita, não o padrão escondido. Sem valor, resolver só fecha a
+  ocorrência.
+- **Política é versionada, não editada.** Salvar faz `INSERT` de uma versão
+  nova em `platform_policies` (a PK é a versão), copiando o que não mudou da
+  anterior. A versão velha continua existindo, e pedido já feito segue a
+  política que ele congelou em `policy_snapshot`. O teste prova as duas
+  coisas: a versão nova nasce e a anterior continua com os valores antigos.
+- **Os relatórios mostram os quatro números que o mock escolheu**, e a
+  escolha é o conteúdo: GMV, quanto do GMV depende de gente conferindo
+  (Pix manual + dinheiro + maquininha), custo de entrega por pedido e perda
+  por fraude como percentual. Onde o dado não sustenta o número, aparece "—".
+- **Honestidade sobre os saldos:** só metade do livro existe. Baixa de
+  espécie e ocorrência são lançadas; o crédito por pedido (comissão + frete
+  que a loja devolve) é o netting semanal da tela 9.7, que não foi
+  construído. A tela diz isso em vez de chamar um saldo pela metade de "a
+  cobrar na terça" -- foi um achado de olhar o número renderizado, que
+  aparecia negativo.
+- **Exportação CSV e fechamento contábil (12.3) não foram construídos**, nem
+  a aprovação de entregador (15.2) ou o painel de campanhas (15.3).
+- **Validado com Postgres e navegador reais.** `tests/smoke_admin.sh` cobre o
+  403 pra quem não é admin, a fila de análise, recusa sem motivo barrada,
+  aprovação ligando só-online (conferido em
+  `restaurant_payment_settings.methods`), decisão dupla barrada, fila de
+  ocorrências por risco, a contrapartida caindo no livro com o valor certo,
+  resolução dupla barrada, os relatórios e a política versionada com a
+  anterior intacta. No Playwright: login por OTP, aprovar, resolver
+  ocorrência cobrando do entregador e publicar uma versão nova de política.
+
 ## PWA e modo offline (Fase 7.1) — decisões de implementação
 
 O app do cliente instala e abre sem rede. Até aqui o rodapé do perfil dizia
@@ -1444,9 +1532,9 @@ esse buraco e junta o KDS, que é a outra metade do mesmo trabalho.
 ```bash
 docker compose up -d
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
-bash db/migrate.sh up           # aplica as 15, em ordem
+bash db/migrate.sh up           # aplica as 16, em ordem
 bash db/migrate.sh down 3       # reverte as 3 últimas
-bash db/migrate.sh down 15      # reverte tudo
+bash db/migrate.sh down 16      # reverte tudo
 
 cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN se precisar
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
@@ -1460,19 +1548,21 @@ JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_panel.sh      # pai
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_cancel.sh     # cancelamento, recusa e reembolso (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_courier.sh    # entregador e baixa de espécie (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_support.sh    # chat do pedido e cupons (semeia sozinho)
+JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_admin.sh      # painel da plataforma (semeia sozinho)
 
 php -S localhost:8080                  # API, num terminal
 cd web && npm install && npm run dev   # front-end Svelte, noutro terminal
                                        #   app do cliente:  http://localhost:5173
                                        #   painel da loja:  http://localhost:5173/painel.html
                                        #   entregador:      http://localhost:5173/entregador.html
+                                       #   plataforma:      http://localhost:5173/admin.html
 ```
 
 Os smoke tests semeiam dados próprios a cada execução, mas contam com um
 banco recém-migrado: rodar a suíte várias vezes no mesmo banco acumula
 lojas de teste e faz as asserções de contagem (ex.: "filtro de categoria
 trouxe 1 loja") falharem por dado velho, não por regressão. `bash
-db/migrate.sh down 15 && bash db/migrate.sh up` devolve o banco ao zero.
+db/migrate.sh down 16 && bash db/migrate.sh up` devolve o banco ao zero.
 
 `MERCADOPAGO_MODE=fake` é o padrão quando `MERCADOPAGO_ACCESS_TOKEN` não
 está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
@@ -1577,6 +1667,11 @@ depois da entrega com histórico preservado, e o cupom barrado por CPF
 ausente, loja errada, valor mínimo, repetição e orçamento.
 `tests/smoke_support.sh` roda tudo isso a cada push.
 
+E o painel da plataforma: aprovação ligando a trava de só-online, recusa
+exigindo motivo, ocorrência virando contrapartida no livro com o valor certo,
+e a política publicada como versão nova com a anterior intacta.
+`tests/smoke_admin.sh` roda tudo isso a cada push.
+
 O front-end validou o mesmo jeito, não só compilado, nas seis fases com
 Playwright + Chromium numa janela de 430px: Fase 1 (fade do splash,
 seleção de estado com destaque, SweetAlert real antes da Geolocation API,
@@ -1605,16 +1700,18 @@ checando `boundingBox()` via Playwright, não só lendo o código.
 1. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
    para Svelte + Bootstrap — Fases 1 a 6 prontas, mais o painel da loja
    (7.3, 9.3 e 11.1), o app do entregador (8.1 a 8.7 e 9.1/9.2/9.4), o acesso
-   do cliente (10.1 a 10.3), o caminho do erro (13.1 e 13.2) e o chat do
-   pedido (14.2); faltam
+   do cliente (10.1 a 10.3), o caminho do erro (13.1 e 13.2), o chat do
+   pedido (14.2) e o painel da plataforma (12.1 a 12.3 e a política da 10.5);
+   faltam
    a fila de upload offline e o push (o resto de 7.1 e o 7.2 inteiro), a
    conciliação de maquininha e o netting
    semanal (9.6 e 9.7), as telas de configuração da Fase 10 (10.4 formas de
    pagamento da loja, 10.5 políticas do admin, 10.6 devolução de maquininha),
    o resto do app do restaurante (11.2 a 11.4: pausar loja, cardápio,
-   horário), painel da plataforma (12), a ocorrência de entrega e o reembolso
-   do admin (13.3 e 13.4), o resto do suporte (14.1 central de ajuda, 14.3
-   mapa, 14.4 agendamento) e o dispatch completo (15).
+   horário), a exportação contábil da 12.3, a ocorrência de entrega e o
+   reembolso do admin (13.3 e 13.4), o resto do suporte (14.1 central de
+   ajuda, 14.3 mapa, 14.4 agendamento) e o dispatch completo (15, incluindo
+   a aprovação de entregador da 15.2 e as campanhas da 15.3).
 2. **Cálculo de frete no servidor.** `orders/checkout.php` (e
    `orders/create.php`, desde antes) recebem `delivery_fee` no corpo da
    requisição em vez de calcular — é a única parte do dinheiro que ainda
