@@ -15,6 +15,7 @@
   import KdsBoard from './lib/screens/panel/KdsBoard.svelte';
   import RejectDialog from './lib/screens/panel/RejectDialog.svelte';
   import PanelOverview from './lib/screens/panel/PanelOverview.svelte';
+  import CashDesk from './lib/screens/panel/CashDesk.svelte';
 
   // Painel da loja (telas 7.3 e 11.1). Roda numa página própria
   // (painel.html), não dentro do app do cliente: são dois públicos e dois
@@ -25,6 +26,7 @@
   let kds = $state([]);
   let recent = $state([]);
   let stats = $state(null);
+  let settlements = $state([]);
   let selectedProof = $state(null);
   let rejecting = $state(null);
   let lastSync = $state(null);
@@ -55,15 +57,17 @@
       kds = kdsData.orders;
 
       if (withStats) {
-        const [statsData, recentData] = await Promise.all([
+        const [statsData, recentData, settleData] = await Promise.all([
           api.get('/restaurants/stats.php', { token }),
           api.get('/restaurants/orders.php', {
             token,
             query: { id: staffRestaurantId(), scope: 'recent' },
           }),
+          api.get('/restaurants/settlements.php', { token }),
         ]);
         stats = statsData.stats;
         recent = recentData.orders;
+        settlements = settleData.settlements;
       }
       online = true;
       lastSync = new Date();
@@ -131,6 +135,10 @@
         <button type="button" class:active={tab === 'overview'} onclick={() => (tab = 'overview')}>
           Visão geral
         </button>
+        <button type="button" class:active={tab === 'cash'} onclick={() => (tab = 'cash')}>
+          Caixa
+          {#if settlements.some((s) => s.state === 'open')}<span class="dot"></span>{/if}
+        </button>
       </nav>
 
       <div class="meta">
@@ -153,6 +161,8 @@
         onOpenProof={(p) => (selectedProof = p)}
         onReject={(o) => (rejecting = o)}
       />
+    {:else if tab === 'cash'}
+      <CashDesk {settlements} onDone={() => pull({ withStats: true })} />
     {:else}
       <div class="overview-layout">
         <aside class="side">
@@ -237,6 +247,15 @@
     font-size: 13px;
     font-weight: 700;
     color: var(--fuu-ink-3);
+  }
+  .dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--fuu-red);
+    margin-left: 5px;
+    vertical-align: middle;
   }
   .tabs button.active {
     background: var(--fuu-ink-1);

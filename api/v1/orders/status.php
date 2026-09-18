@@ -95,6 +95,12 @@ try {
     throw $e;
 }
 
+// Pedido pronto vira corrida oferecida (Fase 8). É o despacho mínimo do
+// lib/dispatch.php -- uma rodada, sem raio e sem surge, até a Fase 15 existir.
+if ($to === 'ready') {
+    ensure_offer($pdo, fetch_order($pdo, $orderId));
+}
+
 $response = ['order' => fetch_order($pdo, $orderId)];
 if ($plan !== null) {
     $response['refund_plan'] = $plan;

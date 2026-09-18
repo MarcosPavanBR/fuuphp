@@ -1,0 +1,183 @@
+<script>
+  import { api } from './lib/api.js';
+  import { toastr } from './lib/toastr.js';
+  import {
+    isCourierAuthenticated,
+    courierToken,
+    courierLogout,
+  } from './lib/courierSession.svelte.js';
+  import CourierLogin from './lib/screens/courier/CourierLogin.svelte';
+  import CourierHome from './lib/screens/courier/CourierHome.svelte';
+  import OfferList from './lib/screens/courier/OfferList.svelte';
+  import RideScreen from './lib/screens/courier/RideScreen.svelte';
+  import SettleScreen from './lib/screens/courier/SettleScreen.svelte';
+  import EarningsScreen from './lib/screens/courier/EarningsScreen.svelte';
+
+  // App do entregador (Fase 8 + 9), numa página própria: o terceiro público
+  // do projeto, no terceiro bundle. "Aplicativo separado, feito para ser
+  // usado com uma mão, no sol, de moto parada."
+  let logged = $state(isCourierAuthenticated());
+  let me = $state(null);
+  let offers = $state([]);
+  let tab = $state('home');
+  let settling = $state(false);
+
+  // Mesma decisão do painel da loja: polling, não SSE, porque `php -S`
+  // atende uma requisição por vez (ver README). 4 s porque corrida é
+  // disputada -- esperar mais é perder corrida pro outro.
+  const TICK_MS = 4000;
+
+  async function pull() {
+    try {
+      const data = await api.get('/couriers/me.php', { token: courierToken() });
+      me = data;
+      // Sem turno aberto não existe vitrine de corridas -- o servidor
+      // devolve 409 e a tela não deve tratar isso como falha.
+      if (data.shift && !data.current_order) {
+        const list = await api.get('/couriers/offers.php', { token: courierToken() });
+        offers = list.offers;
+      } else {
+        offers = [];
+      }
+    } catch {
+      // ciclo perdido não é evento: a tela segue com o último estado bom
+    }
+  }
+
+  $effect(() => {
+    if (!logged) return;
+    pull();
+    const t = setInterval(pull, TICK_MS);
+    return () => clearInterval(t);
+  });
+
+  function leave() {
+    courierLogout();
+    logged = false;
+    me = null;
+    offers = [];
+    toastr.info('Você saiu.');
+  }
+
+  let ride = $derived(me?.current_order ?? null);
+</script>
+
+{#if !logged}
+  <CourierLogin onLoggedIn={() => (logged = true)} />
+{:else}
+  <div class="app">
+    <header class="top">
+      <span class="brand fuu-display">FUU</span>
+      <span class="title">Entregador</span>
+      <button type="button" class="leave" onclick={leave} aria-label="Sair">
+        <i class="bi bi-box-arrow-right"></i>
+      </button>
+    </header>
+
+    <main>
+      {#if settling}
+        <SettleScreen {me} onDone={() => { settling = false; pull(); }} />
+      {:else if ride}
+        <RideScreen
+          order={ride}
+          onDone={() => {
+            tab = 'home';
+            pull();
+          }}
+        />
+      {:else if tab === 'home'}
+        <CourierHome {me} onRefresh={pull} onOpenSettle={() => (settling = true)} />
+        {#if me?.shift}
+          <OfferList {offers} onAccepted={() => pull()} />
+        {/if}
+      {:else}
+        <EarningsScreen />
+      {/if}
+    </main>
+
+    {#if !ride && !settling}
+      <nav class="tabs">
+        <button type="button" class:on={tab === 'home'} onclick={() => (tab = 'home')}>
+          <i class="bi bi-scooter"></i> Corridas
+        </button>
+        <button type="button" class:on={tab === 'earnings'} onclick={() => (tab = 'earnings')}>
+          <i class="bi bi-journal-text"></i> Ganhos
+        </button>
+      </nav>
+    {/if}
+  </div>
+{/if}
+
+<style>
+  .app {
+    max-width: 430px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--fuu-paper);
+  }
+  .top {
+    background: var(--fuu-white);
+    border-bottom: 1px solid var(--fuu-line-3);
+    padding: 12px 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .brand {
+    background: var(--fuu-red);
+    color: var(--fuu-white);
+    border-radius: 9px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .title {
+    font-weight: 800;
+    font-size: 15px;
+    color: var(--fuu-ink-1);
+  }
+  .leave {
+    margin-left: auto;
+    background: var(--fuu-line-5);
+    border: none;
+    border-radius: 10px;
+    width: 38px;
+    height: 38px;
+    color: var(--fuu-ink-3);
+    font-size: 17px;
+  }
+  main {
+    flex: 1;
+    overflow-y: auto;
+  }
+  .tabs {
+    display: flex;
+    background: var(--fuu-white);
+    border-top: 1px solid var(--fuu-line-3);
+    position: sticky;
+    bottom: 0;
+  }
+  .tabs button {
+    flex: 1;
+    background: none;
+    border: none;
+    padding: 12px 0 14px;
+    font-family: var(--fuu-font-body);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--fuu-ink-4);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    min-height: var(--fuu-tap-operator);
+  }
+  .tabs button i {
+    font-size: 19px;
+  }
+  .tabs button.on {
+    color: var(--fuu-red);
+  }
+</style>

@@ -76,6 +76,25 @@ api/v1/restaurants/         catálogo, descoberta (público, exceto orders.php
                                  (MIME real, private/no-store, só a dona dele)
   stats.php                     GET  — "visão geral de hoje": faturado, pedidos,
                                  Pix validados e recusados, calculados no banco
+  settlements.php               GET  — baixas de espécie esperando no caixa e
+                                 as do dia (tela 9.3); nunca devolve o código
+  confirm_settlement.php        POST — a loja conta, digita o código e confirma;
+                                 os dois lançamentos nascem na mesma transação,
+                                 divergência abre ocorrência e não lança nada
+api/v1/couriers/            app do entregador (Fase 8 e 9), role 'courier'
+  me.php                        GET  — turno, saldo em espécie, teto da política
+                                 e a corrida em andamento, numa chamada só
+  shift.php                     POST — abre/fecha turno (um aberto por vez)
+  offers.php                    GET  — corridas abertas da praça dele; some a
+                                 corrida em dinheiro se o caixa está bloqueado
+  accept_offer.php              POST — aceite atômico (UPDATE condicional)
+  pickup.php                    POST — "cheguei"/"peguei" com GPS; devolve a
+                                 comanda e o troco calculado no servidor
+  deliver.php                   POST — entrega com prova (código ou foto),
+                                 lança espécie e frete no livro; idempotente
+  earnings.php                  GET  — o livro de lançamentos, não um resumo
+  settle_intent.php             POST — intenção de baixa: código de 6 dígitos
+                                 (só o hash fica), valor congelado, 10 min
 api/v1/addresses/           endereços do cliente autenticado (Fase 6.1)
   create.php                   POST — cadastra endereço
   list.php                     GET  — lista os do usuário logado
@@ -168,6 +187,8 @@ lib/                          código compartilhado entre módulos
                                    replay, pros 5 métodos de pagamento
   refunds.php                   rotas de estorno por método, quem paga por
                                  causa e gravação idempotente (Fase 13)
+  dispatch.php                  despacho mínimo (uma oferta por pedido pronto),
+                                 saldos do entregador e escrita no livro
   pix.php                         gera o Pix "copia e cola" (BR Code/EMV) —
                                    CRC16 conferido contra o vetor de teste
                                    padrão do algoritmo antes de entrar em uso
@@ -200,6 +221,9 @@ tests/
                                  de apagar endereço em uso) e cartões salvos
                                  (mp_customer_id reaproveitado entre
                                  cartões, troca de padrão, remoção)
+  smoke_courier.sh              entregador e caixa: turno, aceite disputado,
+                                 troco do servidor, entrega com prova, livro
+                                 de lançamentos e baixa de espécie na loja
   smoke_cancel.sh               caminho do erro: cancelamento com e sem taxa,
                                  recusa da loja, reembolso por método (canal,
                                  valor e quem paga) e isolamento por dono
@@ -245,6 +269,7 @@ db/
                                           das 42 tabelas originais, sem
                                           coluna de nota agregada em
                                           restaurants, ver seção própria)
+    015_delivery_proof.up.sql / .down.sql orders.delivery_code + delivery_proofs
     014_cancellation.up.sql / .down.sql   platform_policies.cancel_fee (tela 13.1)
     013_signup_profile.up.sql / .down.sql users.birth_date (opcional da tela 10.3)
     012_saved_cards.up.sql / .down.sql   saved_cards (Fase 6.2) +
@@ -630,7 +655,7 @@ puro: CRUD de endereços completo e cartão salvo via Mercado Pago.
   (confirmado por query direta no banco, não só pela resposta da API),
   troca de padrão e remoção.
 
-## Front-end (`web/`) — Fases 1 a 6, 10 e 13, decisões de implementação
+## Front-end (`web/`) — Fases 1 a 6, 8, 9, 10 e 13, decisões de implementação
 
 Svelte 5 + Vite, Bootstrap 5, Bootstrap Icons, `sweetalert` (não
 `sweetalert2` — o pacote `sweetalert` na versão 2.x do npm *é* a
@@ -639,8 +664,9 @@ seleção de estado, cidade+bairro), Fase 2 (home, busca, fidelidade,
 pedidos, perfil), Fase 3 (loja, item, carrinho), Fase 4 (pagamento), Fase 5
 (pós-pedido), Fase 6 (conta, endereços, cartões, configurações) e Fase 10.1
 a 10.3 (login e cadastro) e Fase 13.1/13.2 (cancelar e recusar) estão
-portadas, mais o painel da loja (Fase 7.3 e 11.1, em `painel.html`); as
-quatro têm seção própria adiante. As outras fases ainda não têm componente.
+portadas, mais o painel da loja (Fase 7.3, 9.3 e 11.1, em `painel.html`) e o
+app do entregador (Fase 8 e 9, em `entregador.html`); todos têm seção própria
+adiante. As outras fases ainda não têm componente.
 
 ```
 web/
@@ -704,12 +730,22 @@ web/
           KdsBoard.svelte               11.1 — três colunas, cronômetro por pedido,
                                          fila de Pix fixa no canto
           RejectDialog.svelte           13.2 — recusar mostrando o custo real
+          CashDesk.svelte               9.3 — conferir e confirmar a baixa de espécie
+        courier/                      app do entregador (entrada entregador.html)
+          CourierLogin.svelte           10.7 — CPF + código, 2FA por aparelho
+          CourierHome.svelte            8.1 — turno, saldo em espécie, teto
+          OfferList.svelte              8.2 — oferta com ganho, distância e troco
+          RideScreen.svelte             8.3 a 8.6 — coleta, entrega e prova
+          EarningsScreen.svelte         8.7 — livro de lançamentos
+          SettleScreen.svelte           9.1/9.2/9.4 — baixa de espécie
           PanelOverview.svelte          7.3 — visão geral de hoje + pedidos recentes
     App.svelte                  orquestra Fase 1 -> Fase 2 (abas, e Fase 6
                                  como pseudo-abas dentro do mesmo shell) ->
                                  Fase 3/4/5 (tela cheia por cima das abas)
     Panel.svelte                raiz do painel da loja: login, abas
-                                 Cozinha/Visão geral, atualização periódica
+                                 Cozinha/Visão geral/Caixa, atualização periódica
+    Courier.svelte              raiz do app do entregador: login, corrida em
+                                 andamento, abas Corridas/Ganhos
 ```
 
 - **`toastr` sem jQuery.** O pacote npm `toastr` declara "jQuery is
@@ -1137,6 +1173,82 @@ em lugar nenhum além da tabela `refunds`, vazia desde a migração `005`.
   "Cancelado"; a loja recusa pelo KDS com o custo na tela (estorno,
   entregador, taxa de recusa real). Zero erros de console.
 
+## App do entregador e caixa (Fase 8 e 9) — decisões de implementação
+
+O terceiro público do projeto, no terceiro bundle (`entregador.html`).
+"Aplicativo separado, feito para ser usado com uma mão, no sol, de moto
+parada: alvos grandes, números enormes. É ele que fecha o dinheiro do pedido
+offline."
+
+- **O dinheiro anda no livro, não num campo de saldo.** Entregar um pedido em
+  dinheiro gera DOIS lançamentos em `ledger_entries` na mesma transação da
+  entrega: `courier_cash += total` (o bruto que ficou na mão dele) e
+  `courier_payable += frete` (o que a plataforma deve). Saldo é `SUM()`, e
+  `app_rw` não tem `UPDATE`/`DELETE` nessa tabela (migração `006`) -- correção
+  é contrapartida, nunca edição, e isso está no banco, não na boa vontade de
+  quem escreve PHP.
+- **O entregador devolve o BRUTO.** É o que a tela 9.3 diz com todas as
+  letras: "sem descontar o frete dele — quem paga o frete somos nós". Por isso
+  `courier_cash` recebe o total do pedido, e o frete corre por fora, em
+  `courier_payable`.
+- **Aceite de corrida é um `UPDATE` condicional, não um lock.** A própria
+  migração `007` já sugeria em comentário:
+  `UPDATE offers SET courier_id=:c WHERE id=:o AND courier_id IS NULL
+  RETURNING id` -- zero linhas significa que o outro chegou primeiro. Aceitar
+  de novo a MESMA corrida que já é sua devolve 200 com `already_mine`, porque
+  retry de rede não é erro.
+- **O timer de 15 s é de DECISÃO, não de validade.** No mock ele conta na tela
+  do entregador; num app que busca corrida por polling, 15 s de validade
+  significaria oferta sempre vencida. O servidor segura a oferta por 5 min, a
+  tela conta 15 s e tira a corrida DESTA tela quando acaba -- ela continua
+  valendo pros outros, que é o certo: ninguém perde corrida porque este
+  entregador ficou olhando.
+- **O troco é conta do servidor.** "É o erro mais comum do delivery em
+  dinheiro", então `couriers/pickup.php` devolve `change_due` pronto
+  (`change_for - total`, com o total que é coluna gerada) e a tela só mostra,
+  em corpo grande.
+- **Prova de entrega é obrigatória** (migração `015`): código de 4 dígitos que
+  o cliente vê no app, ou foto com GPS. Sem uma das duas, `deliver.php`
+  devolve 422 -- é o que sustenta disputa depois. O código nasce com o pedido
+  (DEFAULT aleatório por linha) porque o cliente precisa vê-lo antes de o
+  entregador chegar; não é segredo criptográfico, é prova de presença.
+- **A baixa de espécie guarda só o hash do código**, como o OTP do módulo
+  identity, e o valor fica congelado na intenção. `one_open_intent` (migração
+  `006`) garante uma baixa em voo por entregador -- duas seria o caminho mais
+  curto pra pagar duas vezes a mesma espécie.
+- **Divergência não vira lançamento.** Se a loja conta valor diferente do
+  declarado, a intenção fica `disputed` e NADA é lançado no livro. Não é
+  rigor por rigor: como o livro é append-only, um número errado não teria
+  desfazimento -- "abrir ocorrência" é justamente não registrar um valor que
+  ninguém sabe se é o certo.
+- **Despacho mínimo, e assumido como tal.** `lib/dispatch.php` cria UMA oferta
+  quando o pedido fica pronto, com o frete do pedido e bônus zero. A Fase 15
+  desenha rodadas, raio crescente, surge e `dispatch_attempts` -- nada disso
+  existe aqui, e inventar bônus seria prometer dinheiro que ninguém decidiu
+  pagar. A tabela `offers` já é a da especificação, então a Fase 15 substitui
+  a função sem migrar nada.
+- **O que o mock mostra e o app não tem:** navegação com áudio e o endereço
+  escrito da loja (o esquema só tem `lat`/`lng` de restaurante -- logradouro
+  só existe em `addresses`, que é do cliente); telefone da loja (não há
+  coluna); upload da foto de entrega (o endpoint aceita `photo_storage_key`,
+  mas a tela de câmera não foi construída); posição do entregador enviada a
+  cada 15 s; e a Fase 9.6 (conciliação de maquininha por NSU). Tudo
+  registrado, nada fingido na tela.
+- **A loja ganhou a aba "Caixa" no painel** (tela 9.3): conta o dinheiro,
+  digita o código, confirma. A ordem dos campos é a ordem do trabalho real --
+  valor contado primeiro, código depois, e o valor declarado aparece ao lado
+  mas nunca preenchido no campo, senão ninguém conta nada e só confirma.
+- **Validado com Postgres e navegador reais.** `tests/smoke_courier.sh` cobre
+  turno (inclusive o 409 de abrir dois), a oferta nascendo do `ready`, dois
+  entregadores disputando a mesma corrida, o retry do próprio aceite, o troco
+  do servidor, entrega barrada sem prova e com código errado, os dois
+  lançamentos no livro, o replay idempotente e a baixa de caixa com
+  divergência e com acerto. No Playwright, 430px com geolocalização
+  concedida: login por CPF+código, abrir turno, aceitar corrida, "cheguei",
+  troco R$ 14,10 calculado no servidor, entrega com código, saldo indo pra
+  R$ 85,90 em espécie e R$ 7,50 a receber, código de baixa gerado e, do lado
+  da loja, a confirmação com valor divergente abrindo ocorrência.
+
 ## Painel da loja (`web/painel.html`) — Fase 7.3 e 11.1
 
 O tablet do balcão. Até aqui `restaurants/approve_pix.php` existia e passava
@@ -1222,9 +1334,9 @@ esse buraco e junta o KDS, que é a outra metade do mesmo trabalho.
 ```bash
 docker compose up -d
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
-bash db/migrate.sh up           # aplica as 14, em ordem
+bash db/migrate.sh up           # aplica as 15, em ordem
 bash db/migrate.sh down 3       # reverte as 3 últimas
-bash db/migrate.sh down 14      # reverte tudo
+bash db/migrate.sh down 15      # reverte tudo
 
 cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN se precisar
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
@@ -1236,18 +1348,20 @@ JWT_SECRET=dev-secret bash tests/smoke_tracking.sh    # timeline, SSE, avaliaç�
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_account.sh    # endereços e cartões (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_panel.sh      # painel da loja: fila de Pix e KDS (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_cancel.sh     # cancelamento, recusa e reembolso (semeia sozinho)
+JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_courier.sh    # entregador e baixa de espécie (semeia sozinho)
 
 php -S localhost:8080                  # API, num terminal
 cd web && npm install && npm run dev   # front-end Svelte, noutro terminal
                                        #   app do cliente:  http://localhost:5173
                                        #   painel da loja:  http://localhost:5173/painel.html
+                                       #   entregador:      http://localhost:5173/entregador.html
 ```
 
 Os smoke tests semeiam dados próprios a cada execução, mas contam com um
 banco recém-migrado: rodar a suíte várias vezes no mesmo banco acumula
 lojas de teste e faz as asserções de contagem (ex.: "filtro de categoria
 trouxe 1 loja") falharem por dado velho, não por regressão. `bash
-db/migrate.sh down 14 && bash db/migrate.sh up` devolve o banco ao zero.
+db/migrate.sh down 15 && bash db/migrate.sh up` devolve o banco ao zero.
 
 `MERCADOPAGO_MODE=fake` é o padrão quando `MERCADOPAGO_ACCESS_TOKEN` não
 está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
@@ -1342,6 +1456,11 @@ recusa da loja sem custo pro cliente, o canal de estorno certo pra cada
 método, o pagamento virando `refunded` e reembolso que não duplica.
 `tests/smoke_cancel.sh` roda tudo isso a cada push.
 
+E o app do entregador com o caixa: turno, corrida disputada por dois
+entregadores, troco calculado no servidor, entrega barrada sem prova, os dois
+lançamentos no livro e a baixa de espécie com divergência e com acerto.
+`tests/smoke_courier.sh` roda tudo isso a cada push.
+
 O front-end validou o mesmo jeito, não só compilado, nas seis fases com
 Playwright + Chromium numa janela de 430px: Fase 1 (fade do splash,
 seleção de estado com destaque, SweetAlert real antes da Geolocation API,
@@ -1369,14 +1488,14 @@ checando `boundingBox()` via Playwright, não só lendo o código.
 
 1. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
    para Svelte + Bootstrap — Fases 1 a 6 prontas, mais o painel da loja
-   (7.3 e 11.1), o acesso do cliente (10.1 a 10.3) e o caminho do erro do
-   cliente e da loja (13.1 e 13.2); faltam PWA/offline e push (7.1 e 7.2),
-   app do entregador (8), fechamento de caixa (9), as telas de configuração
-   da Fase 10 (10.4 formas de pagamento da loja, 10.5 políticas do admin,
-   10.6 devolução de maquininha), o resto do app do restaurante (11.2 a
-   11.4: pausar loja, cardápio, horário), painel da plataforma (12), a
-   ocorrência de entrega e o reembolso do admin (13.3 e 13.4), suporte (14)
-   e dispatch (15).
+   (7.3, 9.3 e 11.1), o app do entregador (8.1 a 8.7 e 9.1/9.2/9.4), o acesso
+   do cliente (10.1 a 10.3) e o caminho do erro (13.1 e 13.2); faltam
+   PWA/offline e push (7.1 e 7.2), a conciliação de maquininha e o netting
+   semanal (9.6 e 9.7), as telas de configuração da Fase 10 (10.4 formas de
+   pagamento da loja, 10.5 políticas do admin, 10.6 devolução de maquininha),
+   o resto do app do restaurante (11.2 a 11.4: pausar loja, cardápio,
+   horário), painel da plataforma (12), a ocorrência de entrega e o reembolso
+   do admin (13.3 e 13.4), suporte (14) e dispatch completo (15).
 2. **Cálculo de frete no servidor.** `orders/checkout.php` (e
    `orders/create.php`, desde antes) recebem `delivery_fee` no corpo da
    requisição em vez de calcular — é a única parte do dinheiro que ainda
