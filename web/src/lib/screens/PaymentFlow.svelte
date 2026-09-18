@@ -21,7 +21,7 @@
   // Igual a RestaurantPage/CartDrawer: cada tela carrega o que precisa. O
   // carrinho vem do mesmo módulo reativo que CartDrawer já usa (não é
   // prop-drilling vindo do App.svelte); a loja é carregada aqui mesmo.
-  let { restaurantId, location, onBack, onOrderReady } = $props();
+  let { restaurantId, location, couponCode = null, onBack, onOrderReady } = $props();
 
   let restaurant = $state(null);
   // `restaurantId` é prop fixa pro tempo de vida deste componente -- App.svelte
@@ -90,7 +90,15 @@
       if (order === null) {
         const checkoutData = await api.post('/orders/checkout.php', {
           auth: true,
-          body: { restaurant_id: restaurantId, address_id: addressId, payment_method: method, ...extra },
+          body: {
+            restaurant_id: restaurantId,
+            address_id: addressId,
+            payment_method: method,
+            // O desconto já está no carrinho; o código vai junto pra o
+            // checkout gravar o resgate e consumir o orçamento da campanha.
+            ...(couponCode ? { coupon_code: couponCode } : {}),
+            ...extra,
+          },
         });
         order = checkoutData.order;
       }

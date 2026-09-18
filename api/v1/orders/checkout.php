@@ -98,6 +98,22 @@ if ($tip < 0) {
 
 $commission = round($subtotal * $policy['commission_bps'] / 10000, 2);
 
+// Cupom: o desconto já está no carrinho; o que falta é gravar o resgate. O
+// código vem do corpo porque `orders` não tem coluna de cupom -- quem guarda
+// o vínculo é `coupon_redemptions`, criada logo abaixo.
+$couponCode = isset($body['coupon_code']) && trim((string) $body['coupon_code']) !== ''
+    ? strtoupper(trim((string) $body['coupon_code']))
+    : null;
+$customerCpf = null;
+if ($couponCode !== null) {
+    $cpfStmt = $pdo->prepare('SELECT cpf FROM users WHERE id = :id');
+    $cpfStmt->execute(['id' => $claims['sub']]);
+    $customerCpf = $cpfStmt->fetchColumn();
+    if (!is_string($customerCpf) || $customerCpf === '') {
+        error_response(409, 'cpf_required', 'Cupom exige CPF no cadastro — é um uso por CPF, não por conta.');
+    }
+}
+
 $pdo->beginTransaction();
 try {
     $pdo->prepare(
@@ -118,6 +134,32 @@ try {
     ]);
 
     call_advance_order($pdo, (int) $cart['id'], 'pending_payment', (string) $claims['sub'], 'customer');
+
+    // O cupom foi aplicado no carrinho (cart/apply_coupon.php), mas o consumo
+    // do orçamento só vira registro aqui: é neste ponto que existe pedido de
+    // verdade pra referenciar, e carrinho abandonado não pode segurar
+    // dinheiro de campanha. A UNIQUE (coupon_id, cpf) e o CHECK
+    // `within_budget` fazem o resto -- se o orçamento estourou entre aplicar
+    // e fechar, o banco recusa e o checkout inteiro volta atrás.
+    if ((float) $cart['discount'] > 0 && $couponCode !== null) {
+        $couponStmt = $pdo->prepare('SELECT * FROM coupons WHERE code = :code FOR UPDATE');
+        $couponStmt->execute(['code' => $couponCode]);
+        $coupon = $couponStmt->fetch();
+        if ($coupon === false) {
+            throw new RuntimeException('cupom sumiu entre aplicar e fechar o pedido');
+        }
+        $pdo->prepare(
+            'INSERT INTO coupon_redemptions (coupon_id, order_id, cpf, amount)
+             VALUES (:coupon_id, :order_id, :cpf, :amount)'
+        )->execute([
+            'coupon_id' => $coupon['id'],
+            'order_id' => $cart['id'],
+            'cpf' => $customerCpf,
+            'amount' => $cart['discount'],
+        ]);
+        $pdo->prepare('UPDATE coupons SET spent = spent + :amount WHERE id = :id')
+            ->execute(['amount' => $cart['discount'], 'id' => $coupon['id']]);
+    }
 
     $pdo->commit();
 } catch (Throwable $e) {

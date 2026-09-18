@@ -28,6 +28,7 @@
   let restaurantId = $state(null);
   let cartOpen = $state(false);
   let paymentOpen = $state(false);
+  let couponCode = $state(null);
   let trackingOrderId = $state(null);
 
   if (isAuthenticated()) {
@@ -98,11 +99,20 @@
   </div>
 {:else if restaurantId && paymentOpen}
   <div class="page-shell">
-    <PaymentFlow {restaurantId} {location} onBack={() => (paymentOpen = false)} onOrderReady={openTracking} />
+    <PaymentFlow
+      {restaurantId}
+      {location}
+      {couponCode}
+      onBack={() => (paymentOpen = false)}
+      onOrderReady={openTracking}
+    />
   </div>
 {:else if restaurantId && cartOpen}
   <div class="page-shell">
-    <CartDrawer {restaurantId} onBack={() => (cartOpen = false)} onCheckout={() => (paymentOpen = true)} />
+    <CartDrawer {restaurantId} onBack={() => (cartOpen = false)} onCheckout={(code) => {
+        couponCode = code;
+        paymentOpen = true;
+      }} />
   </div>
 {:else if restaurantId}
   <div class="page-shell">

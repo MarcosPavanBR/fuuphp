@@ -12,7 +12,7 @@
   //
   // A fila de Pix fica fixa no rodapé da terceira coluna, como no mock:
   // "trabalho pendente que trava faturamento, não notificação".
-  let { orders, proofs, onRefresh, onOpenProof, onReject } = $props();
+  let { orders, proofs, onRefresh, onOpenProof, onReject, onOpenChat } = $props();
 
   let now = $state(Date.now());
   let busyId = $state(null);
@@ -106,6 +106,9 @@
           <span class="code fuu-mono">#{order.public_code}</span>
           <span class="when">{ago(elapsed(order))}</span>
           <span class="method">{methodLabel(order)}</span>
+          <button type="button" class="chat" onclick={() => onOpenChat(order)} aria-label="Conversa do pedido">
+            <i class="bi bi-chat-dots"></i>
+          </button>
         </div>
         <ul class="lines">
           {#each lines(order.items) as line}
@@ -146,6 +149,9 @@
         <div class="ticket-head">
           <span class="code fuu-mono">#{order.public_code}</span>
           <span class="timer fuu-mono" class:late={secs > TARGET_SECONDS}>{clock(secs)}</span>
+          <button type="button" class="chat" onclick={() => onOpenChat(order)} aria-label="Conversa do pedido">
+            <i class="bi bi-chat-dots"></i>
+          </button>
         </div>
         <ul class="lines">
           {#each lines(order.items) as line}
@@ -320,6 +326,13 @@
   .method.plain {
     background: var(--fuu-line-4);
     color: var(--fuu-ink-2);
+  }
+  .chat {
+    background: none;
+    border: none;
+    color: var(--fuu-ink-4);
+    font-size: 17px;
+    padding: 0 0 0 8px;
   }
   .timer {
     margin-left: auto;

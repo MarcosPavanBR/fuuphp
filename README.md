@@ -135,6 +135,9 @@ api/v1/orders/               pedido e checkout
                                 legalidade da transição só no banco. Cancelar
                                 ou recusar exige motivo e grava o reembolso na
                                 mesma transação (Fase 13)
+  messages.php                 GET  ?id= / POST — chat de três pontas (14.2);
+                                mistura mensagens e eventos do pedido na mesma
+                                linha do tempo, e fecha 2 h depois da entrega
   cancel_quote.php             GET  ?id= — o que acontece se desfizer agora:
                                 taxa, valor de volta, canal, prazo e quem paga
                                 (telas 13.1 e 13.2); só lê
@@ -221,6 +224,9 @@ tests/
                                  de apagar endereço em uso) e cartões salvos
                                  (mp_customer_id reaproveitado entre
                                  cartões, troca de padrão, remoção)
+  smoke_support.sh              chat de três pontas (quem entra, o fechamento
+                                 2 h depois da entrega) e cupom: mínimo,
+                                 orçamento e um uso por CPF
   smoke_courier.sh              entregador e caixa: turno, aceite disputado,
                                  troco do servidor, entrega com prova, livro
                                  de lançamentos e baixa de espécie na loja
@@ -655,7 +661,7 @@ puro: CRUD de endereços completo e cartão salvo via Mercado Pago.
   (confirmado por query direta no banco, não só pela resposta da API),
   troca de padrão e remoção.
 
-## Front-end (`web/`) — Fases 1 a 6, 8, 9, 10 e 13, decisões de implementação
+## Front-end (`web/`) — Fases 1 a 6, 8, 9, 10, 13 e 14.2, decisões de implementação
 
 Svelte 5 + Vite, Bootstrap 5, Bootstrap Icons, `sweetalert` (não
 `sweetalert2` — o pacote `sweetalert` na versão 2.x do npm *é* a
@@ -664,9 +670,10 @@ seleção de estado, cidade+bairro), Fase 2 (home, busca, fidelidade,
 pedidos, perfil), Fase 3 (loja, item, carrinho), Fase 4 (pagamento), Fase 5
 (pós-pedido), Fase 6 (conta, endereços, cartões, configurações) e Fase 10.1
 a 10.3 (login e cadastro) e Fase 13.1/13.2 (cancelar e recusar) estão
-portadas, mais o painel da loja (Fase 7.3, 9.3 e 11.1, em `painel.html`) e o
-app do entregador (Fase 8 e 9, em `entregador.html`); todos têm seção própria
-adiante. As outras fases ainda não têm componente.
+portadas, mais o chat do pedido (14.2), o painel da loja (Fase 7.3, 9.3 e
+11.1, em `painel.html`) e o app do entregador (Fase 8 e 9, em
+`entregador.html`); todos têm seção própria adiante. As outras fases ainda
+não têm componente.
 
 ```
 web/
@@ -691,6 +698,7 @@ web/
         BottomNav.svelte                5 abas (house/search/cart/star/person)
         QuickAddress.svelte             endereço mínimo real (ver Fase 4 abaixo)
         ItemModal.svelte                3.2 — variações, observação, preço ao vivo
+        OrderChat.svelte                14.2 — chat de três pontas (cliente e loja)
       screens/
         AuthFlow.svelte                 orquestra a Fase 10: 10.1 -> 10.2 -> 10.3
         CancelDialog.svelte             13.1 — taxa e estorno antes de confirmar
@@ -1173,6 +1181,61 @@ em lugar nenhum além da tabela `refunds`, vazia desde a migração `005`.
   "Cancelado"; a loja recusa pelo KDS com o custo na tela (estorno,
   entregador, taxa de recusa real). Zero erros de console.
 
+## Chat do pedido e cupons (Fase 14.2 + migração 008) — decisões
+
+Dois buracos que o próprio README já vinha apontando: `talkToStore()` no
+acompanhamento mostrava "Fase 14 ainda não foi portada", e o campo de cupom
+do carrinho (3.3) estava na tela desde a Fase 3 avisando que não tinha
+backend. Os dois fecham aqui, sobre tabelas que existem desde a migração
+`008`.
+
+- **Quem entra na conversa é decidido pelo VÍNCULO com o pedido, não pelo
+  papel.** Cliente dono do pedido, a loja daquele pedido, o entregador
+  designado e o suporte -- nessa ordem de checagem, em `match`. Uma loja não
+  entra no chat do pedido da loja vizinha, e a resposta pra quem não é parte
+  é 404 (não conta nem que o pedido existe).
+- **Eventos do sistema entram na mesma linha do tempo.** Mensagens e
+  transições de status vêm separadas do servidor e são intercaladas por
+  horário na tela. É isso que faz "Saiu para entrega às 20:29" aparecer entre
+  duas falas, como a conversa aconteceu de verdade.
+- **O chat fecha 2 h depois da entrega, mas só pra escrever.** O comentário
+  estava na própria migração `008` ("regra na API, histórico permanece"):
+  ler continua valendo pra sempre, porque prova de disputa não pode sumir. A
+  hora da entrega sai do `order_events` -- não existe coluna `delivered_at`,
+  e criar uma seria duplicar o que a linha do tempo já sabe.
+- **Respostas rápidas dependem de quem está falando** ("evitam digitar de
+  moto"): o cliente recebe "Já desço"/"Deixe na portaria", a loja recebe
+  "Saindo em 5 min"/"Acabou um item, posso trocar?", o entregador recebe
+  "Estou no portão". Um mesmo componente serve os dois apps -- quem está
+  falando vem do servidor (`me`), não de uma prop.
+- **Cupom é validado inteiro no servidor**, porque cada regra dessas é
+  dinheiro: prazo, loja, pedido mínimo (sobre o SUBTOTAL -- senão o frete
+  ajudaria a atingir o mínimo, o oposto do que o cupom quer), orçamento da
+  campanha e um uso por CPF.
+- **Um uso por CPF, não por conta** -- é a `UNIQUE (coupon_id, cpf)` da
+  migração `008`, e é por isso que quem não preencheu CPF no cadastro recebe
+  409 `cpf_required` com a saída na mensagem, em vez de um "cupom inválido"
+  que esconde o que dava pra corrigir.
+- **O desconto entra em `orders.discount` e o total se recalcula sozinho**,
+  porque `total` é coluna gerada. Nada é somado no PHP nem no navegador.
+- **Aplicar no carrinho e consumir orçamento são momentos diferentes.**
+  `cart/apply_coupon.php` só grava o desconto; o registro em
+  `coupon_redemptions` e o `spent + valor` acontecem no checkout, dentro da
+  transação que avança o pedido -- carrinho abandonado não pode segurar
+  dinheiro de campanha, e se o orçamento estourar entre aplicar e fechar, o
+  `CHECK within_budget` derruba o checkout inteiro.
+- **Código vazio remove o cupom**, no mesmo endpoint: desfazer não precisa de
+  rota nova.
+- **Validado com Postgres e navegador reais.** `tests/smoke_support.sh` cobre
+  cupom sem CPF, inexistente, de outra loja, abaixo do mínimo, aplicado,
+  removido, resgatado no checkout e recusado na segunda tentativa do mesmo
+  CPF; e no chat: as duas pontas conversando, o evento de status na linha do
+  tempo, a marcação de lida, a loja de fora barrada nas duas direções,
+  mensagem vazia e o fechamento 2 h depois da entrega com histórico
+  preservado. No Playwright: o cupom derrubando o total de R$ 78,40 pra
+  R$ 68,40 no carrinho, e a conversa indo do app do cliente pro KDS da loja
+  e voltando por resposta rápida, com "lida" aparecendo.
+
 ## App do entregador e caixa (Fase 8 e 9) — decisões de implementação
 
 O terceiro público do projeto, no terceiro bundle (`entregador.html`).
@@ -1349,6 +1412,7 @@ JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_account.sh    # end
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_panel.sh      # painel da loja: fila de Pix e KDS (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_cancel.sh     # cancelamento, recusa e reembolso (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_courier.sh    # entregador e baixa de espécie (semeia sozinho)
+JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_support.sh    # chat do pedido e cupons (semeia sozinho)
 
 php -S localhost:8080                  # API, num terminal
 cd web && npm install && npm run dev   # front-end Svelte, noutro terminal
@@ -1461,6 +1525,11 @@ entregadores, troco calculado no servidor, entrega barrada sem prova, os dois
 lançamentos no livro e a baixa de espécie com divergência e com acerto.
 `tests/smoke_courier.sh` roda tudo isso a cada push.
 
+E o chat com os cupons: quem pode entrar na conversa, o fechamento 2 h
+depois da entrega com histórico preservado, e o cupom barrado por CPF
+ausente, loja errada, valor mínimo, repetição e orçamento.
+`tests/smoke_support.sh` roda tudo isso a cada push.
+
 O front-end validou o mesmo jeito, não só compilado, nas seis fases com
 Playwright + Chromium numa janela de 430px: Fase 1 (fade do splash,
 seleção de estado com destaque, SweetAlert real antes da Geolocation API,
@@ -1489,13 +1558,15 @@ checando `boundingBox()` via Playwright, não só lendo o código.
 1. **Portar o resto das telas** de `FUUDelivery - 64 Telas (offline).html`
    para Svelte + Bootstrap — Fases 1 a 6 prontas, mais o painel da loja
    (7.3, 9.3 e 11.1), o app do entregador (8.1 a 8.7 e 9.1/9.2/9.4), o acesso
-   do cliente (10.1 a 10.3) e o caminho do erro (13.1 e 13.2); faltam
+   do cliente (10.1 a 10.3), o caminho do erro (13.1 e 13.2) e o chat do
+   pedido (14.2); faltam
    PWA/offline e push (7.1 e 7.2), a conciliação de maquininha e o netting
    semanal (9.6 e 9.7), as telas de configuração da Fase 10 (10.4 formas de
    pagamento da loja, 10.5 políticas do admin, 10.6 devolução de maquininha),
    o resto do app do restaurante (11.2 a 11.4: pausar loja, cardápio,
    horário), painel da plataforma (12), a ocorrência de entrega e o reembolso
-   do admin (13.3 e 13.4), suporte (14) e dispatch completo (15).
+   do admin (13.3 e 13.4), o resto do suporte (14.1 central de ajuda, 14.3
+   mapa, 14.4 agendamento) e o dispatch completo (15).
 2. **Cálculo de frete no servidor.** `orders/checkout.php` (e
    `orders/create.php`, desde antes) recebem `delivery_fee` no corpo da
    requisição em vez de calcular — é a única parte do dinheiro que ainda
@@ -1531,9 +1602,11 @@ checando `boundingBox()` via Playwright, não só lendo o código.
    valer, precisa de um ledger de pontos — mesmo padrão append-only do
    `ledger_entries` financeiro — e isso é decisão de escopo, não algo pra
    inventar numa migração de suporte a tela.
-8. **Decisão de produto pendente: cupons.** `coupons`/`coupon_redemptions`
-   existem desde a migração `008`, mas não há endpoint de resgate. O
-   `CartDrawer` (3.3) já tem o campo de UI, esperando o backend.
+8. **Cupons existem, campanhas não.** O resgate funciona (aplicar, validar,
+   consumir orçamento), mas não há tela pra CRIAR campanha nem o painel da
+   tela 15.3 com custo por pedido e retorno -- e `audience`
+   (`first_order`, `inactive_15d`...) é gravado e ignorado: segmentar exige
+   saber quem está inativo, que é consulta de base, não de pedido.
 9. **Decisão de produto pendente: Pix automático sem tela.** O enum
    `payment_method` já tem `pix_auto` e o backend já processa (webhook
    incluído), mas o mock de 64 telas só desenha o fluxo manual (Fase 4.3);

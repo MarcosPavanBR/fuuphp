@@ -6,6 +6,7 @@
   import { parsePgTimestamp } from '../datetime.js';
   import ReviewScreen from './ReviewScreen.svelte';
   import CancelDialog from './CancelDialog.svelte';
+  import OrderChat from '../components/OrderChat.svelte';
 
   // Fase 5 — pós-pedido e acompanhamento (5.1 Aprovado, 5.2 Em análise,
   // 5.3 Tracking, 5.4 Rejeitado), uma tela só reagindo ao status ao vivo
@@ -22,6 +23,7 @@
   let review = $state(null);
   let showReview = $state(false);
   let showCancel = $state(false);
+  let showChat = $state(false);
   let now = $state(Date.now());
   let evtSource;
   let clockInterval;
@@ -126,7 +128,7 @@
   }
 
   function talkToStore() {
-    toastr.info('Chat com a loja é Fase 14 (suporte) — ainda não foi portado.');
+    showChat = true;
   }
 </script>
 
@@ -215,9 +217,11 @@
     </div>
 
     <div class="actions">
-      {#if order.status === 'pending_verification'}
-        <button type="button" class="btn-fuu-primary w-100" onclick={talkToStore}>Falar com a loja</button>
-      {/if}
+      <!-- 14.2 — a conversa existe do pedido feito até 2 h depois da
+           entrega; o servidor é quem fecha, a tela só abre. -->
+      <button type="button" class="btn-fuu-primary w-100" onclick={talkToStore}>
+        <i class="bi bi-chat-dots"></i> Falar com a loja
+      </button>
       <!-- 13.1 — cancelar só aparece enquanto é possível. 'ready' fica de
            fora porque a comida está na bancada esperando o entregador, e a
            função do banco não permite essa transição. -->
@@ -229,6 +233,10 @@
       <button type="button" class="link-btn" onclick={onDone}>Voltar ao início</button>
     </div>
   </div>
+{/if}
+
+{#if showChat}
+  <OrderChat orderId={order.id} token={currentToken()} onClose={() => (showChat = false)} />
 {/if}
 
 {#if showCancel}

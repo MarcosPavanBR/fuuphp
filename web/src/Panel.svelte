@@ -16,6 +16,7 @@
   import RejectDialog from './lib/screens/panel/RejectDialog.svelte';
   import PanelOverview from './lib/screens/panel/PanelOverview.svelte';
   import CashDesk from './lib/screens/panel/CashDesk.svelte';
+  import OrderChat from './lib/components/OrderChat.svelte';
 
   // Painel da loja (telas 7.3 e 11.1). Roda numa página própria
   // (painel.html), não dentro do app do cliente: são dois públicos e dois
@@ -29,6 +30,7 @@
   let settlements = $state([]);
   let selectedProof = $state(null);
   let rejecting = $state(null);
+  let chatting = $state(null);
   let lastSync = $state(null);
   let online = $state(true);
   let clock = $state(new Date());
@@ -160,6 +162,7 @@
         onRefresh={() => pull({ withStats: true })}
         onOpenProof={(p) => (selectedProof = p)}
         onReject={(o) => (rejecting = o)}
+        onOpenChat={(o) => (chatting = o)}
       />
     {:else if tab === 'cash'}
       <CashDesk {settlements} onDone={() => pull({ withStats: true })} />
@@ -189,6 +192,10 @@
 
   {#if selectedProof}
     <ProofReviewModal proof={selectedProof} onClose={() => (selectedProof = null)} {onReviewed} />
+  {/if}
+
+  {#if chatting}
+    <OrderChat orderId={chatting.id} token={staffToken()} onClose={() => (chatting = null)} />
   {/if}
 
   {#if rejecting}

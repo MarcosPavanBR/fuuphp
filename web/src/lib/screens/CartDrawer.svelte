@@ -1,6 +1,7 @@
 <script>
   import { cartState, loadCart, removeFromCart, updateCartQuantity } from '../cart.svelte.js';
   import { toastr } from '../toastr.js';
+  import { api, ApiError } from '../api.js';
 
   // Tela 3.3 — Carrinho. "Total nunca é somado no cliente: vem da coluna
   // gerada, o que impede divergência com a cobrança." (CartDrawer.svelte,
@@ -9,6 +10,8 @@
 
   let cart = $derived(cartState());
   let coupon = $state('');
+  let appliedCoupon = $state(null);
+  let couponBusy = $state(false);
   let busyItemId = $state(null);
 
   function money(v) {
@@ -38,12 +41,36 @@
     }
   }
 
-  function applyCoupon() {
-    toastr.info('Cupom ainda não foi implementado — coupons existe no esquema (migração 008), mas sem endpoint de resgate.');
+  // Quem valida cupom é o servidor, inteirinho: prazo, loja, pedido mínimo,
+  // orçamento da campanha e um uso por CPF. A tela só mostra o que voltou --
+  // desconto é dinheiro, e dinheiro não se decide no navegador.
+  async function applyCoupon() {
+    couponBusy = true;
+    try {
+      const data = await api.post('/cart/apply_coupon.php', {
+        auth: true,
+        body: { restaurant_id: restaurantId, code: coupon },
+      });
+      appliedCoupon = data.coupon;
+      await loadCart(restaurantId);
+      toastr.success(
+        data.coupon ? `Cupom aplicado: −${money(data.coupon.discount)}` : 'Cupom removido.'
+      );
+    } catch (e) {
+      const code = e instanceof ApiError ? e.code : null;
+      // Cada recusa tem a sua frase: "cupom inválido" pra tudo esconde do
+      // cliente o que ele poderia corrigir (faltou CPF, faltou valor mínimo).
+      toastr.error(e.message ?? 'Não deu pra aplicar o cupom.');
+      if (code === 'cpf_required') {
+        toastr.info('Complete o CPF no seu perfil pra usar cupom.');
+      }
+    } finally {
+      couponBusy = false;
+    }
   }
 
   function goToPayment() {
-    onCheckout();
+    onCheckout(appliedCoupon?.code ?? null);
   }
 </script>
 
@@ -79,8 +106,15 @@
     </div>
 
     <div class="coupon-row">
-      <input type="text" placeholder="Cupom" bind:value={coupon} />
-      <button type="button" onclick={applyCoupon}>Aplicar</button>
+      <input
+        type="text"
+        placeholder="Cupom"
+        bind:value={coupon}
+        onkeydown={(e) => e.key === 'Enter' && applyCoupon()}
+      />
+      <button type="button" disabled={couponBusy} onclick={applyCoupon}>
+        {couponBusy ? '…' : Number(cart.order?.discount ?? 0) > 0 ? 'Trocar' : 'Aplicar'}
+      </button>
     </div>
 
     <div class="totals">
@@ -92,6 +126,12 @@
         <span>Taxa de entrega</span>
         <span class="fuu-mono">{money(cart.order.delivery_fee)} <small>(definida no checkout)</small></span>
       </div>
+      {#if Number(cart.order.discount) > 0}
+        <div class="kv">
+          <span>Desconto{appliedCoupon ? ` (${appliedCoupon.code})` : ''}</span>
+          <span class="fuu-mono discount">− {money(cart.order.discount)}</span>
+        </div>
+      {/if}
       <div class="kv total">
         <span>Total</span>
         <span class="fuu-mono">{money(cart.order.total)}</span>
@@ -186,6 +226,9 @@
   .line-total {
     font-size: 13.5px;
     color: var(--fuu-ink-2);
+  }
+  .discount {
+    color: var(--fuu-leaf-dark);
   }
   .coupon-row {
     display: flex;
