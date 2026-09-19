@@ -8,7 +8,7 @@
   // quatro telas diferentes.
   //   ready      -> rota até a coleta (8.3) e coleta com troco (8.4)
   //   delivering -> entrega, cobrança (8.5) e prova (8.6)
-  let { order, onDone } = $props();
+  let { order, onDone, onProblem } = $props();
 
   let detail = $state(null);
   let code = $state('');
@@ -22,15 +22,23 @@
   // Posição real do aparelho quando houver: o evento de chegada e a prova de
   // entrega valem mais com carimbo. Sem permissão, segue sem -- a corrida não
   // pode travar porque o GPS negou.
+  //
+  // O prazo é nosso, não do navegador: existe aparelho que não chama nenhum
+  // dos dois callbacks mesmo com `timeout` (permissão negada sem diálogo,
+  // GPS sem provedor), e aí a corrida trava num botão desabilitado pra
+  // sempre. Achado testando a tela 13.3 no navegador; vale igual aqui.
   function position() {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) return resolve({});
-      navigator.geolocation.getCurrentPosition(
-        (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-        () => resolve({}),
-        { timeout: 4000 }
-      );
-    });
+    return Promise.race([
+      new Promise((resolve) => {
+        if (!navigator.geolocation) return resolve({});
+        navigator.geolocation.getCurrentPosition(
+          (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+          () => resolve({}),
+          { timeout: 4000 }
+        );
+      }),
+      new Promise((resolve) => setTimeout(() => resolve({}), 4500)),
+    ]);
   }
 
   async function mark(event) {
@@ -170,9 +178,14 @@
     >
       {busy ? 'Confirmando…' : 'Confirmar entrega'}
     </button>
+    <!-- 13.3: o "Problema" desta tela. Fica ao lado do botão de confirmar, e
+         não escondido num menu: quem está na porta com a comida na mão e
+         ninguém atendendo precisa achar isso em um toque. -->
+    <button type="button" class="problem" onclick={onProblem}>
+      <i class="bi bi-exclamation-triangle"></i> Problema na entrega
+    </button>
     <p class="waiting-note">
-      Sem o código, a saída é a foto na porta — o upload de foto de entrega ainda não foi construído
-      (ver README).
+      Sem o código, a saída é a foto na porta — envie a foto pela tela de ocorrência.
     </p>
   {/if}
 </div>
@@ -304,5 +317,17 @@
     margin: 12px 0 0;
     line-height: 1.5;
     text-align: center;
+  }
+  .problem {
+    width: 100%;
+    margin-top: 10px;
+    background: var(--fuu-white);
+    border: 1.5px solid var(--fuu-red-tint-2);
+    color: var(--fuu-alert);
+    border-radius: 11px;
+    padding: 14px;
+    font-family: inherit;
+    font-weight: 800;
+    font-size: 14px;
   }
 </style>

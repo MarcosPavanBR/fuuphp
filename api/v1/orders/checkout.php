@@ -223,6 +223,28 @@ try {
             ->execute(['id' => $coupon['id']]);
     }
 
+    // Crédito em carteira (tela 13.4): saldo aceito entra sozinho no próximo
+    // pedido -- é o que a mensagem de aceite promete. Entra DEPOIS do cupom
+    // porque o cupom é uma campanha com orçamento e o crédito é dívida nossa
+    // com esta pessoa; misturar os dois no mesmo cálculo tiraria do
+    // orçamento da campanha um desconto que ela não bancou.
+    //
+    // O custo já foi lançado no livro quando a oferta foi aceita: aqui só se
+    // consome o passivo. Lançar de novo contaria a mesma despesa duas vezes.
+    $walletApplied = 0.0;
+    $chargeable = round(
+        (float) $cart['subtotal'] + $deliveryFee + $tip
+            + (float) $cart['surge_fee'] - (float) $cart['discount'],
+        2
+    );
+    if ($chargeable > 0) {
+        $walletApplied = wallet_spend($pdo, (string) $claims['sub'], (int) $cart['id'], $chargeable);
+        if ($walletApplied > 0) {
+            $pdo->prepare('UPDATE orders SET discount = discount + :credit WHERE id = :id')
+                ->execute(['credit' => $walletApplied, 'id' => $cart['id']]);
+        }
+    }
+
     $pdo->commit();
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {
@@ -235,4 +257,8 @@ $order = fetch_order($pdo, (int) $cart['id']);
 json_response(200, [
     'order' => $order,
     'items' => fetch_order_items($pdo, (int) $cart['id']),
+    // Linha própria na resposta: o crédito abateu o total, e o app tem que
+    // conseguir dizer POR QUE o valor mudou entre o carrinho e o checkout.
+    'wallet_applied' => $walletApplied,
+    'wallet_balance' => wallet_balance($pdo, (string) $claims['sub']),
 ]);

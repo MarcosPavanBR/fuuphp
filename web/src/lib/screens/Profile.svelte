@@ -13,6 +13,11 @@
     $props();
 
   let stats = $state(null);
+  // Tela 13.4, lado do cliente: a oferta de crédito em carteira aparece
+  // aqui, junto do dinheiro dele. "Nunca pode ser imposto" -- então tem que
+  // haver um lugar onde ele diz sim ou não, e esse lugar é o perfil.
+  let wallet = $state(null);
+  let deciding = $state(false);
 
   async function loadStats() {
     try {
@@ -23,6 +28,36 @@
     }
   }
   loadStats();
+
+  async function loadWallet() {
+    try {
+      wallet = await api.get('/profile/wallet.php', { auth: true });
+    } catch {
+      // carteira vazia não é erro de tela: o perfil segue sem o cartão
+    }
+  }
+  loadWallet();
+
+  function money(v) {
+    return `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
+  }
+
+  async function answerOffer(credit, decision) {
+    if (deciding) return;
+    deciding = true;
+    try {
+      const res = await api.post('/profile/wallet.php', {
+        auth: true,
+        body: { credit_id: credit.id, decision },
+      });
+      toastr.success(res.notice);
+      await loadWallet();
+    } catch (e) {
+      toastr.error(e.message ?? 'Não deu pra responder a oferta.');
+    } finally {
+      deciding = false;
+    }
+  }
 
   function notPortedYet(what) {
     toastr.info(`${what} ainda não foi portado.`);
@@ -65,6 +100,37 @@
   </div>
   {#if stats && stats.loyalty_points === null}
     <p class="note">Pontos de fidelidade ainda não têm tabela no banco — ver Fase 2.3.</p>
+  {/if}
+
+  {#each wallet?.offers ?? [] as offer (offer.id)}
+    <div class="offer">
+      <p class="title">
+        <i class="bi bi-wallet2"></i>
+        {money(Number(offer.amount) + Number(offer.bonus))} de crédito no lugar do estorno
+      </p>
+      <p class="body">
+        O pedido {offer.public_code ? `#${offer.public_code}` : ''} tinha {money(offer.amount)} a
+        devolver. Se você aceitar crédito na carteira, entram
+        {money(offer.bonus)} a mais e o saldo já vale no próximo pedido — mas o estorno no seu
+        pagamento continua sendo seu direito.
+      </p>
+      <div class="actions">
+        <button type="button" class="yes" disabled={deciding} onclick={() => answerOffer(offer, 'accept')}>
+          Aceitar crédito
+        </button>
+        <button type="button" class="no" disabled={deciding} onclick={() => answerOffer(offer, 'decline')}>
+          Prefiro o estorno
+        </button>
+      </div>
+    </div>
+  {/each}
+
+  {#if wallet && wallet.balance > 0}
+    <div class="balance">
+      <span>Saldo na carteira</span>
+      <strong>{money(wallet.balance)}</strong>
+    </div>
+    <p class="note">Entra sozinho no próximo pedido, abatendo o total.</p>
   {/if}
 
   <div class="menu">
@@ -170,6 +236,64 @@
     font-size: 11.5px;
     color: var(--fuu-ink-5);
     margin: 4px 0 18px;
+  }
+  .offer {
+    border: 1px solid var(--fuu-leaf);
+    background: var(--fuu-leaf-tint);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .offer .title {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--fuu-leaf-dark);
+    margin: 0;
+  }
+  .offer .body {
+    font-size: 12.5px;
+    color: var(--fuu-ink-2);
+    line-height: 1.55;
+    margin: 6px 0 0;
+  }
+  .offer .actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .offer .actions button {
+    flex: 1;
+    border-radius: 10px;
+    padding: 12px 6px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .offer .yes {
+    background: var(--fuu-leaf);
+    border: 0;
+    color: var(--fuu-white);
+    font-weight: 800;
+  }
+  .offer .no {
+    background: var(--fuu-white);
+    border: 1.5px solid var(--fuu-line-2);
+    color: var(--fuu-ink-1);
+  }
+  .balance {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--fuu-white);
+    border: 1px solid var(--fuu-line-3);
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 13.5px;
+    color: var(--fuu-ink-2);
+  }
+  .balance strong {
+    font-size: 17px;
+    color: var(--fuu-ink-1);
   }
   .menu {
     display: flex;

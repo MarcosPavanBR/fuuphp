@@ -154,8 +154,8 @@ function record_refund(PDO $pdo, array $order, array $plan, ?string $decidedBy, 
     $paymentId = $paymentStmt->fetchColumn();
 
     $insert = $pdo->prepare(
-        'INSERT INTO refunds (order_id, payment_id, refund_key, amount, channel, payer, cause, decided_by)
-         VALUES (:order_id, :payment_id, :refund_key, :amount, :channel, :payer, :cause, :decided_by)
+        'INSERT INTO refunds (order_id, payment_id, refund_key, amount, fee, channel, payer, cause, decided_by)
+         VALUES (:order_id, :payment_id, :refund_key, :amount, :fee, :channel, :payer, :cause, :decided_by)
          RETURNING *'
     );
     $insert->execute([
@@ -163,6 +163,10 @@ function record_refund(PDO $pdo, array $order, array $plan, ?string $decidedBy, 
         'payment_id' => $paymentId === false ? null : $paymentId,
         'refund_key' => uuid_v4(),
         'amount' => $plan['amount'],
+        // A taxa fica gravada ao lado do estorno porque a tela 13.4 deixa o
+        // admin mexer nela depois ("Perdoar / Metade / Manter"), e sem o
+        // valor original não dá pra recalcular nem pra explicar a mudança.
+        'fee' => $plan['fee'],
         'channel' => $plan['channel'],
         'payer' => $plan['payer'],
         'cause' => $plan['cause'],
@@ -181,4 +185,137 @@ function record_refund(PDO $pdo, array $order, array $plan, ?string $decidedBy, 
     }
 
     return $refund;
+}
+
+// --------------------------------------------------------------------------
+// Tela 13.4 — o console do admin. Tudo daqui pra baixo é a DECISÃO sobre um
+// reembolso que já existe em 'pending', não a criação dele.
+// --------------------------------------------------------------------------
+
+// "AJUSTE DA TAXA — Perdoar · Metade · Manter". Três botões, três fatores.
+const REFUND_FEE_ADJUSTMENTS = [
+    'forgive' => ['label' => 'Perdoar', 'factor' => 0.0],
+    'half' => ['label' => 'Metade', 'factor' => 0.5],
+    'keep' => ['label' => 'Manter', 'factor' => 1.0],
+];
+
+// "Quem paga a conta, por causa" — a lista da tela 13.4, pra o admin ler a
+// regra ao lado da decisão em vez de lembrar dela.
+const REFUND_CAUSE_RULES = [
+    'store_reject' => 'Loja recusou depois de aceitar ou errou o pedido → reembolso sai do repasse dela; a plataforma compensa o entregador.',
+    'wrong_item' => 'Loja recusou depois de aceitar ou errou o pedido → reembolso sai do repasse dela; a plataforma compensa o entregador.',
+    'customer_cancel' => 'Cliente cancelou antes do preparo → devolução integral, ninguém perde. Depois do preparo → taxa fica com a loja, resto volta.',
+    'platform_failure' => 'Falha nossa (dispatch sem entregador, bug, fora do ar) → FUUDelivery paga tudo, inclusive a comida produzida.',
+    'no_courier' => 'Falha nossa (dispatch sem entregador, bug, fora do ar) → FUUDelivery paga tudo, inclusive a comida produzida.',
+    'fraud' => 'Fraude confirmada do cliente → sem reembolso, conta bloqueada, loja ressarcida pela plataforma.',
+    'not_delivered' => 'Não entregue: o entregador recebe a corrida integral de qualquer forma; quem paga a comida depende da ocorrência.',
+];
+
+const REFUND_PAYER_LABELS = [
+    'store' => 'LOJA',
+    'platform' => 'FUUDELIVERY',
+    'shared' => 'DIVIDIDO',
+];
+
+// A coluna "COMO DEVOLVER / PRAZO" da fila, por canal já gravado. REFUND_ROUTES
+// lá em cima responde a mesma pergunta pela forma de PAGAMENTO, antes de
+// existir reembolso; esta responde depois, pelo canal que ficou na linha.
+const REFUND_CHANNEL_LABELS = [
+    'gateway' => ['how' => 'Estorno automático na API', 'eta' => 'até 2 faturas'],
+    'pix_return' => ['how' => 'Pix de volta para a chave do pagador', 'eta' => '1 dia útil'],
+    'acquirer_void' => ['how' => 'Cancelamento na adquirente da loja', 'eta' => 'D+1'],
+    'wallet_credit' => ['how' => 'Saldo no app · cliente aceitou no lugar do estorno', 'eta' => 'imediato'],
+    'none' => ['how' => 'Nada cobrado · só compensar o entregador', 'eta' => 'imediato'],
+];
+
+/**
+ * Recalcula o estorno quando o admin mexe na taxa.
+ *
+ * O total pago não muda; o que muda é quanto da taxa a loja fica. "A loja
+ * anunciou 25 min e estava com 41 — perdoar a taxa é o padrão nesse caso, e
+ * o custo fica com ela": perdoar aumenta o estorno, e o aumento sai do
+ * repasse da loja -- é o `payer` da linha que carrega isso.
+ */
+function refund_with_fee(array $refund, string $adjustment): array
+{
+    $factor = REFUND_FEE_ADJUSTMENTS[$adjustment]['factor'] ?? 1.0;
+    $paid = round((float) $refund['amount'] + (float) $refund['fee'], 2);
+    $fee = round((float) $refund['fee'] * $factor, 2);
+
+    return [
+        'fee' => $fee,
+        'amount' => round($paid - $fee, 2),
+        'paid' => $paid,
+    ];
+}
+
+/**
+ * Lança no livro o custo de um reembolso decidido.
+ *
+ * Este é o "+ ledger_entries" do chip da tela. Até aqui, `refunds.payer` era
+ * um rótulo: a linha existia, o dinheiro não andava. As contas são as mesmas
+ * do cupom (lib/coupons.php), pelo mesmo motivo -- é o mesmo tipo de custo:
+ * dinheiro que ia pra loja e voltou pro cliente.
+ *
+ * `origin_id` é o refund_key, e é isso que faz "idempotente por refund_key"
+ * ser verdade no livro, não só na tabela de reembolsos.
+ */
+function refund_ledger(PDO $pdo, array $order, array $refund, float $amount, ?string $actorId): void
+{
+    if ($amount <= 0) {
+        return;
+    }
+
+    $restaurantId = (string) $order['restaurant_id'];
+    $orderId = (int) $order['id'];
+    $originId = (string) $refund['refund_key'];
+
+    $storeShare = match ((string) $refund['payer']) {
+        'store' => $amount,
+        'platform' => 0.0,
+        'shared' => round($amount / 2, 2),
+        default => 0.0,
+    };
+    $platformShare = round($amount - $storeShare, 2);
+
+    if ($storeShare > 0) {
+        ledger_add(
+            $pdo,
+            'store_receivable',
+            $restaurantId,
+            $storeShare,
+            'refund',
+            $originId,
+            $orderId,
+            $actorId,
+            "estorno do pedido {$order['public_code']} debitado do repasse da loja"
+        );
+    }
+    if ($platformShare > 0) {
+        ledger_add(
+            $pdo,
+            'platform_expense',
+            $restaurantId,
+            $platformShare,
+            'refund',
+            $originId,
+            $orderId,
+            $actorId,
+            "estorno do pedido {$order['public_code']} bancado pela plataforma"
+        );
+    }
+}
+
+/**
+ * Já existe lançamento no livro pra esta chave? A trava de idempotência que
+ * a tela promete: dois cliques no mesmo botão, um lançamento só.
+ */
+function refund_already_booked(PDO $pdo, string $refundKey): bool
+{
+    $stmt = $pdo->prepare(
+        "SELECT 1 FROM ledger_entries WHERE origin = 'refund' AND origin_id = :key LIMIT 1"
+    );
+    $stmt->execute(['key' => $refundKey]);
+
+    return $stmt->fetchColumn() !== false;
 }

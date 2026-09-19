@@ -67,14 +67,21 @@ idempotent_response($pdo, 'POST /v1/couriers/deliver', $key, $body, function () 
     $pdo->beginTransaction();
     try {
         $pdo->prepare(
-            'INSERT INTO delivery_proofs (order_id, courier_id, kind, storage_key, lat, lng)
-             VALUES (:order_id, :courier_id, :kind, :storage_key, :lat, :lng)
+            'INSERT INTO delivery_proofs (order_id, courier_id, kind, storage_key, sha256, lat, lng)
+             VALUES (:order_id, :courier_id, :kind, :storage_key, :sha256, :lat, :lng)
              ON CONFLICT (order_id) DO NOTHING'
         )->execute([
             'order_id' => $orderId,
             'courier_id' => $courierId,
             'kind' => $code !== '' ? 'code' : 'photo',
             'storage_key' => $hasPhoto ? (string) $body['photo_storage_key'] : null,
+            // O hash vem do upload (couriers/incident_photo.php), que o
+            // calculou do conteúdo real. É ele que faz a mesma foto em duas
+            // corridas virar sinal de fraude -- sem isto a coluna sha256 da
+            // migração 015 ficava vazia e a checagem não checava nada.
+            'sha256' => isset($body['photo_sha256']) && preg_match('/^[0-9a-f]{64}$/', (string) $body['photo_sha256']) === 1
+                ? (string) $body['photo_sha256']
+                : null,
             'lat' => $lat,
             'lng' => $lng,
         ]);

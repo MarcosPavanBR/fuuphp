@@ -8,6 +8,8 @@
   import ReportsScreen from './lib/screens/admin/ReportsScreen.svelte';
   import PolicyScreen from './lib/screens/admin/PolicyScreen.svelte';
   import CampaignsScreen from './lib/screens/admin/CampaignsScreen.svelte';
+  import RefundsScreen from './lib/screens/admin/RefundsScreen.svelte';
+  import IncidentQueue from './lib/screens/admin/IncidentQueue.svelte';
 
   // Painel da plataforma (Fase 12 + tela 10.5). Quarto bundle, quarto
   // público: quem opera o negócio, não quem usa o app.
@@ -63,6 +65,9 @@
         <button type="button" class:on={tab === 'disputes'} onclick={() => (tab = 'disputes')}>
           Ocorrências {#if openDisputes > 0}<span class="count alert">{openDisputes}</span>{/if}
         </button>
+        <button type="button" class:on={tab === 'refunds'} onclick={() => (tab = 'refunds')}>
+          Reembolsos
+        </button>
         <button type="button" class:on={tab === 'reports'} onclick={() => (tab = 'reports')}>Relatórios</button>
         <button type="button" class:on={tab === 'campaigns'} onclick={() => (tab = 'campaigns')}>
           Campanhas
@@ -80,6 +85,11 @@
         <StoreQueue data={stores} onRefresh={pull} />
       {:else if tab === 'disputes'}
         <DisputeQueue data={disputes} onRefresh={pull} />
+      {:else if tab === 'refunds'}
+        <!-- 13.3 + 13.4 na mesma mesa: liberar a sacola e decidir o dinheiro
+             são a mesma conversa, com o mesmo pedido na frente. -->
+        <IncidentQueue onDecided={pull} />
+        <RefundsScreen />
       {:else if tab === 'reports'}
         <ReportsScreen />
       {:else if tab === 'campaigns'}

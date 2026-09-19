@@ -13,6 +13,7 @@
   import SettleScreen from './lib/screens/courier/SettleScreen.svelte';
   import EarningsScreen from './lib/screens/courier/EarningsScreen.svelte';
   import ApplyScreen from './lib/screens/courier/ApplyScreen.svelte';
+  import IncidentScreen from './lib/screens/courier/IncidentScreen.svelte';
 
   // App do entregador (Fase 8 + 9), numa página própria: o terceiro público
   // do projeto, no terceiro bundle. "Aplicativo separado, feito para ser
@@ -26,6 +27,9 @@
   let offers = $state([]);
   let tab = $state('home');
   let settling = $state(false);
+  // 13.3 — o "Problema" da tela 8.5. Fica no mesmo nível de `settling`
+  // porque é a mesma coisa: uma tela que toma conta do app até terminar.
+  let reporting = $state(false);
 
   // Mesma decisão do painel da loja: polling, não SSE, porque `php -S`
   // atende uma requisição por vez (ver README). 4 s porque corrida é
@@ -84,9 +88,19 @@
     <main>
       {#if settling}
         <SettleScreen {me} onDone={() => { settling = false; pull(); }} />
+      {:else if reporting && ride}
+        <IncidentScreen
+          order={ride}
+          onBack={() => (reporting = false)}
+          onDone={() => {
+            reporting = false;
+            pull();
+          }}
+        />
       {:else if ride}
         <RideScreen
           order={ride}
+          onProblem={() => (reporting = true)}
           onDone={() => {
             tab = 'home';
             pull();
@@ -102,7 +116,7 @@
       {/if}
     </main>
 
-    {#if !ride && !settling}
+    {#if !ride && !settling && !reporting}
       <nav class="tabs">
         <button type="button" class:on={tab === 'home'} onclick={() => (tab = 'home')}>
           <i class="bi bi-scooter"></i> Corridas
