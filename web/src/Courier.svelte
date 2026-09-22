@@ -63,6 +63,34 @@
     return () => clearInterval(t);
   });
 
+  // Fase 15 — "a posição do entregador é escrita a cada 15 s"
+  // (especificação, Parte II §7). É ela que decide quem enxerga a corrida em
+  // cada rodada do despacho. Só com turno aberto, e fogo-e-esquece: nada
+  // na tela espera por isto, então um GPS que não responde não trava botão
+  // nenhum -- posição que não veio é só a última rodada a esperar.
+  const POSITION_MS = 15000;
+  function sendPosition() {
+    if (!me?.shift || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        api
+          .post('/couriers/position.php', {
+            token: courierToken(),
+            body: { lat: p.coords.latitude, lng: p.coords.longitude, heading: p.coords.heading ?? undefined },
+          })
+          .catch(() => {});
+      },
+      () => {},
+      { timeout: 5000, maximumAge: 10000 }
+    );
+  }
+
+  $effect(() => {
+    if (!logged) return;
+    const t = setInterval(sendPosition, POSITION_MS);
+    return () => clearInterval(t);
+  });
+
   function leave() {
     courierLogout();
     logged = false;

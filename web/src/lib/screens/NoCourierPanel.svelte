@@ -92,7 +92,9 @@
        pedidos na especificação, e inventar uma desculpa é pior que não dar
        nenhuma. O que é verdade e a pessoa quer saber é há quanto tempo. -->
   <p class="alert-text">
-    Ninguém aceitou a corrida ainda. Procurando há <strong>{waitingLabel}</strong>.
+    Ninguém aceitou a corrida ainda. Procurando há <strong>{waitingLabel}</strong>{#if dispatch.search}
+      , agora num raio de <strong>{Number(dispatch.search.radius_km) >= 50 ? 'toda a cidade' : `${Number(dispatch.search.radius_km).toLocaleString('pt-BR')} km`}</strong>{#if Number(dispatch.search.surge) > 0}
+        · com bônus pro entregador por nossa conta{/if}{/if}.
   </p>
   <div class="bar"><div class="fill" style:width={`${progress}%`}></div></div>
 </div>

@@ -103,6 +103,22 @@ function ledger_order_delivered(PDO $pdo, array $order, ?string $actorId): void
         );
     }
 
+    // O bônus da oferta é do entregador: o turbo que o cliente pagou (tela
+    // 15.1, já dentro do total) mais o surge que a plataforma pôs nas rodadas
+    // do despacho. A parte que o cliente não pagou é despesa nossa.
+    $offerStmt = $pdo->prepare(
+        "SELECT bonus FROM offers WHERE order_id = :id AND state = 'accepted' ORDER BY id DESC LIMIT 1"
+    );
+    $offerStmt->execute(['id' => $orderId]);
+    $bonus = (float) ($offerStmt->fetchColumn() ?: 0);
+    if ($bonus > 0 && $order['courier_id'] !== null) {
+        ledger_add($pdo, 'courier_payable', (string) $order['courier_id'], $bonus, 'order', 'bonus:' . $orderId, $orderId, $actorId, 'bônus da corrida (turbo do cliente + surge do despacho)');
+        $platformSurge = round($bonus - (float) ($order['surge_fee'] ?? 0), 2);
+        if ($platformSurge > 0) {
+            ledger_add($pdo, 'platform_expense', (string) $order['restaurant_id'], $platformSurge, 'order', 'surge:' . $orderId, $orderId, $actorId, 'surge do despacho pago pela plataforma');
+        }
+    }
+
     // A gorjeta é do entregador (tela 5.5). Até aqui ela entrava no total do
     // pedido e não saía pra ninguém.
     $tip = (float) ($order['tip'] ?? 0);

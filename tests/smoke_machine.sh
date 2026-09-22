@@ -116,6 +116,7 @@ COURIER2_AUTH=(-H "Authorization: Bearer $COURIER2_TOKEN")
 for t in "$COURIER_TOKEN" "$COURIER2_TOKEN"; do
   curl -s -X POST "$BASE/couriers/shift.php" -H "Content-Type: application/json" \
     -H "Authorization: Bearer $t" -d '{"action":"start"}' >/dev/null
+  curl -s -X POST "$BASE/couriers/position.php" -H "Content-Type: application/json" -H "Authorization: Bearer $t" -d '{"lat":-23.5505,"lng":-46.6333}' >/dev/null
 done
 
 ADMIN_CODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \

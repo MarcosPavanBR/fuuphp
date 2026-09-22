@@ -343,6 +343,10 @@ tests/
                                  resumo do dia, KDS e as transições da loja
                                  (aceitar, pronto, entregue ao motoboy),
                                  mais o isolamento entre lojas
+  smoke_rounds.sh               despacho em rodadas (Fase 15): raio que
+                                 cresce, quem vê a corrida pela posição, GPS
+                                 desligado sem prioridade, surge somado só
+                                 pela diferença e pago ao entregador
   smoke_money.sh                executor de estornos (automático, falha,
                                  retentativa, Pix manual com referência),
                                  CSV contábil, foto privada da ocorrência,
@@ -1583,6 +1587,38 @@ divergência, gerar lote e dar baixa), sem erro de console.
   `allow_courier_own_pos`, mas `pos_devices` só pertence a loja; cadastrar
   máquina de entregador pede decisão de esquema, não um campo improvisado.
 
+## Despacho em rodadas (Fase 15) — decisões de implementação
+
+- **O despacho era uma rodada só**, sem raio: todo entregador da praça via
+  toda corrida. Agora a oferta sobe de rodada enquanto ninguém aceita
+  (`DISPATCH_ROUNDS` em `lib/dispatch.php`): 2 km → 4 km → 7 km com R$ 2 de
+  surge → praça inteira com R$ 4. **Os números são parâmetros de operação,
+  não do mock** — a especificação pede rodada, raio e surge sem fixar
+  valores; ficam num lugar só pra ajustar.
+- **`dispatch_attempts` finalmente recebe linha** (existia desde a migração
+  007): uma por rodada, com raio, quantos candidatos havia dentro dele e o
+  surge. Rodada pulada (ninguém perguntou durante uma janela) entra também —
+  o registro é "por que não achou", e apagar o raio intermediário apagaria
+  parte da resposta.
+- **Posição do entregador** — `couriers/position.php`, UPSERT em
+  `courier_positions` (UNLOGGED, migração 009) a cada 15 s, como a
+  especificação manda; só com turno aberto. O app manda sem travar nada: se o
+  GPS não responde, é fogo-e-esquece.
+- **Quem vê a corrida** é quem está dentro do raio da rodada, medido da loja
+  até a última posição. **Sem posição recente, só na última rodada** —
+  desligar o GPS não pode dar prioridade sobre quem está perto.
+- **Surge soma só a diferença** entre rodadas, por cima do turbo que o
+  cliente pagou (tela 15.1), que não é tocado.
+- **O bônus agora é pago.** Até aqui o turbo entrava na oferta e no total,
+  mas a entrega só lançava o frete: o bônus ia pra lugar nenhum. Na entrega,
+  `courier_payable` recebe o bônus inteiro, e a parte que o cliente não
+  pagou (o surge) é `platform_expense`.
+- **Quem move as rodadas:** a vitrine de ofertas avança na passagem (o app
+  pergunta a cada 4 s), a tela do cliente também, e `bin/dispatch_rounds.php`
+  no cron de minuto cobre a hora em que ninguém está perguntando.
+- **A tela 15.1 do cliente** passou a dizer em que raio a busca está e se
+  já há bônus pago por nós — o que é verdade, em vez de "aguarde".
+
 ## Pontas de dinheiro: livro do pedido, estornos executados, CSV — decisões
 
 - **O livro não tinha a linha principal.** `store_receivable` se mexia em
@@ -2437,6 +2473,7 @@ JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_growth.sh     # ent
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_incident.sh   # ocorrência na entrega e console de reembolso (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_machine.sh    # maquininha, conciliação e netting semanal (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_money.sh      # estornos executados, CSV, livro do pedido (semeia sozinho)
+JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_rounds.sh     # rodadas do despacho (semeia sozinho)
 
 # O único processo de fundo do projeto (tela 15.1). Em produção é uma linha
 # no cron do cPanel, a cada minuto; localmente, roda à mão quando quiser ver

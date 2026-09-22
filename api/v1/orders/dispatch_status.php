@@ -79,7 +79,22 @@ if ($order['address_id'] !== null && $restaurant !== false && $restaurant['lat']
 
 $refund = refund_plan($order, $policy, 'no_courier');
 
+// Fase 15: a rodada em que a busca está -- raio e quantos entregadores havia
+// dentro dele. É o que troca "aguarde" por uma frase que diz o que está
+// acontecendo ("procurando num raio de 4 km").
+$search = null;
+if ($searching) {
+    dispatch_advance($pdo, $order);
+    $attempt = $pdo->prepare(
+        'SELECT round, radius_km, candidates, surge FROM dispatch_attempts
+          WHERE order_id = :id ORDER BY round DESC LIMIT 1'
+    );
+    $attempt->execute(['id' => $order['id']]);
+    $search = $attempt->fetch() ?: null;
+}
+
 json_response(200, [
+    'search' => $search,
     'searching' => $searching,
     'waiting_seconds' => $waitingSeconds,
     // "Está mais difícil que o normal" aparece depois de um terço do prazo:

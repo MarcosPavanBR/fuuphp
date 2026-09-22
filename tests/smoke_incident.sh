@@ -103,6 +103,8 @@ COURIER_TOKEN=$(curl -s -X POST "$BASE/auth/partner_login.php" -H "Content-Type:
 COURIER_AUTH=(-H "Authorization: Bearer $COURIER_TOKEN")
 curl -s -X POST "$BASE/couriers/shift.php" -H "Content-Type: application/json" "${COURIER_AUTH[@]}" \
   -d '{"action":"start"}' >/dev/null
+curl -s -X POST "$BASE/couriers/position.php" -H "Content-Type: application/json" "${COURIER_AUTH[@]}" \
+  -d '{"lat":-23.5505,"lng":-46.6333}' >/dev/null  # na porta da loja: dentro do raio da 1ª rodada
 
 ADMIN_CODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"login\",\"phone\":\"${ADMIN_PHONE}\"}" | jq -er '.dev_code') || fail "otp do admin falhou"

@@ -98,7 +98,11 @@ echo "== abrir turno (e abrir duas vezes dá 409) =="
    -d '{"action":"start"}' | jq -r '.shift.ended_at')" = "null" ] || fail "turno não abriu"
 [ "$(curl -s -X POST "$BASE/couriers/shift.php" -H "Content-Type: application/json" "${CAUTH[@]}" \
    -d '{"action":"start"}' | jq -r '.code')" = "shift_already_open" ] || fail "abriu dois turnos"
+curl -s -X POST "$BASE/couriers/position.php" -H "Content-Type: application/json" "${CAUTH[@]}" \
+  -d '{"lat":-23.5505,"lng":-46.6333}' >/dev/null  # na porta da loja: dentro do raio da 1ª rodada
 curl -s -X POST "$BASE/couriers/shift.php" -H "Content-Type: application/json" "${RAUTH[@]}" -d '{"action":"start"}' >/dev/null
+curl -s -X POST "$BASE/couriers/position.php" -H "Content-Type: application/json" "${RAUTH[@]}" \
+  -d '{"lat":-23.5505,"lng":-46.6333}' >/dev/null  # na porta da loja: dentro do raio da 1ª rodada
 
 echo "== me.php traz saldo zerado, teto da política e nenhuma corrida =="
 ME=$(curl -s "$BASE/couriers/me.php" "${CAUTH[@]}")

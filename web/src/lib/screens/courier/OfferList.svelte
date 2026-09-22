@@ -100,6 +100,11 @@
         <div class="earn">
           <p class="k">VOCÊ GANHA</p>
           <p class="v fuu-display">{money(Number(offer.fee) + Number(offer.bonus))}</p>
+          {#if Number(offer.bonus) > 0}
+            <!-- Fase 15: o bônus aparece separado -- é turbo do cliente e/ou
+                 surge das rodadas, e quem aceita quer saber que ele existe. -->
+            <p class="bonus">inclui {money(offer.bonus)} de bônus</p>
+          {/if}
         </div>
 
         <div class="grid">
@@ -142,6 +147,12 @@
 </div>
 
 <style>
+  .bonus {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--fuu-leaf-dark);
+    margin: 2px 0 0;
+  }
   .offers {
     padding: 18px;
     display: flex;
