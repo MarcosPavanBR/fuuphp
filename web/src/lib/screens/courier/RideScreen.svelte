@@ -1,7 +1,7 @@
 <script>
-  import { api, ApiError } from '../../api.js';
-  import { toastr } from '../../toastr.js';
-  import { courierToken } from '../../courierSession.svelte.js';
+  import { api, ApiError } from '../../services/api.js';
+  import { toastr } from '../../utils/toastr.js';
+  import { courierToken } from '../../state/courierSession.svelte.js';
 
   // Telas 8.3 a 8.6 numa só, mudando conforme o estado da corrida -- pelo
   // mesmo motivo do OrderTracking do cliente: são etapas do mesmo pedido, não

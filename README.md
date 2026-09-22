@@ -796,7 +796,7 @@ puro: CRUD de endereços completo e cartão salvo via Mercado Pago.
   pedido é bloqueado pela própria FK (`orders.address_id` não tem `ON
   DELETE`) — capturado e devolvido como 409, não como 500 cru.
 - **Taxa de entrega por endereço não é mostrada em lugar nenhum desta
-  tela** — mesmo achado documentado em `PaymentSelector.svelte`
+  tela** — mesmo achado documentado em `PaymentSelectorScreen.svelte`
   (Fase 4.1): não existe cálculo de frete por bairro/distância neste
   backend (`orders/checkout.php` recebe `delivery_fee` do corpo da
   requisição, não calcula). O mock mostra "Taxa R$ 6,90 · 25–35 min" por
@@ -854,7 +854,7 @@ web/
     lib/
       api.js                      cliente fetch fino (base URL, token, erros,
                                    headers extra, multipart -- ver Fase 4)
-      session.svelte.js            estado de sessão reativo (login/logout real)
+      customerSession.svelte.js            estado de sessão reativo (login/logout real)
       cart.svelte.js                estado do carrinho, espelha a resposta da API
                                      a cada ação (não um store que finge sincronizar)
       toastr.js                    toastr sem jQuery (ver abaixo)
@@ -887,63 +887,63 @@ web/
         LoginScreen.svelte              10.1 — telefone ou e-mail, código de uso único
         OtpScreen.svelte                10.2 — seis caixas, reenvio, WhatsApp
         SignupScreen.svelte             10.3 — cadastro com base legal por bloco
-        Splash.svelte                   1.1 — fade, avança sozinho (pulado quando
+        SplashScreen.svelte                   1.1 — fade, avança sozinho (pulado quando
                                          a praça já está salva)
-        StateSelector.svelte            1.2 — busca + lista com contagem de lojas
-        CityPicker.svelte               1.3 — busca de cidade, bairro, SweetAlert
-        Home.svelte                     2.1 — categorias, lojas por distância real
-        Search.svelte                   2.2 — busca de produto por trigram
-        Loyalty.svelte                  2.3 — só desenho, dado de exemplo (ver abaixo)
-        Orders.svelte                   2.4 — pedidos do cliente, tabs em andamento/histórico
-        Profile.svelte                  2.5 — perfil, estatísticas, endereços
-        RestaurantPage.svelte           3.1 — cardápio por categoria, item esgotado visível
+        StatePickerScreen.svelte            1.2 — busca + lista com contagem de lojas
+        CityPickerScreen.svelte               1.3 — busca de cidade, bairro, SweetAlert
+        HomeScreen.svelte                     2.1 — categorias, lojas por distância real
+        SearchScreen.svelte                   2.2 — busca de produto por trigram
+        LoyaltyScreen.svelte                  2.3 — só desenho, dado de exemplo (ver abaixo)
+        OrdersScreen.svelte                   2.4 — pedidos do cliente, tabs em andamento/histórico
+        ProfileScreen.svelte                  2.5 — perfil, estatísticas, endereços
+        RestaurantScreen.svelte           3.1 — cardápio por categoria, item esgotado visível
         CartDrawer.svelte               3.3 — itens, cupom (só UI), totais reais
         PaymentFlow.svelte              orquestra a Fase 4 inteira (endereço ->
                                          seleção -> método -> resultado)
-        PaymentSelector.svelte          4.1 — grid de 5 métodos + BitPay (BETA, desabilitado)
-        CardForm.svelte                 4.2 — campos do cartão (tokenização real pendente)
-        PixPayment.svelte               4.3 — QR + copia-e-cola real, contador do banco
-        ProofUploader.svelte            4.4 — compressão via canvas, progresso real (XHR)
-        CashPayment.svelte              4.5 — troco, valida contra o total
-        MachinePayment.svelte           4.6 — débito/crédito, bandeiras aceitas
-        OrderTracking.svelte            5.1/5.2/5.3/5.4 numa tela só, reagindo
+        PaymentSelectorScreen.svelte          4.1 — grid de 5 métodos + BitPay (BETA, desabilitado)
+        CardPaymentScreen.svelte                 4.2 — campos do cartão (tokenização real pendente)
+        PixPaymentScreen.svelte               4.3 — QR + copia-e-cola real, contador do banco
+        ProofUploadScreen.svelte            4.4 — compressão via canvas, progresso real (XHR)
+        CashPaymentScreen.svelte              4.5 — troco, valida contra o total
+        MachinePaymentScreen.svelte           4.6 — débito/crédito, bandeiras aceitas
+        OrderTrackingScreen.svelte            5.1/5.2/5.3/5.4 numa tela só, reagindo
                                          ao status ao vivo por SSE (ver abaixo)
         ReviewScreen.svelte             5.5 — nota, tags, gorjeta, comentário
         AddressesScreen.svelte          6.1 — CRUD completo, CEP real (ViaCEP),
                                          padrão, bloqueio de apagar em uso
-        PaymentMethods.svelte           6.2 — cartões salvos via Mercado Pago
+        PaymentMethodsScreen.svelte           6.2 — cartões salvos via Mercado Pago
         SettingsScreen.svelte           6.3 — notificações por tipo (localStorage)
         panel/                        painel da loja (entrada painel.html)
-          StaffLogin.svelte             10.7 — CNPJ + senha, 2FA por aparelho
+          StaffLoginScreen.svelte             10.7 — CNPJ + senha, 2FA por aparelho
           ProofQueue.svelte             7.3 — fila de validação, mais urgente no topo
           ProofReviewModal.svelte       7.3 — comprovante à esquerda (zoom/rotação),
                                          pedido à direita, aprovar ou recusar
           KdsBoard.svelte               11.1 — três colunas, cronômetro por pedido,
                                          fila de Pix fixa no canto
           RejectDialog.svelte           13.2 — recusar mostrando o custo real
-          CashDesk.svelte               9.3 — conferir e confirmar a baixa de espécie
+          CashDeskScreen.svelte               9.3 — conferir e confirmar a baixa de espécie
         admin/                        painel da plataforma (entrada admin.html)
-          AdminLogin.svelte             login por OTP (admin é pessoa, não aparelho)
+          AdminLoginScreen.svelte             login por OTP (admin é pessoa, não aparelho)
           StoreQueue.svelte             12.1 — aprovar/recusar cadastro de loja
           DisputeQueue.svelte           12.2 — ocorrências e galeria antifraude
           ReportsScreen.svelte          12.3 — os números que mudam decisão
           PolicyScreen.svelte           10.5 — política versionada da plataforma
         courier/                      app do entregador (entrada entregador.html)
-          CourierLogin.svelte           10.7 — CPF + código, 2FA por aparelho
-          CourierHome.svelte            8.1 — turno, saldo em espécie, teto
+          CourierLoginScreen.svelte           10.7 — CPF + código, 2FA por aparelho
+          CourierHomeScreen.svelte            8.1 — turno, saldo em espécie, teto
           OfferList.svelte              8.2 — oferta com ganho, distância e troco
           RideScreen.svelte             8.3 a 8.6 — coleta, entrega e prova
           EarningsScreen.svelte         8.7 — livro de lançamentos
           SettleScreen.svelte           9.1/9.2/9.4 — baixa de espécie
-          PanelOverview.svelte          7.3 — visão geral de hoje + pedidos recentes
-    App.svelte                  orquestra Fase 1 -> Fase 2 (abas, e Fase 6
+          OverviewScreen.svelte          7.3 — visão geral de hoje + pedidos recentes
+    CustomerApp.svelte                  orquestra Fase 1 -> Fase 2 (abas, e Fase 6
                                  como pseudo-abas dentro do mesmo shell) ->
                                  Fase 3/4/5 (tela cheia por cima das abas)
-    Panel.svelte                raiz do painel da loja: login, abas
+    StorePanelApp.svelte                raiz do painel da loja: login, abas
                                  Cozinha/Visão geral/Caixa, atualização periódica
-    Courier.svelte              raiz do app do entregador: login, corrida em
+    CourierApp.svelte              raiz do app do entregador: login, corrida em
                                  andamento, abas Corridas/Ganhos
-    Admin.svelte                raiz do painel da plataforma: login por OTP e
+    AdminApp.svelte                raiz do painel da plataforma: login por OTP e
                                  abas Lojas/Ocorrências/Relatórios/Políticas
 ```
 
@@ -987,8 +987,8 @@ web/
 - **A barra inferior tem 5 abas** (house/search/cart/star/person), **não
   6** — "Pedidos" (2.4) não é uma delas. No mock, ela é alcançada tocando
   a estatística "PEDIDOS" dentro do Perfil (2.5); é assim que
-  `App.svelte` liga as duas (`Profile` → `onOpenOrders` → aba `orders`,
-  com botão de voltar em `Orders.svelte`, já que ela não é uma aba
+  `CustomerApp.svelte` liga as duas (`Profile` → `onOpenOrders` → aba `orders`,
+  com botão de voltar em `OrdersScreen.svelte`, já que ela não é uma aba
   própria da navegação inferior).
 - **A aba Carrinho existe mas não abre nada** — avisa que é a Fase 3
   (cardápio/item/carrinho), ainda não portada, em vez de levar a uma tela
@@ -1029,7 +1029,7 @@ web/
 
 - **`RestaurantPage`/`CartDrawer` são tela cheia por cima das abas, sem a
   barra inferior** — é assim que o mock desenha 3.1/3.3 (sem os 5 ícones
-  visíveis), diferente das telas da Fase 2. `App.svelte` trata isso como
+  visíveis), diferente das telas da Fase 2. `CustomerApp.svelte` trata isso como
   uma pilha própria (`restaurantId`/`cartOpen`), não como mais uma aba.
 - **Adicionar item sem estar logado abre o `QuickLogin` *dentro* do
   modal**, sem fechar ou perder as variações já marcadas — testado de
@@ -1085,12 +1085,12 @@ web/
   de domínio.** `checkoutAndPay()` distingue os dois: um 402 cujo corpo já
   traz `order`/`payment` (a forma que `payments/pay.php` sempre devolve
   numa recusa) é tratado como resultado normal, não repassado como
-  exceção — entrega pro `OrderTracking.svelte` (Fase 5) igual a um
+  exceção — entrega pro `OrderTrackingScreen.svelte` (Fase 5) igual a um
   sucesso, que mostra o hero de "Pagamento recusado" (5.4) porque um
   pedido `rejected` é estado terminal no banco (`advance_order()` não tem
   transição saindo dele) — não dá pra "tentar de novo" no mesmo pedido.
 - **Tokenização real do MercadoPago.js não está integrada** — este
-  ambiente não tem uma Public Key de sandbox do Mercado Pago. `CardForm.svelte`
+  ambiente não tem uma Public Key de sandbox do Mercado Pago. `CardPaymentScreen.svelte`
   tem os mesmos campos do mock (4.2), mas manda um token placeholder (os
   dígitos do cartão) em vez de um token de verdade gerado pelo SDK no
   navegador; funciona porque o backend também está em
@@ -1099,14 +1099,14 @@ web/
   "login provisório" do `QuickLogin`.
 - **Progresso de upload é real, não decorativo.** `fetch()` não expõe
   progresso de envio de forma confiável entre navegadores, então
-  `ProofUploader.svelte` usa `XMLHttpRequest` só pra esta chamada
+  `ProofUploadScreen.svelte` usa `XMLHttpRequest` só pra esta chamada
   (`xhr.upload.onprogress`) — é por isso que este componente não usa
   `lib/api.js` como os outros. A compressão antes do envio também é real:
   redesenha a imagem num `<canvas>` (máximo 1280px no lado maior, JPEG
   80%) e mostra o tamanho antes/depois, exatamente como o chip da tela
   4.4 descreve.
 - **Pix copia-e-cola (BR Code) veio de `lib/payments/pix.php` de verdade** — não é
-  texto decorativo. `PixPayment.svelte` exibe o payload EMV completo
+  texto decorativo. `PixPaymentScreen.svelte` exibe o payload EMV completo
   (testado visualmente: começa com `000201`, contém `br.gov.bcb.pix`).
   O CNPJ mostrado na tela exigiu adicionar a coluna `cnpj` na resposta de
   `restaurants/show.php` (não vazava antes — é dado público, mesmo que já
@@ -1143,7 +1143,7 @@ web/
 
 **Fase 5 — decisões adicionais:**
 
-- **Uma tela só (`OrderTracking.svelte`) cobre 5.1, 5.2, 5.3 e 5.4** — no
+- **Uma tela só (`OrderTrackingScreen.svelte`) cobre 5.1, 5.2, 5.3 e 5.4** — no
   mock as quatro já são a mesma ideia ("o aviso chega por SSE"), só o
   conteúdo do "hero" muda com `order.status`; separar em 4 arquivos
   duplicaria a conexão SSE e a busca do pedido sem ganhar nada. 5.5
@@ -1163,7 +1163,7 @@ web/
   com Leaflet -- ver "Lacunas do app do cliente fechadas".
 - **Previsão de entrega é uma janela fixa a partir de `created_at`** (25 a
   45 min depois), igual à mesma simplificação já assumida em
-  `PaymentSelector.svelte` (Fase 4.1) — sem motor de logística real
+  `PaymentSelectorScreen.svelte` (Fase 4.1) — sem motor de logística real
   (Fase 8/9), não tem outra fonte pra esse número.
 - **Bug real de datas, achado nesta fase e corrigido em três lugares.**
   `new Date(timestamp.replace(' ', 'T'))` parece inofensivo, mas quebra
@@ -1174,7 +1174,7 @@ web/
   Playwright comparando o texto renderizado ("Invalid Date" na tela, não
   só no console). `web/src/lib/datetime.js` (`parsePgTimestamp()`) resolve
   isso normalizando pra ISO 8601 de verdade antes de entregar pro `Date`;
-  usado em `OrderTracking.svelte` (novo) e em `Orders.svelte` (Fase 2.4,
+  usado em `OrderTrackingScreen.svelte` (novo) e em `OrdersScreen.svelte` (Fase 2.4,
   que já tinha o mesmo bug desde antes desta fase — `minutesLeft()` também
   corrigido).
 - **`orders/show.php` ganhou `review`** (a avaliação já feita, ou `null`)
@@ -1200,7 +1200,7 @@ web/
 
 - **Endereços/cartões/configurações entram como pseudo-abas dentro do
   mesmo `app-shell`**, não como uma pilha própria tipo `RestaurantPage`/
-  `PaymentFlow` — mesmo padrão que `Orders.svelte` (Fase 2.4) já usava
+  `PaymentFlow` — mesmo padrão que `OrdersScreen.svelte` (Fase 2.4) já usava
   (`tab = 'orders'` sem estar na barra inferior). Simples, e consistente
   com o que já existia.
 - **Busca por CEP é uma chamada real pro ViaCEP** (API pública,
@@ -1252,7 +1252,7 @@ mock).
   correção de um bug real que o Playwright pegou: com a condição escrita
   como "não autenticado", a aba trocava o fluxo pela tela dela no instante
   em que o token chegava, e o cadastro nunca aparecia. Agora
-  `session.svelte.js` guarda `pendingSignup`, ligado no `verifyOtp` com
+  `customerSession.svelte.js` guarda `pendingSignup`, ligado no `verifyOtp` com
   `purpose=signup` e desligado quando o cadastro termina -- a aba e o modal
   de item leem o mesmo sinal.
 - **Os três blocos de 10.3 são bases legais diferentes, e isso muda onde o
@@ -1703,7 +1703,7 @@ divergência, gerar lote e dar baixa), sem erro de console.
   original tenha usado cliente + cartão salvos (token novo a partir do
   `card_id`); sem isso a cobrança falha com mensagem clara, nunca cobra
   outro cartão.
-- **Pix automático tem tela** (`PixAutoPayment.svelte`). O mock não a
+- **Pix automático tem tela** (`PixAutoPaymentScreen.svelte`). O mock não a
   desenha: o Pix automático aparece como forma que a LOJA liga (10.5,
   "RECOMENDADO · nada de conferir comprovante") e no mix da 12.3. A tela é a
   4.3 sem o que não se aplica -- sem comprovante, sem "a loja confirma" --
@@ -2271,7 +2271,7 @@ script de seed. Estas três telas fecham isso.
   seria aceitar pedido que ninguém vai preparar.
 - **O tempo de preparo saiu do front e virou dado da loja.** A previsão de
   entrega do app do cliente era uma janela fixa de 25–45 min escrita no
-  `OrderTracking.svelte`, que ninguém na loja podia corrigir. Agora é
+  `OrderTrackingScreen.svelte`, que ninguém na loja podia corrigir. Agora é
   `restaurants.prep_minutes` + uma margem de viagem, e o "aumentar sozinho
   quando a fila passar de 8 pedidos" é calculado na LEITURA
   (`lib/catalog/store.php`), nunca gravado por cima do valor combinado — se fosse

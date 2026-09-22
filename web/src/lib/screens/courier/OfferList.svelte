@@ -1,7 +1,7 @@
 <script>
-  import { api, ApiError } from '../../api.js';
-  import { toastr } from '../../toastr.js';
-  import { courierToken } from '../../courierSession.svelte.js';
+  import { api, ApiError } from '../../services/api.js';
+  import { toastr } from '../../utils/toastr.js';
+  import { courierToken } from '../../state/courierSession.svelte.js';
 
   // Tela 8.2 — "Tudo que decide o aceite em uma tela: ganho, distância, forma
   // de pagamento e troco."

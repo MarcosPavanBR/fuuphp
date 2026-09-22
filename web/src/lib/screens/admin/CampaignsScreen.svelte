@@ -1,7 +1,7 @@
 <script>
-  import { api } from '../../api.js';
-  import { toastr } from '../../toastr.js';
-  import { adminToken } from '../../adminSession.svelte.js';
+  import { api } from '../../services/api.js';
+  import { toastr } from '../../utils/toastr.js';
+  import { adminToken } from '../../state/adminSession.svelte.js';
 
   // Tela 15.3 — "Cupons e campanhas".
   //

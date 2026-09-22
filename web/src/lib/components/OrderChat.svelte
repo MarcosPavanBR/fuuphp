@@ -1,7 +1,7 @@
 <script>
-  import { api } from '../api.js';
-  import { toastr } from '../toastr.js';
-  import { parsePgTimestamp } from '../datetime.js';
+  import { api } from '../services/api.js';
+  import { toastr } from '../utils/toastr.js';
+  import { parsePgTimestamp } from '../utils/datetime.js';
 
   // Tela 14.2 — "Chat do pedido (três pontas)".
   //

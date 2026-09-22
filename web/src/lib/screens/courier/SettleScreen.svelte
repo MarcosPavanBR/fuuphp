@@ -1,8 +1,8 @@
 <script>
-  import { api, ApiError } from '../../api.js';
-  import { toastr } from '../../toastr.js';
-  import { courierToken } from '../../courierSession.svelte.js';
-  import { parsePgTimestamp } from '../../datetime.js';
+  import { api, ApiError } from '../../services/api.js';
+  import { toastr } from '../../utils/toastr.js';
+  import { courierToken } from '../../state/courierSession.svelte.js';
+  import { parsePgTimestamp } from '../../utils/datetime.js';
 
   // Telas 9.1, 9.2 e 9.4 — escolher a baixa, gerar o código e ver o saldo
   // zerado.

@@ -51,7 +51,7 @@ export const ALL_STATES = [
 // um mock de tela.
 // lat/lng são o centro aproximado da cidade (não do bairro escolhido) --
 // bastam pra ordenar a Home por distância de verdade; geocodificação fina
-// por bairro é a mesma lacuna já registrada em CityPicker.svelte.
+// por bairro é a mesma lacuna já registrada em CityPickerScreen.svelte.
 export const CITIES_BY_STATE = {
   SP: [
     { name: 'São Paulo', ibge: '3550308', lat: -23.5505, lng: -46.6333, neighborhoods: ['Pinheiros', 'Cambuí', 'Moema', 'Vila Mariana'] },

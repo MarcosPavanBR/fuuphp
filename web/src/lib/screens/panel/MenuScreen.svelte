@@ -1,9 +1,9 @@
 <script>
-  import { api, BASE } from '../../api.js';
+  import { api, BASE } from '../../services/api.js';
   import MenuPhoto from '../../components/MenuPhoto.svelte';
-  import { toastr } from '../../toastr.js';
-  import { staffToken } from '../../staffSession.svelte.js';
-  import { parsePgTimestamp } from '../../datetime.js';
+  import { toastr } from '../../utils/toastr.js';
+  import { staffToken } from '../../state/staffSession.svelte.js';
+  import { parsePgTimestamp } from '../../utils/datetime.js';
 
   // Tela 11.3 — "Cardápio: item, preço e disponibilidade".
   //

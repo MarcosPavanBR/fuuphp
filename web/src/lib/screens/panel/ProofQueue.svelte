@@ -1,5 +1,5 @@
 <script>
-  import { parsePgTimestamp } from '../../datetime.js';
+  import { parsePgTimestamp } from '../../utils/datetime.js';
 
   // Coluna "FILA DE VALIDAÇÃO · 3" do mock (tela 7.3). O primeiro da fila
   // vem destacado em vermelho porque ele é o que está mais perto de

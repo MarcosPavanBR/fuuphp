@@ -1,8 +1,8 @@
 <script>
-  import { api, ApiError } from '../../api.js';
-  import { toastr } from '../../toastr.js';
-  import { staffToken } from '../../staffSession.svelte.js';
-  import { parsePgTimestamp } from '../../datetime.js';
+  import { api, ApiError } from '../../services/api.js';
+  import { toastr } from '../../utils/toastr.js';
+  import { staffToken } from '../../state/staffSession.svelte.js';
+  import { parsePgTimestamp } from '../../utils/datetime.js';
 
   // Tela 11.1 — "Três colunas, cronômetro por pedido, nenhum pedido sem
   // pagamento resolvido." As três colunas são exatamente os três status que

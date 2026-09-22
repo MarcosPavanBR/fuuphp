@@ -1,6 +1,6 @@
 <script>
-  import { api } from '../api.js';
-  import { toastr } from '../toastr.js';
+  import { api } from '../services/api.js';
+  import { toastr } from '../utils/toastr.js';
 
   // "Cinco abas em bi-house · bi-search · bi-cart · bi-star · bi-person.
   // Alvos de toque de 48 px na barra inferior; badge do carrinho vem do

@@ -1,6 +1,6 @@
 <script>
-  import { api } from '../api.js';
-  import { toastr } from '../toastr.js';
+  import { api } from '../services/api.js';
+  import { toastr } from '../utils/toastr.js';
 
   // Passo de endereço do checkout (Fase 4): escolhe um endereço salvo ou
   // cadastra um rápido. O cadastro completo -- rótulo, padrão, edição, CEP

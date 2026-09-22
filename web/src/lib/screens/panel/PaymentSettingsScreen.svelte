@@ -1,8 +1,8 @@
 <script>
-  import { api } from '../../api.js';
-  import { toastr } from '../../toastr.js';
-  import { staffToken } from '../../staffSession.svelte.js';
-  import { parsePgTimestamp } from '../../datetime.js';
+  import { api } from '../../services/api.js';
+  import { toastr } from '../../utils/toastr.js';
+  import { staffToken } from '../../state/staffSession.svelte.js';
+  import { parsePgTimestamp } from '../../utils/datetime.js';
 
   // Tela 10.4 — "Painel da loja: configurar formas de pagamento".
   //

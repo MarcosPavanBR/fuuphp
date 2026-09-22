@@ -1,7 +1,7 @@
 <script>
-  import { api } from '../../api.js';
-  import { toastr } from '../../toastr.js';
-  import { staffToken } from '../../staffSession.svelte.js';
+  import { api } from '../../services/api.js';
+  import { toastr } from '../../utils/toastr.js';
+  import { staffToken } from '../../state/staffSession.svelte.js';
 
   // Tela 11.4 — "Horário, feriados e último pedido".
   //

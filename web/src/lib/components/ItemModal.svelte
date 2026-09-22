@@ -1,10 +1,10 @@
 <script>
   import MenuPhoto from './MenuPhoto.svelte';
   import { fly } from 'svelte/transition';
-  import { addToCart } from '../cart.svelte.js';
-  import { isAuthenticated } from '../session.svelte.js';
-  import { toastr } from '../toastr.js';
-  import AuthFlow from '../screens/AuthFlow.svelte';
+  import { addToCart } from '../state/cart.svelte.js';
+  import { isAuthenticated } from '../state/customerSession.svelte.js';
+  import { toastr } from '../utils/toastr.js';
+  import AuthFlow from '../screens/customer/AuthFlow.svelte';
 
   // Tela 3.2 — Item, extras e observações. "Modal com transição fly do
   // Svelte; preço recalculado no servidor antes de virar item do pedido."

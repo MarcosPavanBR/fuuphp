@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import L from 'leaflet';
   import 'leaflet/dist/leaflet.css';
-  import { api } from '../api.js';
+  import { api } from '../services/api.js';
 
   // Tela 5.3 — "mapa da entrega (Leaflet / tiles)", "1,4 km · 8 min",
   // "Jonas está levando · Honda Biz · placa QQP-1B34" (DeliveryMap.svelte no

@@ -1,5 +1,5 @@
 <script>
-  import { BASE } from '../api.js';
+  import { BASE } from '../services/api.js';
 
   // A foto de um item do cardápio, ou o ícone de "sem foto" -- o mesmo
   // quadrado em todo lugar (loja 3.1, item 3.2, busca 2.2, painel 11.1).

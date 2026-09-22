@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 
 // Tela 6.2 — Adicionar cartão. Mesmo limite já documentado em
 // payments/pay.php: sem MercadoPago.js real integrado neste ambiente, o
-// "token" que chega aqui é o placeholder que CardForm.svelte manda (os
+// "token" que chega aqui é o placeholder que CardPaymentScreen.svelte manda (os
 // dígitos do cartão), não uma tokenização de verdade -- funciona porque o
 // backend está em MERCADOPAGO_MODE=fake. "Guardamos apenas bandeira e 4
 // últimos dígitos" (mock): é literalmente tudo que este endpoint grava.

@@ -215,7 +215,7 @@ function mp_delete_card(string $mpCustomerId, string $mpCardId): void
 /**
  * Sem BIN de verdade pra consultar (não há base de bandeiras neste
  * ambiente), a bandeira em modo fake é um palpite simples pelo primeiro
- * dígito do token-placeholder (que, no CardForm.svelte, são os próprios
+ * dígito do token-placeholder (que, no CardPaymentScreen.svelte, são os próprios
  * dígitos do cartão) -- só cosmético, nunca usado pra decidir cobrança.
  */
 function mp_fake_create_card(string $cardToken): array

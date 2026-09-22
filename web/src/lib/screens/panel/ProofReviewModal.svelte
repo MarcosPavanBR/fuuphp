@@ -1,9 +1,9 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { api, ApiError, BASE } from '../../api.js';
-  import { toastr } from '../../toastr.js';
-  import { staffToken } from '../../staffSession.svelte.js';
-  import { parsePgTimestamp } from '../../datetime.js';
+  import { api, ApiError, BASE } from '../../services/api.js';
+  import { toastr } from '../../utils/toastr.js';
+  import { staffToken } from '../../state/staffSession.svelte.js';
+  import { parsePgTimestamp } from '../../utils/datetime.js';
 
   // Tela 7.3 — "Modal split: comprovante à esquerda, pedido à direita,
   // dois botões grandes. A conferência automática (hash, phash, horário,

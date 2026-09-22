@@ -1,7 +1,7 @@
 <script>
-  import { api, BASE } from '../../api.js';
-  import { toastr } from '../../toastr.js';
-  import { adminToken } from '../../adminSession.svelte.js';
+  import { api, BASE } from '../../services/api.js';
+  import { toastr } from '../../utils/toastr.js';
+  import { adminToken } from '../../state/adminSession.svelte.js';
 
   // Tela 12.3 — "Os números que mudam decisão".
   //

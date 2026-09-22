@@ -1,6 +1,6 @@
 <script>
-  import { api, BASE } from '../../api.js';
-  import { toastr } from '../../toastr.js';
+  import { api, BASE } from '../../services/api.js';
+  import { toastr } from '../../utils/toastr.js';
 
   // Tela 15.2 — "Onboarding do entregador".
   //

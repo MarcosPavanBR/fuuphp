@@ -1,7 +1,7 @@
 <script>
-  import { api, ApiError } from '../../api.js';
-  import { toastr } from '../../toastr.js';
-  import { staffToken } from '../../staffSession.svelte.js';
+  import { api, ApiError } from '../../services/api.js';
+  import { toastr } from '../../utils/toastr.js';
+  import { staffToken } from '../../state/staffSession.svelte.js';
 
   // Tela 13.2 — "Recusar tem custo e a tela mostra qual: compensação ao
   // entregador que já saiu, efeito na taxa de recusa e na posição na busca."

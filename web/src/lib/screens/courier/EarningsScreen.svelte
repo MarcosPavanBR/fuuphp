@@ -1,7 +1,7 @@
 <script>
-  import { api } from '../../api.js';
-  import { courierToken } from '../../courierSession.svelte.js';
-  import { parsePgTimestamp } from '../../datetime.js';
+  import { api } from '../../services/api.js';
+  import { courierToken } from '../../state/courierSession.svelte.js';
+  import { parsePgTimestamp } from '../../utils/datetime.js';
 
   // Tela 8.7 — "Livro de lançamentos, não um campo de saldo: cada corrida,
   // bônus, gorjeta e repasse é uma linha — é o que permite fechar o caixa sem
