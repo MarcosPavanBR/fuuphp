@@ -100,16 +100,21 @@ EARLY=$(curl -s -X POST "$BASE/reviews/create.php" -H "Content-Type: application
   -d "{\"order_id\":${ORDER_ID},\"rating\":5}")
 [ "$(echo "$EARLY" | jq -r '.code')" = "order_not_delivered" ] || fail "avaliação antes de delivered não foi barrada: $EARLY"
 
-echo "== avança até 'delivered' (courier ainda não existe -- Fase 8) =="
+echo "== avança até 'delivered' direto no banco (sem entregador: o foco aqui é a avaliação) =="
 psql_run -c "SELECT advance_order(${ORDER_ID}, 'ready', NULL, 'system');" >/dev/null
 psql_run -c "SELECT advance_order(${ORDER_ID}, 'delivering', NULL, 'system');" >/dev/null
 psql_run -c "SELECT advance_order(${ORDER_ID}, 'delivered', NULL, 'system');" >/dev/null
 
+echo "== reviews/create.php: gorjeta sem entregador é recusada (a cobrança está em smoke_payment_changes) =="
+NOCOURIER=$(curl -s -X POST "$BASE/reviews/create.php" -H "Content-Type: application/json" "${AUTH[@]}" \
+  -d "{\"order_id\":${ORDER_ID},\"rating\":5,\"courier_tip\":5}")
+[ "$(echo "$NOCOURIER" | jq -r '.code')" = "tip_no_courier" ] || fail "gorjeta sem entregador passou: $NOCOURIER"
+
 echo "== reviews/create.php: avaliação de verdade =="
 REVIEW=$(curl -s -X POST "$BASE/reviews/create.php" -H "Content-Type: application/json" "${AUTH[@]}" \
-  -d "{\"order_id\":${ORDER_ID},\"rating\":5,\"tags\":[\"Comida quente\",\"Chegou rápido\"],\"comment\":\"Muito bom!\",\"courier_tip\":5}")
+  -d "{\"order_id\":${ORDER_ID},\"rating\":5,\"tags\":[\"Comida quente\",\"Chegou rápido\"],\"comment\":\"Muito bom!\"}")
 [ "$(echo "$REVIEW" | jq -r '.review.rating')" = "5" ] || fail "avaliação não gravou a nota certa: $REVIEW"
-[ "$(echo "$REVIEW" | jq -r '.review.courier_tip')" = "5.00" ] || fail "avaliação não gravou a gorjeta certa: $REVIEW"
+[ "$(echo "$REVIEW" | jq -r '.review.tip_state')" = "none" ] || fail "avaliação sem gorjeta ficou com estado de gorjeta: $REVIEW"
 
 echo "== reviews/create.php: segunda avaliação do mesmo pedido é barrada (409) =="
 DUPLICATE=$(curl -s -X POST "$BASE/reviews/create.php" -H "Content-Type: application/json" "${AUTH[@]}" \

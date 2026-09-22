@@ -1,14 +1,15 @@
 <script>
+  import { api } from '../api.js';
   import { toastr } from '../toastr.js';
 
   // "Cinco abas em bi-house · bi-search · bi-cart · bi-star · bi-person.
   // Alvos de toque de 48 px na barra inferior; badge do carrinho vem do
   // store Svelte." (Fase 2, chip BottomNav.svelte)
   //
-  // O carrinho é Fase 3, ainda não portada -- a aba existe (fidelidade ao
-  // mock) mas avisa que não é clicável de verdade ainda, em vez de levar a
-  // uma tela vazia fingindo que funciona.
-  let { active, onNavigate } = $props();
+  // A aba do carrinho abre o carrinho com item mais recente (cart/show.php
+  // sem loja). O carrinho mora dentro da loja (um por loja), então quem
+  // desenha é o CartDrawer daquela loja -- `onOpenCart(restaurantId)`.
+  let { active, onNavigate, onOpenCart } = $props();
 
   const tabs = [
     { key: 'home', icon: 'bi-house', label: 'Início' },
@@ -18,9 +19,22 @@
     { key: 'profile', icon: 'bi-person', label: 'Perfil' },
   ];
 
+  async function openLatestCart() {
+    try {
+      const data = await api.get('/cart/show.php', { auth: true });
+      if (data.order) {
+        onOpenCart(data.order.restaurant_id);
+      } else {
+        toastr.info('Seu carrinho está vazio.');
+      }
+    } catch {
+      toastr.error('Não deu pra abrir o carrinho agora.');
+    }
+  }
+
   function go(tab) {
     if (tab.key === 'cart') {
-      toastr.info('O carrinho é a Fase 3 das telas — ainda não portada.');
+      openLatestCart();
       return;
     }
     onNavigate(tab.key);

@@ -48,6 +48,8 @@ if (mp_mode() === 'fake') {
 if ($status === '') {
     error_response(422, 'payment_not_found_upstream', 'Não deu pra confirmar esse pagamento no Mercado Pago.');
 }
+// 'pending', 'cancelled' etc. viram o vocabulário de payments.status.
+$status = mp_normalize_status($status);
 
 $paymentStmt = $pdo->prepare("SELECT * FROM payments WHERE provider = 'mercadopago' AND provider_ref = :ref");
 $paymentStmt->execute(['ref' => $dataId]);
@@ -74,7 +76,7 @@ try {
     if ($order !== null && $order['status'] === 'pending_payment') {
         if ($status === 'approved') {
             call_advance_order($pdo, $orderId, 'paid', null, 'system', ['payment_id' => $payment['id'], 'source' => 'mp_webhook']);
-        } elseif (in_array($status, ['rejected', 'cancelled'], true)) {
+        } elseif ($status === 'rejected') {
             $pdo->prepare('UPDATE orders SET reject_reason = :r WHERE id = :id')
                 ->execute(['r' => $statusDetail ?? 'pagamento recusado pelo Mercado Pago', 'id' => $orderId]);
             call_advance_order($pdo, $orderId, 'rejected', null, 'system', ['payment_id' => $payment['id'], 'source' => 'mp_webhook']);

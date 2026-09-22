@@ -96,7 +96,7 @@ function mp_create_pix_payment(float $amount, string $payerEmail): array
 
     return [
         'provider_ref' => (string) ($body['id'] ?? ''),
-        'status' => (string) ($body['status'] ?? 'in_process'),
+        'status' => mp_normalize_status((string) ($body['status'] ?? 'in_process')),
         'qr_code' => $poi['qr_code'] ?? null,
         'qr_code_base64' => $poi['qr_code_base64'] ?? null,
         'raw' => $body,
@@ -137,13 +137,32 @@ function mp_fake_card_payment(string $cardToken, float $amount, int $installment
 function mp_fake_pix_payment(float $amount): array
 {
     $ref = 'fake_' . bin2hex(random_bytes(8));
+    $qr = ['qr_code' => 'fake-pix-copia-e-cola-' . $ref, 'qr_code_base64' => base64_encode('fake-qr:' . $ref)];
     return [
         'provider_ref' => $ref,
         'status' => 'in_process',
-        'qr_code' => 'fake-pix-copia-e-cola-' . $ref,
-        'qr_code_base64' => base64_encode('fake-qr:' . $ref),
-        'raw' => ['mode' => 'fake', 'amount' => $amount],
+        'qr_code' => $qr['qr_code'],
+        'qr_code_base64' => $qr['qr_code_base64'],
+        // Mesmo formato da resposta real, pra quem relê o QR do raw
+        // (pay.php reaproveita a cobrança em vez de emitir outra).
+        'raw' => ['mode' => 'fake', 'amount' => $amount, 'point_of_interaction' => ['transaction_data' => $qr]],
     ];
+}
+
+/**
+ * Traduz o status do Mercado Pago pro vocabulário de `payments.status`
+ * (CHECK da migração 005: created, in_process, approved, rejected, refunded,
+ * charged_back). O MP tem mais estados que isso; sem esta tradução, gravar
+ * 'pending' (todo Pix recém-emitido) ou 'cancelled' (Pix que expirou)
+ * quebrava o INSERT/UPDATE em produção.
+ */
+function mp_normalize_status(string $mpStatus): string
+{
+    return match ($mpStatus) {
+        'approved', 'rejected', 'refunded', 'charged_back', 'in_process' => $mpStatus,
+        'cancelled' => 'rejected',            // Pix expirado / cobrança cancelada
+        default => 'in_process',              // pending, authorized, in_mediation
+    };
 }
 
 /**
@@ -286,4 +305,61 @@ function mp_refund_payment(string $paymentProviderRef, float $amount, string $id
         'status' => (string) ($resp['body']['status'] ?? 'approved'),
         'raw' => $resp['body'],
     ];
+}
+
+/**
+ * Tela 5.5 — cobra a gorjeta "no mesmo cartão do pedido".
+ *
+ * Em modo live: lê o pagamento original pra descobrir o cartão salvo e o
+ * cliente no Mercado Pago, gera um token novo a partir do `card_id` e cria
+ * um pagamento avulso de 1 parcela. Isso só funciona se o pagamento do
+ * pedido foi feito com cliente + cartão salvos no MP (fluxo de "cartão
+ * salvo"); sem isso o MP não devolve `card.id` e a cobrança falha com
+ * mensagem clara -- nunca cobra um cartão diferente. NÃO VALIDADO contra a
+ * API real (este ambiente não alcança o Mercado Pago).
+ *
+ * Em modo fake: aprova, exceto quando a referência do pagamento original
+ * começa com "FAIL" (mesma convenção de mp_refund_payment, pros testes).
+ *
+ * @return array{provider_ref:string,status:string,raw:array}
+ */
+function mp_charge_tip(string $originalProviderRef, float $amount, string $idempotencyKey): array
+{
+    if (mp_mode() === 'fake') {
+        if (str_starts_with(strtoupper($originalProviderRef), 'FAIL')) {
+            throw new RuntimeException('Mercado Pago recusou a cobrança da gorjeta (simulado)');
+        }
+
+        return [
+            'provider_ref' => 'fake-tip-' . substr(hash('sha256', $idempotencyKey), 0, 12),
+            'status' => 'approved',
+            'raw' => ['simulated' => true, 'amount' => $amount, 'original' => $originalProviderRef],
+        ];
+    }
+
+    $original = mp_request('GET', '/v1/payments/' . rawurlencode($originalProviderRef), []);
+    $cardId = $original['body']['card']['id'] ?? null;
+    $customerId = $original['body']['payer']['id'] ?? null;
+    if ($cardId === null || $customerId === null) {
+        throw new RuntimeException('o pagamento do pedido não usou cartão salvo; não dá pra cobrar o mesmo cartão');
+    }
+
+    $token = mp_request('POST', '/v1/card_tokens', ['card_id' => (string) $cardId]);
+    if (!isset($token['body']['id'])) {
+        throw new RuntimeException('Mercado Pago não gerou token do cartão salvo: ' . json_encode($token['body'], JSON_UNESCAPED_UNICODE));
+    }
+
+    $resp = mp_request('POST', '/v1/payments', [
+        'transaction_amount' => round($amount, 2),
+        'token' => $token['body']['id'],
+        'installments' => 1,
+        'description' => 'Gorjeta do entregador',
+        'payer' => ['type' => 'customer', 'id' => (string) $customerId],
+    ], $idempotencyKey);
+    $status = (string) ($resp['body']['status'] ?? 'rejected');
+    if ($resp['http_status'] >= 400 || $status !== 'approved') {
+        throw new RuntimeException('Mercado Pago recusou a cobrança da gorjeta: ' . ($resp['body']['status_detail'] ?? $status));
+    }
+
+    return ['provider_ref' => (string) $resp['body']['id'], 'status' => $status, 'raw' => $resp['body']];
 }

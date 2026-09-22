@@ -210,7 +210,7 @@
 </script>
 
 {#if showReview}
-  <ReviewScreen {orderId} orderCode={order?.public_code} restaurantName={restaurant?.name ?? ''} onDone={() => { showReview = false; onDone(); }} onSkip={() => (showReview = false)} />
+  <ReviewScreen {orderId} orderCode={order?.public_code} tipAllowed={order?.payment_method === 'mp_card' && order?.courier_id != null} restaurantName={restaurant?.name ?? ''} onDone={() => { showReview = false; onDone(); }} onSkip={() => (showReview = false)} />
 {:else if order === null}
   <div class="tracking-screen"><p class="loading">Carregando pedido…</p></div>
 {:else}

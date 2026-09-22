@@ -10,6 +10,11 @@ declare(strict_types=1);
 // não são aplicados aqui (exigiriam cruzar city_ibge_code do endereço de
 // entrega, que este módulo ainda não resolve por geocodificação). Só
 // scope='restaurant' entra no merge. Fica registrado no README.
+// Formas "online": o dinheiro não passa pela mão do entregador. É o que
+// sobra pra loja em atraso de repasse ("Loja com repasse em atraso cai
+// automaticamente para somente online", tela 10.5).
+const ONLINE_PAYMENT_METHODS = ['mp_card', 'pix_auto', 'pix_manual'];
+
 function resolve_policy(PDO $pdo, string $restaurantId): array
 {
     $policyStmt = $pdo->query(
@@ -29,6 +34,15 @@ function resolve_policy(PDO $pdo, string $restaurantId): array
     if ($settings !== false) {
         $storeMethods = pg_text_array_to_php((string) $settings['methods']);
         $enabledMethods = array_values(array_intersect($enabledMethods, $storeMethods));
+    }
+
+    // Trava de atraso (bin/apply_financial_blocks.php liga, a baixa em
+    // admin/netting.php desliga): enquanto valer, só formas online -- no
+    // checkout, na troca de método e na tela 4.1, porque todos passam aqui.
+    $blockStmt = $pdo->prepare('SELECT online_only_until > now() FROM restaurants WHERE id = :id');
+    $blockStmt->execute(['id' => $restaurantId]);
+    if ($blockStmt->fetchColumn() === true) {
+        $enabledMethods = array_values(array_intersect($enabledMethods, ONLINE_PAYMENT_METHODS));
     }
 
     $overrideStmt = $pdo->prepare(

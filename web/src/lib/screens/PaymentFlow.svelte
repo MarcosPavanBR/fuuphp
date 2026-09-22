@@ -4,6 +4,7 @@
   import { cartState, clearCartState } from '../cart.svelte.js';
   import QuickAddress from '../components/QuickAddress.svelte';
   import PaymentSelector from './PaymentSelector.svelte';
+  import PixAutoPayment from './PixAutoPayment.svelte';
   import CardForm from './CardForm.svelte';
   import PixPayment from './PixPayment.svelte';
   import ProofUploader from './ProofUploader.svelte';
@@ -25,13 +26,20 @@
   let { restaurantId, location, couponCode = null, onBack, onOrderReady } = $props();
 
   let restaurant = $state(null);
+  // O que a loja aceita agora (restaurants/show.php, já com a trava de
+  // "somente online" de repasse atrasado). null = ainda não sabe: o seletor
+  // mostra tudo e o checkout decide.
+  let acceptedMethods = $state(null);
   // `restaurantId` é prop fixa pro tempo de vida deste componente -- App.svelte
   // recria o PaymentFlow a cada troca de loja (restaurantId volta a null
   // entre uma visita e outra), então ler o valor inicial aqui é
   // intencional, não um bug de reatividade (mesmo padrão de ItemModal.svelte).
   api
     .get('/restaurants/show.php', { query: { id: restaurantId } })
-    .then((data) => (restaurant = data.restaurant))
+    .then((data) => {
+      restaurant = data.restaurant;
+      acceptedMethods = data.payment_methods ?? null;
+    })
     .catch(() => {});
 
   let cart = $derived(cartState());
@@ -61,13 +69,13 @@
 
   async function onMethodContinue(chosen) {
     method = chosen;
-    if (chosen === 'pix_manual') {
+    if (chosen === 'pix_manual' || chosen === 'pix_auto') {
       // Pix precisa do QR já pronto quando a tela aparece -- diferente dos
       // outros métodos, que só chamam checkout+pay quando o usuário confirma.
       step = 'pix_loading';
       try {
         await checkoutAndPay({});
-        step = 'pix_manual';
+        step = chosen;
       } catch {
         step = 'select';
       }
@@ -108,6 +116,22 @@
           },
         });
         order = checkoutData.order;
+      } else if (order.payment_method !== method) {
+        // Voltou e escolheu outro método depois do checkout (ex.: Pix
+        // manual numa loja sem chave): troca o método do MESMO pedido --
+        // itens, cupom, crédito e vaga agendada continuam valendo.
+        const changed = await api.post('/payments/change_method.php', {
+          auth: true,
+          body: {
+            order_id: order.id,
+            payment_method: method,
+            ...(extra.change_for !== undefined ? { change_for: extra.change_for } : {}),
+            ...(extra.machine_kind ? { machine_kind: extra.machine_kind } : {}),
+          },
+        });
+        order = changed.order;
+        pixCopyPaste = '';
+        pixQrBase64 = null;
       }
 
       const payData = await api.post('/payments/pay.php', {
@@ -178,14 +202,11 @@
     onOrderReady(order.id);
   }
 
-  // Simplificação assumida: se o checkout já aconteceu (order !== null,
-  // ex.: pix_manual sem chave Pix cadastrada) e o cliente volta e escolhe
-  // OUTRO método aqui, o pedido já existe com o payment_method antigo
-  // gravado -- trocar de método de verdade, nesse caso, exigiria um
-  // endpoint pra abandonar o pending_payment e abrir carrinho novo, que
-  // não existe ainda. Não é o caminho comum (a maioria das voltas acontece
-  // antes de qualquer checkout, quando `order` ainda é null e o retry já
-  // funciona certo).
+  // Voltar pra escolha de método depois do checkout não perde o pedido:
+  // `checkoutAndPay` percebe que o método mudou e chama
+  // payments/change_method.php antes de pagar. O servidor recusa (409) se
+  // o pagamento já andou -- comprovante enviado, cartão ou Pix automático
+  // já no Mercado Pago --, e aí o toastr explica.
   function backFromMethod() {
     step = 'select';
   }
@@ -206,7 +227,7 @@
     <QuickAddress {location} onReady={onAddressReady} />
   </div>
 {:else if step === 'select'}
-  <PaymentSelector {total} {addressLabel} onContinue={onMethodContinue} {onBack} />
+  <PaymentSelector {total} {addressLabel} {acceptedMethods} onContinue={onMethodContinue} {onBack} />
 {:else if step === 'mp_card'}
   <CardForm {total} onSubmit={onCardSubmit} onBack={backFromMethod} {busy} />
 {:else if step === 'pix_loading'}
@@ -219,6 +240,20 @@
     copyPaste={pixCopyPaste}
     deadline={order?.verification_deadline}
     onProofStep={() => (step = 'proof')}
+    onBack={backFromMethod}
+  />
+{:else if step === 'pix_auto'}
+  <PixAutoPayment
+    orderId={order?.id}
+    restaurantName={restaurant?.name ?? ''}
+    amount={order?.total ?? total}
+    copyPaste={pixCopyPaste}
+    qrBase64={pixQrBase64}
+    deadline={order?.verification_deadline}
+    onPaid={(paidOrder) => {
+      order = paidOrder;
+      showResult();
+    }}
     onBack={backFromMethod}
   />
 {:else if step === 'proof'}

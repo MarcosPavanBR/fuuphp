@@ -9,12 +9,18 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 // da migração 011 faz o "uma nota por pedido"; aqui só confere o dono e o
 // status antes de deixar gravar.
 //
-// courier_tip é REGISTRADA aqui, não cobrada de novo no cartão -- "Cobrada
-// no mesmo cartão do pedido" (o texto do mock) pediria uma segunda
-// transação no Mercado Pago associada ao pagamento original, que este
-// módulo não implementa. Documentado no README como simplificação, mesmo
-// padrão de dinheiro/maquininha no módulo de pagamentos (intenção
-// registrada, captura de valor de verdade fica pra outro módulo).
+// Gorjeta (migração 025): "Vai 100% para o entregador, no repasse da terça.
+// Cobrada no mesmo cartão do pedido." Por isso só existe gorjeta em pedido
+// pago com CARTÃO pelo app e entregue por entregador -- em Pix, dinheiro ou
+// maquininha não há cartão guardado pra cobrar, e na retirada no balcão não
+// há entregador pra receber.
+//
+// Ordem das coisas: a avaliação é gravada primeiro (a nota vale mesmo se o
+// cartão recusar), depois a gorjeta é cobrada fora da transação -- chamada
+// de rede não segura lock de banco -- e, se aprovada, vira
+// `courier_payable` no livro. Recusa não desfaz a avaliação: fica
+// `tip_state = 'failed'` e a tela avisa. A chave de idempotência é por
+// pedido, então um retry nunca cobra duas vezes.
 
 require_method('POST');
 $claims = require_auth();
@@ -38,6 +44,13 @@ if ($courierTip < 0) {
     error_response(422, 'invalid_courier_tip', 'Gorjeta inválida.', fields: ['courier_tip' => 'inválida']);
 }
 
+// Teto de sanidade: gorjeta de R$ 5.000 por engano de digitação é estorno
+// e suporte; a tela oferece R$ 2, 5 e 10.
+const REVIEW_TIP_MAX = 200.0;
+if ($courierTip > REVIEW_TIP_MAX) {
+    error_response(422, 'invalid_courier_tip', 'Gorjeta acima do limite de R$ 200.', fields: ['courier_tip' => 'acima do limite']);
+}
+
 $pdo = db();
 $order = fetch_order($pdo, $orderId);
 if ($order === null) {
@@ -46,6 +59,21 @@ if ($order === null) {
 authorize_order_access($order, $claims);
 if ($order['status'] !== 'delivered') {
     error_response(409, 'order_not_delivered', 'Só dá pra avaliar um pedido já entregue.');
+}
+
+$cardPayment = null;
+if ($courierTip > 0) {
+    if ($order['courier_id'] === null) {
+        error_response(422, 'tip_no_courier', 'Pedido retirado no balcão não tem entregador pra receber gorjeta.');
+    }
+    $paymentStmt = $pdo->prepare(
+        "SELECT * FROM payments WHERE order_id = :id AND provider = 'mercadopago' AND status = 'approved' LIMIT 1"
+    );
+    $paymentStmt->execute(['id' => $orderId]);
+    $cardPayment = $paymentStmt->fetch();
+    if ($order['payment_method'] !== 'mp_card' || $cardPayment === false) {
+        error_response(422, 'tip_requires_card', 'A gorjeta é cobrada no cartão do pedido — este pedido não foi pago com cartão pelo app.');
+    }
 }
 
 try {
@@ -69,4 +97,50 @@ try {
     throw $e;
 }
 
+if ($courierTip > 0) {
+    $review = review_charge_tip($pdo, $review, $order, $cardPayment, (string) $claims['sub']);
+}
+
 json_response(201, ['review' => $review]);
+
+/**
+ * Cobra a gorjeta e registra o resultado na avaliação. Aprovada, lança o
+ * valor em `courier_payable` (origem 'order', 'review_tip:<pedido>') -- é o
+ * mesmo lugar onde a gorjeta do checkout e o frete do entregador já moram,
+ * então o repasse da terça paga sem saber de onde veio.
+ */
+function review_charge_tip(PDO $pdo, array $review, array $order, array $cardPayment, string $actorId): array
+{
+    $orderId = (int) $order['id'];
+    $amount = (float) $review['courier_tip'];
+    try {
+        $charge = mp_charge_tip((string) $cardPayment['provider_ref'], $amount, 'tip-order-' . $orderId);
+    } catch (RuntimeException $e) {
+        $stmt = $pdo->prepare(
+            "UPDATE reviews SET tip_state = 'failed', tip_error = :err WHERE id = :id RETURNING *"
+        );
+        $stmt->execute(['err' => $e->getMessage(), 'id' => $review['id']]);
+
+        return $stmt->fetch();
+    }
+
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare(
+            "UPDATE reviews SET tip_state = 'charged', tip_provider_ref = :ref, tip_charged_at = now(), tip_error = NULL
+              WHERE id = :id RETURNING *"
+        );
+        $stmt->execute(['ref' => $charge['provider_ref'], 'id' => $review['id']]);
+        $updated = $stmt->fetch();
+        ledger_add($pdo, 'courier_payable', (string) $order['courier_id'], $amount, 'order',
+            'review_tip:' . $orderId, $orderId, $actorId, 'gorjeta da avaliação, cobrada no cartão do pedido');
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+
+    return $updated;
+}

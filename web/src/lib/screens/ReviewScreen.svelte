@@ -4,7 +4,10 @@
 
   // Tela 5.5 — Avaliação. "Só habilitada para pedido com status =
   // 'delivered' -- uma nota por pedido, garantida por índice único."
-  let { orderId, orderCode, restaurantName, onDone, onSkip } = $props();
+  // `tipAllowed`: só pedido pago com cartão pelo app e entregue por
+  // entregador tem gorjeta -- ela é "cobrada no mesmo cartão do pedido"
+  // (reviews/create.php recusa o resto com 422).
+  let { orderId, orderCode, restaurantName, tipAllowed = false, onDone, onSkip } = $props();
 
   const RATING_LABELS = { 1: 'Ruim', 2: 'Poderia ser melhor', 3: 'OK', 4: 'Bom', 5: 'Muito bom' };
   const TAGS = ['Comida quente', 'Chegou rápido', 'Bem embalado', 'Entregador educado'];
@@ -39,17 +42,25 @@
     }
     busy = true;
     try {
-      await api.post('/reviews/create.php', {
+      const data = await api.post('/reviews/create.php', {
         auth: true,
         body: {
           order_id: orderId,
           rating,
           tags: selectedTags,
           comment: comment.trim() || undefined,
-          courier_tip: effectiveTip,
+          courier_tip: tipAllowed ? effectiveTip : 0,
         },
       });
-      toastr.success('Avaliação enviada, obrigado ✓');
+      // A nota vale mesmo se o cartão recusar a gorjeta: o servidor grava a
+      // avaliação primeiro e devolve o resultado da cobrança separado.
+      if (data.review?.tip_state === 'failed') {
+        toastr.warning('Avaliação enviada. A gorjeta não foi cobrada — o cartão recusou.');
+      } else if (data.review?.tip_state === 'charged') {
+        toastr.success(`Avaliação enviada e gorjeta de ${money(data.review.courier_tip)} cobrada ✓`);
+      } else {
+        toastr.success('Avaliação enviada, obrigado ✓');
+      }
       onDone();
     } catch (e) {
       const message = e instanceof ApiError ? e.message : 'Não deu pra enviar a avaliação.';
@@ -87,6 +98,7 @@
     {/each}
   </div>
 
+  {#if tipAllowed}
   <p class="section-label">GORJETA PARA O ENTREGADOR</p>
   <div class="tips">
     {#each TIP_AMOUNTS as amount (amount)}
@@ -103,9 +115,8 @@
       onfocus={() => (tipAmount = null)}
     />
   </div>
-  <p class="tip-note">
-    Vai 100% para o entregador, registrada no repasse — cobrança separada não está implementada nesta passada.
-  </p>
+  <p class="tip-note">Vai 100% para o entregador, no repasse da terça. Cobrada no mesmo cartão do pedido.</p>
+  {/if}
 
   <p class="section-label">COMENTÁRIO (OPCIONAL)</p>
   <textarea placeholder="Conte como foi…" rows="3" bind:value={comment}></textarea>

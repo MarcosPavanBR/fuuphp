@@ -27,8 +27,20 @@ $hoursStmt->execute(['id' => $id]);
 // uma janela fixa escrita no front, que ninguém na loja podia corrigir.
 $prep = effective_prep_minutes($pdo, (string) $restaurant['id'], $restaurant);
 
+// Tela 4.1: a seleção de método mostra o que ESTA loja aceita agora
+// (plataforma ∩ loja, já com o "somente online" de repasse atrasado) --
+// antes o app oferecia os cinco e o checkout recusava com 422 depois.
+// null quando ainda não há política cadastrada: o app mostra tudo e o
+// checkout decide, como antes.
+try {
+    $paymentMethods = resolve_policy($pdo, (string) $restaurant['id'])['enabled_methods'];
+} catch (RuntimeException) {
+    $paymentMethods = null;
+}
+
 json_response(200, [
     'restaurant' => $restaurant,
     'prep' => $prep,
+    'payment_methods' => $paymentMethods,
     'business_hours' => $hoursStmt->fetchAll(),
 ]);

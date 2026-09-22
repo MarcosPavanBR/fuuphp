@@ -6,7 +6,18 @@
   // (Cripto via BitPay) é BETA no mock e não existe no enum payment_method
   // deste backend -- mostrado desabilitado, com aviso, em vez de escondido
   // ou fingindo que funciona.
-  let { total, addressLabel, onContinue, onBack } = $props();
+  //
+  // `acceptedMethods` (restaurants/show.php): o que a loja aceita agora. Os
+  // quatro tiles do mock aparecem sempre -- o que a loja não aceita fica
+  // desabilitado com o motivo, em vez de sumir (o cliente entende por que
+  // não tem dinheiro hoje). O Pix automático não está no grid do mock: é
+  // forma que a LOJA liga (tela 10.5, "RECOMENDADO"), então só aparece
+  // quando ela ligou.
+  let { total, addressLabel, acceptedMethods = null, onContinue, onBack } = $props();
+
+  function accepted(id) {
+    return acceptedMethods === null || acceptedMethods.includes(id);
+  }
 
   let selected = $state(null);
 
@@ -25,6 +36,7 @@
 
   const METHODS = [
     { id: 'mp_card', title: 'Cartão no app', subtitle: 'Aprovação imediata', badge: 'RECOMENDADO', group: 'app' },
+    { id: 'pix_auto', title: 'Pix automático', subtitle: 'Confirmação automática', badge: 'SEM COMPROVANTE', group: 'app', optIn: true },
     { id: 'pix_manual', title: 'Pix + comprovante', subtitle: 'Validação em até 15 min', badge: 'MANUAL', group: 'app' },
     { id: 'cash', title: 'Dinheiro', subtitle: 'Informe o troco', group: 'entrega' },
     { id: 'pos_machine', title: 'Maquininha', subtitle: 'Débito ou crédito', group: 'entrega' },
@@ -47,11 +59,11 @@
 
   <p class="section-label">PAGUE AGORA NO APP</p>
   <div class="grid">
-    {#each METHODS.filter((m) => m.group === 'app') as m (m.id)}
-      <button type="button" class="tile" class:selected={selected === m.id} onclick={() => (selected = m.id)}>
+    {#each METHODS.filter((m) => m.group === 'app' && (!m.optIn || (acceptedMethods ?? []).includes(m.id))) as m (m.id)}
+      <button type="button" class="tile" class:selected={selected === m.id} class:disabled={!accepted(m.id)} disabled={!accepted(m.id)} onclick={() => (selected = m.id)}>
         {#if m.badge}<span class="badge">{m.badge}</span>{/if}
         <p class="title">{m.title}</p>
-        <p class="subtitle">{m.subtitle}</p>
+        <p class="subtitle">{accepted(m.id) ? m.subtitle : 'A loja não aceita agora'}</p>
       </button>
     {/each}
   </div>
@@ -59,9 +71,9 @@
   <p class="section-label">PAGUE NA ENTREGA</p>
   <div class="grid">
     {#each METHODS.filter((m) => m.group === 'entrega') as m (m.id)}
-      <button type="button" class="tile" class:selected={selected === m.id} onclick={() => (selected = m.id)}>
+      <button type="button" class="tile" class:selected={selected === m.id} class:disabled={!accepted(m.id)} disabled={!accepted(m.id)} onclick={() => (selected = m.id)}>
         <p class="title">{m.title}</p>
-        <p class="subtitle">{m.subtitle}</p>
+        <p class="subtitle">{accepted(m.id) ? m.subtitle : 'A loja não aceita agora'}</p>
       </button>
     {/each}
     <button

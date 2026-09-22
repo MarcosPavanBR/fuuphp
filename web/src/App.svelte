@@ -230,7 +230,14 @@
         <HelpScreen onBack={() => (tab = 'profile')} onOpenOrder={openTracking} />
       {/if}
     </div>
-    <BottomNav active={tab} onNavigate={(t) => (tab = t)} />
+    <BottomNav
+      active={tab}
+      onNavigate={(t) => (tab = t)}
+      onOpenCart={(id) => {
+        openRestaurant({ id });
+        cartOpen = true;
+      }}
+    />
   </div>
 {/if}
 

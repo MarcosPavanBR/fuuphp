@@ -79,6 +79,12 @@ $payment = $paymentStmt->fetch();
 if ($payment === false) {
     error_response(409, 'payment_not_started', 'Chame payments/pay.php antes de enviar o comprovante.');
 }
+// O último pagamento pode ser um Pix descartado por payments/change_method.php
+// (troca pra outro método e volta pro Pix antes de gerar QR novo): comprovante
+// de QR morto não entra.
+if ($payment['status'] !== 'in_process') {
+    error_response(409, 'payment_not_started', 'Gere o QR do Pix de novo antes de enviar o comprovante.');
+}
 
 $sha256 = hash('sha256', $bytes);
 $phash = pix_proof_average_hash($bytes, $mime);

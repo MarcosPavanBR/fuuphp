@@ -128,7 +128,30 @@ function pay_with_card(PDO $pdo, array $order, array $body, array $claims, strin
  */
 function pay_with_pix(PDO $pdo, array $order, array $claims, bool $auto): array
 {
+    // Cobrança Pix já emitida e ainda viva? Devolve a MESMA em vez de emitir
+    // outra. Sem isto, voltar da tela do QR e escolher Pix de novo criava um
+    // segundo QR pro mesmo pedido -- e o cliente podia pagar os dois.
+    $existingStmt = $pdo->prepare(
+        "SELECT * FROM payments WHERE order_id = :id AND status = 'in_process' AND provider = :provider
+          ORDER BY id DESC LIMIT 1"
+    );
+    $existingStmt->execute(['id' => $order['id'], 'provider' => $auto ? 'mercadopago' : 'offline']);
+    $existing = $existingStmt->fetch();
+
     if ($auto) {
+        if ($existing !== false) {
+            $raw = json_decode((string) $existing['raw_response'], true) ?: [];
+            $poi = $raw['point_of_interaction']['transaction_data'] ?? [];
+            if (isset($poi['qr_code'])) {
+                return [200, [
+                    'order' => fetch_order($pdo, (int) $order['id']),
+                    'payment' => $existing,
+                    'pix_copy_paste' => $poi['qr_code'],
+                    'pix_qr_base64' => $poi['qr_code_base64'] ?? null,
+                    'reused' => true,
+                ]];
+            }
+        }
         $userStmt = $pdo->prepare('SELECT email FROM users WHERE id = :id');
         $userStmt->execute(['id' => $claims['sub']]);
         $payerEmail = (string) ($userStmt->fetchColumn() ?: 'cliente@fuudelivery.com.br');
@@ -154,6 +177,18 @@ function pay_with_pix(PDO $pdo, array $order, array $claims, bool $auto): array
         $restaurantStmt = $pdo->prepare('SELECT name FROM restaurants WHERE id = :id');
         $restaurantStmt->execute(['id' => $order['restaurant_id']]);
         $restaurantName = (string) ($restaurantStmt->fetchColumn() ?: 'FUUdelivery');
+
+        if ($existing !== false) {
+            // O copia-e-cola do Pix manual é determinístico (chave, valor,
+            // código do pedido): recalcular dá o mesmo texto que o cliente já viu.
+            return [200, [
+                'order' => fetch_order($pdo, (int) $order['id']),
+                'payment' => $existing,
+                'pix_copy_paste' => pix_copy_paste((string) $pixKey, (float) $order['total'], (string) $order['public_code'], $restaurantName, 'BRASIL'),
+                'pix_qr_base64' => null,
+                'reused' => true,
+            ]];
+        }
 
         $providerRef = 'manual_' . bin2hex(random_bytes(8));
         $provider = 'offline';

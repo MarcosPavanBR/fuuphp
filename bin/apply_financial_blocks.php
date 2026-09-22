@@ -12,7 +12,7 @@ require_once __DIR__ . '/../lib/bootstrap.php';
 //
 // `couriers.cash_blocked` existe desde a migração 007 e já é respeitado em
 // `couriers/offers.php` e `accept_offer.php`; `restaurants.online_only_until`
-// existe desde a 002 e é respeitado no checkout. O que faltava era alguém
+// existe desde a 002 e é respeitado no checkout (via resolve_policy, desde a migração 025). O que faltava era alguém
 // LIGAR os dois: os campos eram lidos por todo mundo e escritos por ninguém.
 //
 // POR QUE EM PHP, E NÃO NO pg_cron (mesma razão do auto_cancel da 15.1):

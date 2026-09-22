@@ -2,11 +2,11 @@
   import { api } from '../api.js';
   import { toastr } from '../toastr.js';
 
-  // Endereço mínimo, funcional de verdade (chama /addresses/list.php e
-  // /addresses/create.php reais) -- não é a tela de endereços desenhada da
-  // Fase 6 (CRUD completo, rótulo, padrão, edição), que ainda não foi
-  // portada. Existe só pra destravar o checkout da Fase 4: sem endereço
-  // salvo, orders/checkout.php não tem pra onde levar o pedido.
+  // Passo de endereço do checkout (Fase 4): escolhe um endereço salvo ou
+  // cadastra um rápido. O cadastro completo -- rótulo, padrão, edição, CEP
+  // e área de entrega -- é a tela de endereços do perfil (Fase 6.1 e 14.3,
+  // AddressesScreen.svelte); aqui fica só o essencial pra não tirar o
+  // cliente do checkout.
   let { location, onReady } = $props();
 
   let addresses = $state(null);
@@ -67,7 +67,6 @@
 </script>
 
 <div class="quick-address fuu-card">
-  <p class="badge-note">endereço mínimo · Fase 6 ainda não portada</p>
 
   {#if addresses === null}
     <p class="hint">Carregando endereços…</p>
@@ -109,17 +108,6 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-  }
-  .badge-note {
-    font-family: var(--fuu-font-mono);
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    color: var(--fuu-wait-text);
-    background: var(--fuu-wait-bg);
-    border-radius: 999px;
-    padding: 3px 10px;
-    align-self: flex-start;
-    margin: 0 0 6px;
   }
   h2 {
     margin: 0;

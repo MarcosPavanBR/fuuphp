@@ -30,7 +30,7 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (vinte e quatro migrações SQL), os módulos **identity**,
+A **fundação de banco** (vinte e cinco migrações SQL), os módulos **identity**,
 **catálogo + pedido + checkout**, **descoberta** (busca de loja e
 produto), **carrinho incremental**, **pagamentos** (cartão via Mercado
 Pago, Pix automático e manual, dinheiro, maquininha, validação humana do
@@ -1674,6 +1674,60 @@ divergência, gerar lote e dar baixa), sem erro de console.
   (`application_fee`) não é usado: sem ele o dinheiro online cai na conta da
   plataforma, e é exatamente isso que o livro do pedido registra.
 
+## Troca de método, gorjeta cobrada e Pix automático (migração 025) — decisões
+
+- **Trocar a forma de pagamento troca o método do MESMO pedido**
+  (`payments/change_method.php`), não abandona e recria. Itens, frete,
+  cupom resgatado, crédito de carteira e vaga agendada já estão decididos e
+  não dependem do método; desfazer cada um pra refazer em seguida seria
+  mais código e mais chance de errar dinheiro. `orders.status` não muda
+  (continua `pending_payment`); a troca fica na trilha (`order_events`,
+  `meta.event = payment_method_changed`).
+- **Só se troca o que ainda não é dinheiro.** O único pagamento descartável
+  é o Pix manual sem comprovante (vira `rejected / method_changed`). Cartão
+  ou Pix automático já no Mercado Pago travam o método (409
+  `payment_method_locked`): o dinheiro ainda pode cair, e um pedido com
+  duas cobranças vivas é o que `payments_one_approved` existe pra impedir.
+  Comprovante de um QR descartado é recusado no upload.
+- **Um Pix por pedido.** Voltar da tela do QR e escolher Pix de novo
+  devolvia um QR NOVO (o cliente podia pagar os dois). Agora `pay.php`
+  reaproveita a cobrança viva (`reused: true`); o copia-e-cola do Pix manual
+  é determinístico e é recalculado igual.
+- **Status do Mercado Pago traduzido** (`mp_normalize_status`). O CHECK de
+  `payments.status` não conhece `pending` (todo Pix recém-emitido no MP),
+  `cancelled` (Pix expirado), `authorized` nem `in_mediation`: o primeiro Pix
+  automático em produção quebraria o INSERT. Achado ao construir a tela.
+- **Gorjeta da tela 5.5 cobrada** ("Cobrada no mesmo cartão do pedido").
+  Não mora em `payments` -- o índice de um aprovado por pedido é a regra de
+  ouro -- e sim na própria avaliação (`reviews.tip_state` =
+  none/charged/failed, `tip_provider_ref`, `tip_error`). A nota é gravada
+  antes e vale mesmo se o cartão recusar; a cobrança roda fora da transação
+  (rede não segura lock) com idempotência por pedido; aprovada, vira
+  `courier_payable` (`review_tip:<pedido>`). Só existe em pedido de cartão
+  no app com entregador; teto de R$ 200. Gorjetas registradas antes da 025
+  ficam `failed` ("registrada antes da cobrança existir"), pra não parecer
+  dinheiro que entrou. **Não validado no MP real:** exige que o pagamento
+  original tenha usado cliente + cartão salvos (token novo a partir do
+  `card_id`); sem isso a cobrança falha com mensagem clara, nunca cobra
+  outro cartão.
+- **Pix automático tem tela** (`PixAutoPayment.svelte`). O mock não a
+  desenha: o Pix automático aparece como forma que a LOJA liga (10.5,
+  "RECOMENDADO · nada de conferir comprovante") e no mix da 12.3. A tela é a
+  4.3 sem o que não se aplica -- sem comprovante, sem "a loja confirma" --
+  e sai sozinha quando o webhook aprova (consulta o pedido a cada 4 s).
+  O tile só aparece na 4.1 quando a loja aceita.
+- **A 4.1 mostra o que a loja aceita** (`restaurants/show.php` devolve
+  `payment_methods`). Antes os quatro tiles apareciam sempre e o checkout
+  recusava depois com 422; agora o que a loja não aceita fica desabilitado
+  com "A loja não aceita agora" -- visível, pra o cliente entender.
+- **"Somente online" passou a valer de verdade.** `restaurants.online_only_until`
+  (loja em atraso de repasse) era ligado por `bin/apply_financial_blocks.php`
+  e mostrado na tela de pagamentos da loja, mas nenhum checkout o lia -- o
+  comentário do script dizia o contrário. Agora `resolve_policy()` corta pra
+  `ONLINE_PAYMENT_METHODS`, e checkout, troca de método e 4.1 obedecem juntos.
+- **Aba "Carrinho" da barra inferior** abre o carrinho com item mais recente
+  (`cart/show.php` sem `restaurant_id`); antes avisava "ainda não portada".
+
 ## Painel da plataforma (Fase 12 + tela 10.5) — decisões de implementação
 
 O quarto público do projeto, no quarto bundle (`admin.html`): quem opera o
@@ -2494,7 +2548,7 @@ docker compose up -d
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
 bash db/migrate.sh up           # aplica as 20, em ordem
 bash db/migrate.sh down 3       # reverte as 3 últimas
-bash db/migrate.sh down 24      # reverte tudo
+bash db/migrate.sh down 25      # reverte tudo
 
 cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN se precisar
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
@@ -2537,13 +2591,13 @@ Os smoke tests semeiam dados próprios a cada execução, mas contam com um
 banco recém-migrado: rodar a suíte várias vezes no mesmo banco acumula
 lojas de teste e faz as asserções de contagem (ex.: "filtro de categoria
 trouxe 1 loja") falharem por dado velho, não por regressão. `bash
-db/migrate.sh down 24 && bash db/migrate.sh up` devolve o banco ao zero.
+db/migrate.sh down 25 && bash db/migrate.sh up` devolve o banco ao zero.
 
 `MERCADOPAGO_MODE=fake` é o padrão quando `MERCADOPAGO_ACCESS_TOKEN` não
 está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
 de conta sandbox pra rodar nada disto localmente.
 
-As vinte e quatro migrações foram validadas de ponta a ponta (`up` completo, `down`
+As vinte e cinco migrações foram validadas de ponta a ponta (`up` completo, `down`
 completo em ordem reversa, `up` de novo) contra um PostgreSQL 16 real com
 `pg_cron` instalado, incluindo um teste funcional de `advance_order()`
 confirmando que transições legais avançam o pedido e transições ilegais
@@ -2722,22 +2776,13 @@ checando `boundingBox()` via Playwright, não só lendo o código.
    tela 15.3 com custo por pedido e retorno -- e `audience`
    (`first_order`, `inactive_15d`...) é gravado e ignorado: segmentar exige
    saber quem está inativo, que é consulta de base, não de pedido.
-9. **Decisão de produto pendente: Pix automático sem tela.** O enum
-   `payment_method` já tem `pix_auto` e o backend já processa (webhook
-   incluído), mas o mock de 64 telas só desenha o fluxo manual (Fase 4.3);
-   não há uma tela própria pra "Pix instantâneo" — fica pra quando/se essa
-   tela for desenhada.
-10. **Trocar de método de pagamento depois do checkout já ter acontecido
-    não reabre um carrinho novo** (ex.: Pix manual sem chave cadastrada,
-    volta e escolhe cartão) — precisaria de um endpoint de abandono de
-    `pending_payment` que não existe ainda. Registrado como simplificação
-    em `PaymentFlow.svelte`; não é o caminho comum (a maioria das voltas
-    acontece antes do checkout, quando o retry já funciona certo).
-11. **Gorjeta da avaliação (Fase 5.5) é registrada, não cobrada.** O mock
-    diz "cobrada no mesmo cartão do pedido" — exigiria uma segunda
-    transação no Mercado Pago associada ao pagamento original, que este
-    módulo não implementa (mesma simplificação de dinheiro/maquininha no
-    módulo de pagamentos).
+9. **Pix automático tem tela** — FEITO (seção "Troca de método, gorjeta
+   cobrada e Pix automático").
+10. **Trocar de método depois do checkout** — FEITO
+    (`payments/change_method.php`, mesma seção).
+11. **Gorjeta da avaliação cobrada no cartão do pedido** — FEITO (migração
+    025, mesma seção). A cobrança real no Mercado Pago depende do pagamento
+    original ter usado cartão salvo; não foi validada contra a API.
 12. **Login social (Google e Apple) não existe no backend.** A tela 10.1
     mostra os dois botões, aqui desabilitados: não há OAuth nem tabela de
     identidade federada no esquema, e `users` não tem como guardar um

@@ -55,8 +55,6 @@ const METHOD_CONSEQUENCE = [
     ],
 ];
 
-const ONLINE_METHODS = ['mp_card', 'pix_auto', 'pix_manual'];
-
 // A política CRUA, não o snapshot de `resolve_policy()`: aquele já cruza
 // `enabled_methods` com o que a loja aceita hoje, e aqui a pergunta é
 // justamente o contrário -- o que a plataforma permitiria ligar.
@@ -106,7 +104,7 @@ function settings_payload(PDO $pdo, string $restaurantId, array $policy, bool $o
         // menos, quando ela está em atraso).
         'allowed_by_platform' => $allowed,
         'selectable' => $onlineOnly
-            ? array_values(array_intersect($allowed, ONLINE_METHODS))
+            ? array_values(array_intersect($allowed, ONLINE_PAYMENT_METHODS))
             : array_values($allowed),
         'online_only' => $onlineOnly,
         'online_only_until' => $onlineOnlyUntil === false ? null : $onlineOnlyUntil,
@@ -129,7 +127,7 @@ if (!is_array($methods) || $methods === []) {
 }
 
 $allowed = pg_text_array_to_php((string) $policy['enabled_methods']);
-$selectable = $onlineOnly ? array_intersect($allowed, ONLINE_METHODS) : $allowed;
+$selectable = $onlineOnly ? array_intersect($allowed, ONLINE_PAYMENT_METHODS) : $allowed;
 
 foreach ($methods as $method) {
     if (!array_key_exists($method, METHOD_CONSEQUENCE)) {
