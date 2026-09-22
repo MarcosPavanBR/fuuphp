@@ -35,5 +35,21 @@ $stmt = $pdo->prepare(
      LIMIT 50"
 );
 $stmt->execute(['city_ibge_code' => $cityIbge, 'query' => $query]);
+$products = $stmt->fetchAll();
 
-json_response(200, ['products' => $stmt->fetchAll()]);
+// Os filtros da tela 2.2 (Entrega grátis / Até 30 min / 4,5+) são sobre a
+// LOJA do produto: cada resultado leva os números da loja dele, calculados
+// como no card da Home (lib/restaurant_facts.php). Com ?lat&lng, frete e
+// tempo são do lugar de quem busca.
+$lat = isset($_GET['lat']) && $_GET['lat'] !== '' ? (float) $_GET['lat'] : null;
+$lng = isset($_GET['lng']) && $_GET['lng'] !== '' ? (float) $_GET['lng'] : null;
+$facts = restaurant_card_facts($pdo, array_values(array_unique(array_column($products, 'restaurant_id'))), $lat, $lng);
+foreach ($products as &$p) {
+    $f = $facts[$p['restaurant_id']] ?? [];
+    $p['restaurant_rating'] = $f['rating'] ?? null;
+    $p['delivery_fee'] = $f['delivery_fee'] ?? null;
+    $p['eta_minutes'] = $f['eta_minutes'] ?? null;
+}
+unset($p);
+
+json_response(200, ['products' => $products]);

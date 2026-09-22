@@ -30,21 +30,18 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (vinte e cinco migrações SQL), os módulos **identity**,
-**catálogo + pedido + checkout**, **descoberta** (busca de loja e
-produto), **carrinho incremental**, **pagamentos** (cartão via Mercado
-Pago, Pix automático e manual, dinheiro, maquininha, validação humana do
-Pix), **acompanhamento pós-pedido** (linha do tempo, tracking em tempo
-real por SSE, avaliação) e **conta** (endereços CRUD, cartões salvos via
-Mercado Pago) em PHP sobre ela, e o **front-end em Svelte** (`web/`)
-cobrindo a Fase 1 (onboarding), a Fase 2 (home, busca, fidelidade,
-pedidos, perfil), a Fase 3 (loja, item, carrinho), a Fase 4 (pagamento), a
-Fase 5 (pós-pedido) e a Fase 6 (conta, endereços, cartões, configurações)
-— 6 das 15 fases / 64 telas. Ledger, dispatch e o resto ainda não foram
-portados. Segue a ordem sugerida pela especificação (12 semanas, Parte I
-§10) — catálogo/pedido vem antes de
-pagamentos porque `POST /v1/orders/:id/pay` pressupõe que o pedido já
-existe.
+A **fundação de banco** (vinte e seis migrações SQL), a **API em PHP** sobre
+ela e os **quatro apps em Svelte** (`web/`): cliente, painel da loja, app do
+entregador e painel da plataforma. As 15 fases do mock estão construídas --
+onboarding, descoberta, cardápio e carrinho, os cinco meios de pagamento
+(Mercado Pago em modo fake), acompanhamento com mapa, conta e LGPD, PWA
+offline e push, painel da loja, entregador com caixa e maquininha, livro
+contábil com netting semanal, login, painel da plataforma, caminho do erro
+com reembolso executado, ajuda, chat, agendamento e despacho em rodadas.
+O que ficou de fora, e por quê, está em "Próximos passos" no fim deste
+arquivo; cada módulo tem sua seção de decisões abaixo, na ordem em que foi
+construído (as seções mais antigas registram o estado da época e apontam
+pra seção que as atualizou).
 
 ```
 api/v1/auth/                módulo identity (endpoints, um arquivo por rota)
@@ -575,10 +572,8 @@ coluna no esquema — a Parte II original fixa 42 tabelas e nenhuma delas tem
 - **Busca de produto usa `ILIKE` sobre o índice GIN trigram**
   (`gin_trgm_ops`, extensão `pg_trgm` já criada na migração `001`) — é
   exatamente o que a tela 2.2 pede no chip "PostgreSQL trigram". Os
-  filtros do mock (Entrega grátis / Até 30 min / 4,5+) dependem de taxa de
-  entrega, ETA e nota por loja — nenhum dos três é real ainda (mesma
-  lacuna do parágrafo acima); só o filtro "Tudo" filtra de verdade no
-  front, os outros avisam em vez de fingir.
+  filtros do mock (Entrega grátis / Até 30 min / 4,5+) passaram a filtrar
+  de verdade -- ver "Lacunas do app do cliente fechadas".
 
 ## Módulo de carrinho — decisões de implementação
 
@@ -1163,11 +1158,9 @@ web/
   deixa configurar headers customizados, então a Authorization normal não
   serve aqui. `require_auth_header_or_query()` no backend é o que torna
   isso seguro sem abrir a exceção pra mais nenhuma rota.
-- **Mapa e localização do entregador são um placeholder explícito**, não
-  Leaflet nem coordenadas fingidas — a Fase 8 (app do entregador, que é
-  quem geraria posição de verdade) não foi construída. Mesma decisão do
-  `courier_positions` (migração 009): existe no banco, não tem quem
-  escreva nele ainda.
+- **Mapa e localização do entregador** eram um placeholder enquanto não
+  havia quem escrevesse em `courier_positions`; hoje são o `DeliveryMap`
+  com Leaflet -- ver "Lacunas do app do cliente fechadas".
 - **Previsão de entrega é uma janela fixa a partir de `created_at`** (25 a
   45 min depois), igual à mesma simplificação já assumida em
   `PaymentSelector.svelte` (Fase 4.1) — sem motor de logística real
@@ -1728,6 +1721,59 @@ divergência, gerar lote e dar baixa), sem erro de console.
 - **Aba "Carrinho" da barra inferior** abre o carrinho com item mais recente
   (`cart/show.php` sem `restaurant_id`); antes avisava "ainda não portada".
 
+## Lacunas do app do cliente fechadas (migração 026) — decisões
+
+O que o app ainda avisava como "não construído" (toasts, notas, placeholders)
+virou funcionalidade. Uma varredura por "ainda não" no front achou a lista.
+
+- **LGPD de verdade (tela 6.3).** "Baixar meus dados" entrega um JSON com
+  tudo que o sistema guarda sobre a pessoa (`profile/export.php`,
+  `lib/account_privacy.php`) e nada que seja segredo (hash de sessão, código
+  OTP, token do cartão no MP). "Excluir conta" é **anonimização**: nome,
+  CPF, telefone, e-mail, nascimento, cartões, push e sessões somem; pedidos e
+  pagamentos ficam, sem identificar ninguém, porque a lei fiscal obriga
+  (LGPD art. 16, I). Endereço usado em pedido fica só com cidade, CEP de 5
+  dígitos e coordenada arredondada. Barrada com pedido em andamento ou
+  reembolso vivo; saldo de carteira exige aceite explícito de perda;
+  confirmação digitando EXCLUIR. O telefone fica livre pra conta nova.
+  Limite conhecido: o access token (15 min) de quem excluiu continua
+  assinado até vencer -- o app faz logout na hora, e o refresh já é recusado.
+- **"Alterar senha"** explica que conta de cliente não tem senha (entra por
+  código no celular) em vez de abrir um formulário que não faria nada.
+- **"Cardápios offline"** lista o que o service worker guardou de verdade
+  (cache `*-data`) e deixa apagar; o rodapé mostra a versão real do SW.
+- **Perfil (2.5) completo**: "Editar perfil" (nome, e-mail, CPF só
+  mascarado na volta -- `cpf_masked` --, nascimento), "Notas e comprovantes"
+  (recibo por pedido em `orders/receipt.php`: loja com CNPJ, itens, taxas,
+  como pagou, estornos, gorjeta cobrada à parte; imprimível; diz que não é
+  nota fiscal -- quem emite é a loja) e "Privacidade e dados (LGPD)".
+- **"Repetir" pedido (2.4)** (`orders/reorder.php`): os mesmos itens,
+  variações e observações voltam pro carrinho com o **preço de hoje**; o
+  que saiu do cardápio é pulado e listado, em vez de falhar tudo.
+- **Mapa da entrega (5.3)**: `DeliveryMap.svelte` com Leaflet (o chip do
+  mock), pinos de loja, destino e entregador, "0,8 km · 3 min" e "Jonas está
+  levando · Moto · placa". A posição só é liberada enquanto o pedido está
+  em rota (`orders/courier_location.php`) -- antes e depois, o entregador
+  não é rastreável por cliente. Sinal velho aparece como "última posição".
+  A candidatura guarda o tipo de veículo, não o modelo ("Moto", não "Honda
+  Biz").
+- **Foto do item (11.1 → 3.1/3.2/2.2)** (`restaurants/menu_photo.php`):
+  recodificada com GD pra JPEG de até 900 px (tira EXIF/GPS, neutraliza
+  arquivo disfarçado), chave = hash do conteúdo, servida pública com cache
+  imutável e guardada pelo service worker pro cardápio offline. Sobe na hora,
+  fora do rascunho do editor (foto não muda preço nem regra).
+- **Nota, tempo e frete no card da loja e nos filtros da busca (2.1/2.2)**
+  (`lib/restaurant_facts.php`): nota das avaliações (só com 3 ou mais),
+  frete pelo MESMO `delivery_quote()` que o checkout cobra (o teste confere
+  que card e cobrança batem), tempo = preparo informado pela loja com a
+  fila + viagem a `DELIVERY_AVG_KMH`. "Entrega grátis", "Até 30 min" e
+  "4,5+" filtram de verdade; resultado sem o dado não passa no filtro.
+  Custo conhecido: calcula por loja a cada listagem (algumas consultas por
+  loja) -- aceitável no tamanho de uma praça; cache vira assunto se a lista
+  crescer.
+- **Pontos de fidelidade continuam sem tabela** (decisão de produto,
+  "Próximos passos" 7) -- o perfil segue dizendo isso.
+
 ## Painel da plataforma (Fase 12 + tela 10.5) — decisões de implementação
 
 O quarto público do projeto, no quarto bundle (`admin.html`): quem opera o
@@ -2262,9 +2308,8 @@ script de seed. Estas três telas fecham isso.
     guardar rascunho pediria coluna ou tabela de versão que a especificação
     não tem, e o efeito prático é o mesmo, porque o cliente só vê o que foi
     publicado. Fechar o painel sem publicar avisa antes de descartar.
-  - *Foto do item* — `menu_items.photo_key` existe, mas não há endpoint de
-    upload de imagem de cardápio (o único upload do projeto é o comprovante
-    de Pix). O painel diz isso no lugar de um seletor que não sobe nada.
+  - *Foto do item* — FEITO depois (`restaurants/menu_photo.php`, ver
+    "Lacunas do app do cliente fechadas").
   - *"Nova categoria"* — categoria é texto em `menu_items`, não tabela; um
     botão próprio criaria categoria fantasma, sem item dentro. A tela explica
     que ela nasce ao publicar um item com o nome dela.
@@ -2548,7 +2593,7 @@ docker compose up -d
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
 bash db/migrate.sh up           # aplica as 20, em ordem
 bash db/migrate.sh down 3       # reverte as 3 últimas
-bash db/migrate.sh down 25      # reverte tudo
+bash db/migrate.sh down 26      # reverte tudo
 
 cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN se precisar
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
@@ -2591,13 +2636,13 @@ Os smoke tests semeiam dados próprios a cada execução, mas contam com um
 banco recém-migrado: rodar a suíte várias vezes no mesmo banco acumula
 lojas de teste e faz as asserções de contagem (ex.: "filtro de categoria
 trouxe 1 loja") falharem por dado velho, não por regressão. `bash
-db/migrate.sh down 25 && bash db/migrate.sh up` devolve o banco ao zero.
+db/migrate.sh down 26 && bash db/migrate.sh up` devolve o banco ao zero.
 
 `MERCADOPAGO_MODE=fake` é o padrão quando `MERCADOPAGO_ACCESS_TOKEN` não
 está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
 de conta sandbox pra rodar nada disto localmente.
 
-As vinte e cinco migrações foram validadas de ponta a ponta (`up` completo, `down`
+As vinte e seis migrações foram validadas de ponta a ponta (`up` completo, `down`
 completo em ordem reversa, `up` de novo) contra um PostgreSQL 16 real com
 `pg_cron` instalado, incluindo um teste funcional de `advance_order()`
 confirmando que transições legais avançam o pedido e transições ilegais
@@ -2751,10 +2796,10 @@ checando `boundingBox()` via Playwright, não só lendo o código.
 4. **Impressão ESC/POS** — o push da 7.2 está FEITO (seção própria); imprimir
    a comanda depende de conexão com impressora térmica, que não existe
    neste repositório.
-5. **Mapa e posição do entregador (Fase 5.3 e Fase 8).**
-   `OrderTracking.svelte` já mostra a linha do tempo real, mas o mapa é um
-   placeholder explícito — depende do app do entregador (Fase 8) existir
-   pra ter posição de verdade pra mostrar.
+5. **Mapa e posição do entregador (Fase 5.3)** — FEITO (Leaflet, seção
+   "Lacunas do app do cliente fechadas"). Os tiles vêm do OpenStreetMap,
+   que este ambiente não alcança: os pinos, a distância e o tempo foram
+   validados; a imagem do mapa por baixo, não.
 6. **Reembolso — EXECUTADO no cartão e Pix automático; manual no resto.**
    O executor existe (seção "Pontas de dinheiro"). O parágrafo abaixo é o
    histórico de antes dele. A tela 13.4 agora

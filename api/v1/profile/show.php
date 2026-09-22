@@ -9,7 +9,7 @@ $claims = require_auth();
 
 $pdo = db();
 
-$userStmt = $pdo->prepare('SELECT id, full_name, email, phone, cpf, created_at FROM users WHERE id = :id');
+$userStmt = $pdo->prepare('SELECT id, full_name, email, phone, cpf, birth_date, created_at FROM users WHERE id = :id');
 $userStmt->execute(['id' => $claims['sub']]);
 $user = $userStmt->fetch();
 if ($user === false) {
@@ -17,6 +17,11 @@ if ($user === false) {
 }
 $cpf = $user['cpf'];
 unset($user['cpf']); // não devolve CPF completo numa tela de perfil (minimização de dado, LGPD)
+// Só o miolo, no formato que a Receita usa pra mascarar: "***.456.789-**".
+// Basta pra pessoa reconhecer o próprio documento na tela "Editar perfil".
+$user['cpf_masked'] = is_string($cpf) && strlen($cpf) === 11
+    ? '***.' . substr($cpf, 3, 3) . '.' . substr($cpf, 6, 3) . '-**'
+    : null;
 
 $ordersCountStmt = $pdo->prepare('SELECT count(*) FROM orders WHERE user_id = :id AND status <> :cart');
 $ordersCountStmt->execute(['id' => $claims['sub'], 'cart' => 'cart']);

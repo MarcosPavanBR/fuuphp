@@ -10,6 +10,8 @@
   import AddressesScreen from './lib/screens/AddressesScreen.svelte';
   import PaymentMethods from './lib/screens/PaymentMethods.svelte';
   import SettingsScreen from './lib/screens/SettingsScreen.svelte';
+  import EditProfileScreen from './lib/screens/EditProfileScreen.svelte';
+  import ReceiptsScreen from './lib/screens/ReceiptsScreen.svelte';
   import HelpScreen from './lib/screens/HelpScreen.svelte';
   import RestaurantPage from './lib/screens/RestaurantPage.svelte';
   import CartDrawer from './lib/screens/CartDrawer.svelte';
@@ -86,6 +88,11 @@
     restaurantId = r.id;
     cartOpen = false;
     paymentOpen = false;
+  }
+  // Abre direto o carrinho de uma loja: aba "Carrinho" e "Repetir" pedido.
+  function openCartOf(id) {
+    openRestaurant({ id });
+    cartOpen = true;
   }
   function closeRestaurant() {
     restaurantId = null;
@@ -206,7 +213,7 @@
       {:else if tab === 'loyalty'}
         <Loyalty />
       {:else if tab === 'orders'}
-        <Orders onOpenOrder={openOrder} onBack={() => (tab = 'profile')} />
+        <Orders onOpenOrder={openOrder} onBack={() => (tab = 'profile')} onOpenCart={openCartOf} />
       {:else if tab === 'profile'}
         <Profile
           onLoggedOut={() => (tab = 'home')}
@@ -215,7 +222,13 @@
           onOpenPaymentMethods={() => (tab = 'payment_methods')}
           onOpenSettings={() => (tab = 'settings')}
           onOpenHelp={() => (tab = 'help')}
+          onOpenReceipts={() => (tab = 'receipts')}
+          onEditProfile={() => (tab = 'edit_profile')}
         />
+      {:else if tab === 'receipts'}
+        <ReceiptsScreen onBack={() => (tab = 'profile')} />
+      {:else if tab === 'edit_profile'}
+        <EditProfileScreen onBack={() => (tab = 'profile')} />
       {:else if tab === 'addresses'}
         <AddressesScreen {location} onBack={() => (tab = 'profile')} />
       {:else if tab === 'payment_methods'}
@@ -233,10 +246,7 @@
     <BottomNav
       active={tab}
       onNavigate={(t) => (tab = t)}
-      onOpenCart={(id) => {
-        openRestaurant({ id });
-        cartOpen = true;
-      }}
+      onOpenCart={openCartOf}
     />
   </div>
 {/if}

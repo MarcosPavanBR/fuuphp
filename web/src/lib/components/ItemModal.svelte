@@ -1,4 +1,5 @@
 <script>
+  import MenuPhoto from './MenuPhoto.svelte';
   import { fly } from 'svelte/transition';
   import { addToCart } from '../cart.svelte.js';
   import { isAuthenticated } from '../session.svelte.js';
@@ -84,7 +85,7 @@
       <i class="bi bi-x-lg"></i>
     </button>
 
-    <div class="photo" aria-hidden="true"><i class="bi bi-image"></i></div>
+    <div class="photo"><MenuPhoto photoKey={item.photo_key} alt={item.name} /></div>
 
     <h2 class="fuu-display">{item.name}</h2>
     <p class="price-line fuu-mono">R$ {unitPrice.toFixed(2).replace('.', ',')}</p>

@@ -33,6 +33,8 @@ require_once __DIR__ . '/netting.php';
 require_once __DIR__ . '/refund_executor.php';
 require_once __DIR__ . '/push.php';
 require_once __DIR__ . '/notifications.php';
+require_once __DIR__ . '/account_privacy.php';
+require_once __DIR__ . '/restaurant_facts.php';
 
 // Em produção, PWA e API ficam atrás do mesmo domínio via Cloudflare (a
 // especificação nunca fala em domínios separados) -- CORS não seria

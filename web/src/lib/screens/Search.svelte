@@ -1,4 +1,5 @@
 <script>
+  import MenuPhoto from '../components/MenuPhoto.svelte';
   import { api } from '../api.js';
   import { toastr } from '../toastr.js';
 
@@ -6,11 +7,11 @@
   // em badge do Bootstrap, consulta com índice do PostgreSQL."
   // (api/search.php, PostgreSQL trigram)
   //
-  // Os filtros do mock (Entrega grátis / Até 30 min / 4,5+) dependem de
-  // taxa de entrega, ETA e nota por loja -- nenhum dos três existe no
-  // esquema (mesma lacuna documentada em Home.svelte). Só "Tudo" filtra de
-  // verdade; os outros avisam que ainda não têm dado real por trás, em vez
-  // de fingir que filtram.
+  // Os filtros (Entrega grátis / Até 30 min / 4,5+) são sobre a LOJA de
+  // cada produto: search_products.php devolve frete, tempo e nota da loja,
+  // calculados como no card da Home. Resultado sem o dado (loja sem
+  // avaliações suficientes, sem coordenada) não passa no filtro -- "4,5+"
+  // não pode incluir quem ainda não tem nota.
   let { location, onOpenRestaurant } = $props();
 
   const FILTERS = ['Tudo', 'Entrega grátis', 'Até 30 min', '4,5+'];
@@ -36,7 +37,7 @@
     loading = true;
     try {
       const data = await api.get('/restaurants/search_products.php', {
-        query: { city_ibge_code: location.city.ibge, q: query.trim() },
+        query: { city_ibge_code: location.city.ibge, q: query.trim(), lat: location.lat, lng: location.lng },
       });
       products = data.products;
       searched = true;
@@ -47,13 +48,18 @@
     }
   }
 
+  const FILTER_TEST = {
+    Tudo: () => true,
+    'Entrega grátis': (p) => p.delivery_fee === 0,
+    'Até 30 min': (p) => p.eta_minutes != null && p.eta_minutes <= 30,
+    '4,5+': (p) => p.restaurant_rating != null && p.restaurant_rating >= 4.5,
+  };
+
   function pickFilter(f) {
-    if (f !== 'Tudo') {
-      toastr.info(`Filtro "${f}" ainda não tem dado real por trás (ver README).`);
-      return;
-    }
     filter = f;
   }
+
+  let visible = $derived(products.filter(FILTER_TEST[filter]));
 </script>
 
 <div class="search-screen">
@@ -78,14 +84,16 @@
   {#if loading}
     <p class="empty">Buscando…</p>
   {:else if searched}
-    <p class="section-label">{products.length} RESULTADO{products.length === 1 ? '' : 'S'} EM PRODUTOS</p>
-    {#if products.length === 0}
-      <p class="empty">Nada encontrado para "{query}".</p>
+    <p class="section-label">{visible.length} RESULTADO{visible.length === 1 ? '' : 'S'} EM PRODUTOS</p>
+    {#if visible.length === 0}
+      <p class="empty">
+        {products.length === 0 ? `Nada encontrado para "${query}".` : `Nenhum resultado com o filtro "${filter}".`}
+      </p>
     {:else}
       <div class="product-list">
-        {#each products as p (p.id)}
+        {#each visible as p (p.id)}
           <button type="button" class="product-row" onclick={() => onOpenRestaurant({ id: p.restaurant_id, name: p.restaurant_name })}>
-            <div class="photo" aria-hidden="true"><i class="bi bi-image"></i></div>
+            <div class="photo"><MenuPhoto photoKey={p.photo_key} alt={p.name} /></div>
             <div class="info">
               <p class="name">{p.name}</p>
               <p class="restaurant">{p.restaurant_name}</p>

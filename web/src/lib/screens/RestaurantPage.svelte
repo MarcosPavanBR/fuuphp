@@ -1,4 +1,5 @@
 <script>
+  import MenuPhoto from '../components/MenuPhoto.svelte';
   import { api } from '../api.js';
   import { toastr } from '../toastr.js';
   import { cartState, loadCart } from '../cart.svelte.js';
@@ -98,7 +99,7 @@
             {/if}
             <p class="price fuu-mono">{money(item.price)}</p>
           </div>
-          <div class="photo" aria-hidden="true"><i class="bi bi-image"></i></div>
+          <div class="photo"><MenuPhoto photoKey={item.photo_key} alt={item.name} /></div>
         </button>
       {/each}
     </div>

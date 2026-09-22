@@ -11,6 +11,12 @@ declare(strict_types=1);
 // abaixo é a decisão registrada -- simples de propósito, e com os
 // parâmetros na política versionada em vez de constantes no código.
 
+// Velocidade média de uma entrega na cidade, pra estimar tempo de viagem:
+// o "chega em torno de 20:35" do push (7.2), o "8 min" do mapa (5.3) e o
+// tempo do card da loja (2.1). É estimativa declarada, não promessa -- não
+// há roteamento por ruas neste projeto.
+const DELIVERY_AVG_KMH = 20;
+
 /**
  * Distância em linha reta entre dois pontos, em km (Haversine).
  *

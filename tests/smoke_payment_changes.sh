@@ -247,4 +247,47 @@ BLOCKED=$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: applicat
 [ "$(echo "$BLOCKED" | jq -r '.code')" = "payment_method_not_allowed" ] || fail "checkout aceitou espécie em loja em atraso: $BLOCKED"
 psql_run -c "UPDATE restaurants SET online_only_until = NULL WHERE id='${RESTAURANT_ID}'"
 
+echo "== 2.1/2.2: nota, frete e tempo da loja no card e na busca =="
+# Três avaliações nesta loja até aqui: 5, 4 e 5 -> 4,7.
+LIST=$(curl -s "$BASE/restaurants/list.php?city_ibge_code=${CITY}&lat=-23.805&lng=${LNG}" | jq ".restaurants[] | select(.id == \"${RESTAURANT_ID}\")")
+[ "$(echo "$LIST" | jq -r '.rating')" = "4.7" ] || fail "nota da loja errada no card: $LIST"
+[ "$(echo "$LIST" | jq -r '.rating_count')" = "3" ] || fail "contagem de avaliações errada: $LIST"
+PREP=$(query "SELECT prep_minutes FROM restaurants WHERE id='${RESTAURANT_ID}'")
+[ "$(echo "$LIST" | jq -r '.eta_minutes')" = "$(( PREP + 2 ))" ] || fail "tempo = preparo + viagem (0,6 km) errado: $LIST"
+# O último pedido desta loja saiu deste mesmo endereço: o frete que o
+# checkout cobrou é o que o card tem que prometer.
+QUOTE_FEE=$(query "SELECT delivery_fee FROM orders WHERE restaurant_id='${RESTAURANT_ID}' AND status <> 'cart' ORDER BY id DESC LIMIT 1")
+[ "$(jq -n "$(echo "$LIST" | jq -r '.delivery_fee') == ${QUOTE_FEE}")" = "true" ] \
+  || fail "frete do card ($(echo "$LIST" | jq -r '.delivery_fee')) diferente do que o checkout cobra (${QUOTE_FEE})"
+SEARCH=$(curl -s "$BASE/restaurants/search_products.php?city_ibge_code=${CITY}&q=Prato%20Troca&lat=-23.805&lng=${LNG}")
+[ "$(echo "$SEARCH" | jq -r '.products[0].restaurant_rating')" = "4.7" ] || fail "busca sem a nota da loja: $SEARCH"
+[ "$(echo "$SEARCH" | jq -r '.products[0].eta_minutes')" = "$(( PREP + 2 ))" ] || fail "busca sem o tempo da loja: $SEARCH"
+NOLOC=$(curl -s "$BASE/restaurants/list.php?city_ibge_code=${CITY}" | jq ".restaurants[] | select(.id == \"${RESTAURANT_ID}\")")
+[ "$(echo "$NOLOC" | jq -r '.delivery_fee')" = "null" ] || fail "frete inventado sem saber onde a pessoa está: $NOLOC"
+
+echo "== 5.3: posição do entregador só enquanto o pedido está em rota =="
+O9=$(checkout mp_card)
+pay "$O9" '"card_token":"APRO-mapa"' >/dev/null
+for to in preparing ready; do
+  curl -s -X POST "$BASE/orders/status.php" -H "Content-Type: application/json" "${STAFF_AUTH[@]}" -d "{\"order_id\":${O9},\"to\":\"${to}\"}" >/dev/null
+done
+psql_run -c "UPDATE orders SET courier_id='${COURIER_ID}' WHERE id=${O9}"
+BEFORE=$(curl -s "$BASE/orders/courier_location.php?id=${O9}" "${AUTH[@]}")
+[ "$(echo "$BEFORE" | jq -r '.courier')" = "null" ] || fail "posição do entregador vazou antes da rota: $BEFORE"
+[ "$(echo "$BEFORE" | jq -r '.store.lat')" != "null" ] || fail "mapa sem a loja: $BEFORE"
+curl -s -X POST "$BASE/orders/status.php" -H "Content-Type: application/json" "${STAFF_AUTH[@]}" -d "{\"order_id\":${O9},\"to\":\"delivering\"}" >/dev/null
+# Entregador a ~1,1 km ao norte do destino (-23.805, LNG).
+curl -s -X POST "$BASE/couriers/position.php" -H "Content-Type: application/json" "${COURIER_AUTH[@]}" \
+  -d "{\"lat\":-23.795,\"lng\":${LNG}}" >/dev/null
+ONWAY=$(curl -s "$BASE/orders/courier_location.php?id=${O9}" "${AUTH[@]}")
+[ "$(echo "$ONWAY" | jq -r '.courier.first_name')" = "Entregador" ] || fail "sem entregador em rota: $ONWAY"
+[ "$(echo "$ONWAY" | jq -r '.courier.position.lat')" = "-23.795" ] || fail "posição não veio: $ONWAY"
+[ "$(echo "$ONWAY" | jq -r '.remaining_km')" = "1.1" ] || fail "distância restante errada: $ONWAY"
+[ "$(echo "$ONWAY" | jq -r '.eta_minutes')" = "4" ] || fail "tempo estimado errado (1,1 km a 20 km/h): $ONWAY"
+psql_run -c "UPDATE courier_positions SET updated_at = now() - interval '10 minutes' WHERE courier_id='${COURIER_ID}'"
+[ "$(curl -s "$BASE/orders/courier_location.php?id=${O9}" "${AUTH[@]}" | jq -r '.courier.position.stale')" = "true" ] \
+  || fail "posição velha não foi marcada"
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/orders/courier_location.php?id=${O9}" "${COURIER_AUTH[@]}")" != "200" ] \
+  || fail "o próprio app do entregador não devia usar a rota do cliente"
+
 echo "smoke_payment_changes OK"

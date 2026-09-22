@@ -9,9 +9,29 @@
   //
   // Esta lista busca uma vez ao entrar, sem atualização automática -- quem
   // atualiza ao vivo é OrderTracking.svelte (Fase 5, SSE de verdade via
-  // orders/track.php), aberta ao tocar o card. "Repetir" pedido não foi
-  // construído; avisa em vez de fingir.
-  let { onOpenOrder, onBack } = $props();
+  // orders/track.php), aberta ao tocar o card. "Repetir" (histórico) chama
+  // orders/reorder.php: os mesmos itens voltam pro carrinho daquela loja,
+  // com o preço de hoje, e o que saiu do cardápio é avisado.
+  let { onOpenOrder, onBack, onOpenCart } = $props();
+
+  let reordering = $state(null);
+
+  async function reorder(o) {
+    reordering = o.id;
+    try {
+      const data = await api.post('/orders/reorder.php', { auth: true, body: { order_id: o.id } });
+      if (data.skipped.length > 0) {
+        toastr.warning(`Não voltou pro carrinho: ${data.skipped.map((s) => `${s.name} (${s.reason})`).join(', ')}.`);
+      } else {
+        toastr.success('Itens de volta no carrinho ✓');
+      }
+      onOpenCart(data.restaurant_id);
+    } catch (e) {
+      toastr.error(e.message ?? 'Não deu pra repetir o pedido.');
+    } finally {
+      reordering = null;
+    }
+  }
 
   const LABELS = {
     pending_payment: 'AGUARDANDO PAGAMENTO',
@@ -116,9 +136,10 @@
             <button
               type="button"
               class="action"
-              onclick={(e) => { e.stopPropagation(); toastr.info('Repetir pedido ainda não foi construído.'); }}
+              disabled={reordering === o.id}
+              onclick={(e) => { e.stopPropagation(); reorder(o); }}
             >
-              Repetir
+              {reordering === o.id ? 'Repetindo…' : 'Repetir'}
             </button>
           {/if}
         </div>

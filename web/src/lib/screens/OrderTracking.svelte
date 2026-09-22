@@ -5,6 +5,7 @@
   import { currentToken } from '../session.svelte.js';
   import { parsePgTimestamp } from '../datetime.js';
   import ReviewScreen from './ReviewScreen.svelte';
+  import DeliveryMap from '../components/DeliveryMap.svelte';
   import CancelDialog from './CancelDialog.svelte';
   import NoCourierPanel from './NoCourierPanel.svelte';
   import OrderChat from '../components/OrderChat.svelte';
@@ -285,10 +286,7 @@
       {/if}
     {:else if ['preparing', 'ready', 'delivering'].includes(order.status)}
       <div class="hero tracking">
-        <div class="map-placeholder">
-          <i class="bi bi-map"></i>
-          <span>Mapa e localização do entregador — Fase 8 (app do entregador) ainda não foi construída</span>
-        </div>
+        <DeliveryMap {orderId} status={order.status} />
         <h1 class="fuu-display">{STATUS_LABELS[order.status]}</h1>
         <p class="hero-text">
           {#if scheduledLabel}
@@ -465,24 +463,6 @@
     font-size: 22px;
     font-weight: 700;
     color: var(--fuu-wait-text);
-  }
-  .map-placeholder {
-    height: 140px;
-    border-radius: var(--fuu-radius-card);
-    background: var(--fuu-line-5);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    color: var(--fuu-ink-5);
-    font-size: 11px;
-    padding: 0 24px;
-    text-align: center;
-    margin-bottom: 12px;
-  }
-  .map-placeholder i {
-    font-size: 32px;
   }
   .summary {
     padding: 12px 16px;

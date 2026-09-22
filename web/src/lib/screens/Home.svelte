@@ -6,10 +6,11 @@
   // cards do Bootstrap." (CategoryCarousel.svelte, BottomNav.svelte,
   // api/restaurants.php)
   //
-  // O mock mostra nota (4,8), taxa de entrega e ETA por loja -- nenhum dos
-  // três existe no esquema (restaurants não tem rating nem taxa padrão nem
-  // tempo médio; ver README). O card aqui mostra só o que é real:
-  // categoria, distância (quando dá pra calcular) e se está aberta agora.
+  // O card mostra nota (4,8), tempo e frete como no mock -- calculados pelo
+  // servidor das mesmas fontes que o checkout usa (lib/restaurant_facts.php):
+  // nota das avaliações (só com 3 ou mais), frete da tarifa da política pro
+  // lugar escolhido, tempo = preparo informado pela loja + viagem. O que não
+  // dá pra calcular (sem coordenada, sem avaliações) simplesmente não aparece.
   let { location, onOpenRestaurant, onSearch } = $props();
 
   const CATEGORIES = ['Lanches', 'Pizza', 'Mercado', 'Farmácia', 'Doces'];
@@ -41,6 +42,17 @@
     category; // dependência explícita: recarrega ao trocar categoria
     load();
   });
+
+  function money(v) {
+    return `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
+  }
+
+  // "25–35 min": a estimativa vira faixa, porque ninguém lê "31 min" como
+  // estimativa.
+  function etaRange(m) {
+    const low = Math.max(5, Math.round((m - 5) / 5) * 5);
+    return `${low}–${low + 10} min`;
+  }
 
   function initials(name) {
     return name
@@ -92,9 +104,21 @@
           <div class="info">
             <p class="name">{r.name}</p>
             <p class="meta">
+              {#if r.rating !== null && r.rating !== undefined}<span class="rating"><i class="bi bi-star-fill"></i> {String(r.rating).replace('.', ',')}</span> ·{/if}
               {r.category ?? 'Loja'}
-              {#if r.distance_km !== null}· {r.distance_km} km{/if}
+              {#if r.distance_km !== null}· {String(r.distance_km).replace('.', ',')} km{/if}
             </p>
+            {#if r.eta_minutes != null || r.delivery_fee != null || r.in_area === false}
+              <p class="meta">
+                {#if r.in_area === false}
+                  Fora da área de entrega
+                {:else}
+                  {#if r.eta_minutes != null}{etaRange(r.eta_minutes)}{/if}
+                  {#if r.eta_minutes != null && r.delivery_fee != null}·{/if}
+                  {#if r.delivery_fee != null}{r.delivery_fee === 0 ? 'Entrega grátis' : money(r.delivery_fee)}{/if}
+                {/if}
+              </p>
+            {/if}
           </div>
           <span class={r.is_open ? 'fuu-badge-confirmed' : 'fuu-badge-wait'}>
             {r.is_open ? 'Aberto' : 'Fechado'}
@@ -217,6 +241,13 @@
     font-weight: 600;
     color: var(--fuu-ink-1);
     font-size: 14.5px;
+  }
+  .rating {
+    color: var(--fuu-ink-1);
+    font-weight: 600;
+  }
+  .rating i {
+    color: #e0a100;
   }
   .meta {
     margin: 2px 0 0;

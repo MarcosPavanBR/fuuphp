@@ -7,10 +7,20 @@
   // exigência do banco de comprovantes com retenção de 180 dias."
   // (Bootstrap list-group, api/profile.php, LGPD)
   //
-  // "Endereços salvos", "Formas de pagamento" e "Configurações" abrem as
-  // telas da Fase 6 de verdade (AddressesScreen/PaymentMethods/SettingsScreen).
-  let { onLoggedOut, onOpenOrders, onOpenAddresses, onOpenPaymentMethods, onOpenSettings, onOpenHelp } =
-    $props();
+  // Cada linha abre uma tela de verdade: endereços, formas de pagamento e
+  // configurações (Fase 6), notas e comprovantes (ReceiptsScreen), ajuda
+  // (14.1) e "Editar perfil" (EditProfileScreen). "Privacidade e dados
+  // (LGPD)" leva às Configurações, onde moram exportar e excluir.
+  let {
+    onLoggedOut,
+    onOpenOrders,
+    onOpenAddresses,
+    onOpenPaymentMethods,
+    onOpenSettings,
+    onOpenHelp,
+    onOpenReceipts,
+    onEditProfile,
+  } = $props();
 
   let stats = $state(null);
   // Tela 13.4, lado do cliente: a oferta de crédito em carteira aparece
@@ -59,10 +69,6 @@
     }
   }
 
-  function notPortedYet(what) {
-    toastr.info(`${what} ainda não foi portado.`);
-  }
-
   function doLogout() {
     logout();
     onLoggedOut();
@@ -81,6 +87,7 @@
     <div>
       <p class="name">{user?.full_name ?? '—'}</p>
       <p class="contact">{user?.email ?? user?.phone ?? ''}</p>
+      <button type="button" class="edit-link" onclick={onEditProfile}>Editar perfil</button>
     </div>
   </div>
 
@@ -142,8 +149,12 @@
       <span>Formas de pagamento</span>
       <i class="bi bi-chevron-right"></i>
     </button>
-    <button type="button" onclick={() => notPortedYet('Notas e comprovantes')}>
+    <button type="button" onclick={onOpenReceipts}>
       <span>Notas e comprovantes</span>
+      <i class="bi bi-chevron-right"></i>
+    </button>
+    <button type="button" onclick={onOpenSettings}>
+      <span>Privacidade e dados (LGPD)</span>
       <i class="bi bi-chevron-right"></i>
     </button>
     <button type="button" onclick={onOpenHelp}>
@@ -160,10 +171,19 @@
     Sair da conta
   </button>
 
-  <p class="footer">PWA v2.0.0 (parcial) · Fase 2 de 15</p>
+  <p class="footer">PWA v2.0.0 · HTTP/3 ativo</p>
 </div>
 
 <style>
+  .edit-link {
+    background: none;
+    border: none;
+    padding: 0;
+    margin-top: 2px;
+    color: var(--fuu-red);
+    font-weight: 600;
+    font-size: 12.5px;
+  }
   .profile-screen {
     padding: 12px 20px 24px;
   }

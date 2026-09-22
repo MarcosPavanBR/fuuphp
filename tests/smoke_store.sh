@@ -241,4 +241,23 @@ done
   || fail "cliente conseguiu fechar a loja"
 [ "$(query "SELECT is_open FROM restaurants WHERE id='${RESTAURANT_ID}'")" = "t" ] || fail "a loja fechou por ação de cliente"
 
+echo "== 11.1: foto do item -- recodificada, sem EXIF, só da própria loja, servida pública =="
+PHOTO="/tmp/store-photo-${STAMP}.png"
+php -r '$i=imagecreatetruecolor(2000,1200);imagefill($i,0,0,imagecolorallocate($i,200,40,30));imagepng($i,$argv[1]);' "$PHOTO"
+UP=$(curl -s -X POST "$BASE/restaurants/menu_photo.php" "${AUTH[@]}" -F "menu_item_id=${ITEM_ID}" -F "photo=@${PHOTO};type=image/png")
+KEY=$(echo "$UP" | jq -er '.photo_key') || fail "foto não subiu: $UP"
+[ "$(query "SELECT photo_key FROM menu_items WHERE id=${ITEM_ID}")" = "$KEY" ] || fail "photo_key não gravado"
+curl -s -D /tmp/store-photo-h.txt "$BASE/restaurants/menu_photo.php?key=${KEY}" -o /tmp/store-photo-out.jpg
+grep -qi 'content-type: image/jpeg' /tmp/store-photo-h.txt || fail "foto não veio como JPEG"
+grep -qi 'immutable' /tmp/store-photo-h.txt || fail "foto sem cache longo"
+[ "$(php -r '[$w]=getimagesize($argv[1]);echo $w;' /tmp/store-photo-out.jpg)" = "900" ] || fail "foto não foi reduzida pra 900 px"
+[ "$(curl -s "$BASE/restaurants/menu.php?id=${RESTAURANT_ID}" | jq -r "[.. | objects | select(.id? == ${ITEM_ID}) | .photo_key][0]")" = "$KEY" ] \
+  || fail "o cardápio público não traz a foto"
+[ "$(curl -s -X POST "$BASE/restaurants/menu_photo.php" "${AUTH[@]}" -F "menu_item_id=${OTHER_ITEM_ID}" -F "photo=@${PHOTO};type=image/png" | jq -r '.code')" = "menu_item_not_found" ] \
+  || fail "loja pôs foto em item de outra loja"
+echo "não sou imagem" >/tmp/store-fake-${STAMP}.png
+[ "$(curl -s -X POST "$BASE/restaurants/menu_photo.php" "${AUTH[@]}" -F "menu_item_id=${ITEM_ID}" -F "photo=@/tmp/store-fake-${STAMP}.png;type=image/png" | jq -r '.code')" = "invalid_file_type" ] \
+  || fail "arquivo que finge ser imagem passou"
+[ "$(curl -s "$BASE/restaurants/menu_photo.php?key=../../.env" | jq -r '.code')" = "invalid_key" ] || fail "caminho arbitrário aceito na leitura"
+
 echo "OK: loja operando a si mesma (Fase 11.2 a 11.4) passou no smoke test"

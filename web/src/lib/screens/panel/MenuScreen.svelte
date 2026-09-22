@@ -1,5 +1,6 @@
 <script>
-  import { api } from '../../api.js';
+  import { api, BASE } from '../../api.js';
+  import MenuPhoto from '../../components/MenuPhoto.svelte';
   import { toastr } from '../../toastr.js';
   import { staffToken } from '../../staffSession.svelte.js';
   import { parsePgTimestamp } from '../../datetime.js';
@@ -95,6 +96,7 @@
       category: item.category ?? '',
       price: Number(item.price),
       available: item.available,
+      photo_key: item.photo_key ?? null,
       variants: parseVariants(item.variants).map((v) => ({ ...v, price_delta: Number(v.price_delta) })),
       dirty: false,
     };
@@ -108,6 +110,7 @@
       category: category ?? '',
       price: 0,
       available: true,
+      photo_key: null,
       variants: [],
       dirty: true,
     };
@@ -133,6 +136,34 @@
   function removeVariant(index) {
     draft.variants = draft.variants.filter((_, i) => i !== index);
     touch();
+  }
+
+  let uploadingPhoto = $state(false);
+
+  async function uploadPhoto(event) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file || !draft?.id) return;
+    uploadingPhoto = true;
+    try {
+      const form = new FormData();
+      form.append('menu_item_id', String(draft.id));
+      form.append('photo', file);
+      const res = await fetch(`${BASE}/restaurants/menu_photo.php`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${staffToken()}` },
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? 'Não deu pra subir a foto.');
+      draft.photo_key = data.photo_key;
+      await load();
+      toastr.success('Foto atualizada — já aparece no app.');
+    } catch (e) {
+      toastr.error(e.message);
+    } finally {
+      uploadingPhoto = false;
+    }
   }
 
   async function publish() {
@@ -241,14 +272,18 @@
           {draft.dirty ? 'rascunho · publique para valer no app' : 'publicado — igual ao que o cliente vê'}
         </p>
 
-        <div class="photo-slot">
-          <i class="bi bi-image"></i>
-          <!-- Upload de foto do item não foi construído: o esquema tem
-               menu_items.photo_key, mas não existe endpoint de upload de
-               imagem de cardápio (o único upload do projeto é o comprovante
-               de Pix). Um seletor que não sobe nada seria pior. -->
-          <span>foto do item ainda não sobe por aqui</span>
-        </div>
+        <!-- Foto: sobe na hora pra o item já salvo (restaurants/menu_photo.php),
+             fora do rascunho -- foto não muda preço nem regra. Item novo
+             precisa ser publicado antes, porque a foto é presa ao id. -->
+        <label class="photo-slot" class:has-photo={draft.photo_key}>
+          <MenuPhoto photoKey={draft.photo_key} alt={draft.name} />
+          {#if draft.id > 0}
+            <span class="photo-action">{uploadingPhoto ? 'Enviando…' : draft.photo_key ? 'Trocar foto' : 'Adicionar foto'}</span>
+            <input type="file" accept="image/jpeg,image/png,image/webp" hidden disabled={uploadingPhoto} onchange={uploadPhoto} />
+          {:else}
+            <span class="photo-action">publique o item pra adicionar a foto</span>
+          {/if}
+        </label>
 
         <label class="field">
           <span>Nome</span>
@@ -580,8 +615,29 @@
     text-align: center;
     padding: 0 16px;
   }
-  .photo-slot i {
+  .photo-slot :global(i) {
     font-size: 22px;
+  }
+  .photo-slot {
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .photo-slot.has-photo {
+    height: 160px;
+    padding: 0;
+  }
+  .photo-action {
+    font-weight: 600;
+  }
+  .photo-slot.has-photo .photo-action {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    background: var(--fuu-white);
+    color: var(--fuu-ink-1);
+    border-radius: var(--fuu-radius-pill);
+    padding: 4px 10px;
   }
   .field {
     display: block;

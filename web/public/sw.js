@@ -12,7 +12,7 @@
 //   - cardápio e listas públicas: rede primeiro com cópia no cache. Preço
 //     velho é pior que espera, então a rede sempre ganha quando existe --
 //     o cache é o plano B, e a tela avisa que está mostrando o que salvou.
-const VERSION = 'fuu-v2';
+const VERSION = 'fuu-v3';
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 
@@ -26,6 +26,9 @@ const CACHEABLE_API = [
   '/api/v1/restaurants/show.php',
   '/api/v1/restaurants/menu.php',
   '/api/v1/restaurants/search_products.php',
+  // Foto do item: URL por hash de conteúdo, nunca muda -- boa pra ver o
+  // cardápio offline com as fotos.
+  '/api/v1/restaurants/menu_photo.php',
 ];
 
 self.addEventListener('install', (event) => {
