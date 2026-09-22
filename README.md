@@ -1508,11 +1508,24 @@ era literalmente a fila que não existia.
   do mock) e oferece o crédito; o cliente aceita no perfil e fica com
   R$ 88,40 de saldo. Zero erros de console.
 
-## Maquininha, conciliação e netting semanal (9.6, 9.7, 10.4, 10.6) — backend
+## Maquininha, conciliação e netting semanal (9.6, 9.7, 10.4, 10.6) — decisões
 
-**Estado honesto: o servidor das quatro telas está construído e testado; as
-telas Svelte ainda não.** Tudo abaixo roda contra Postgres real em
-`tests/smoke_machine.sh`.
+Servidor e telas construídos. Painel da loja: abas **Pagamentos** (10.4) e
+**Conciliação** (9.6); app do entregador: **Maquininha** (10.6) e o campo de
+NSU na entrega de pedido de maquininha; painel da plataforma: **Financeiro**
+(9.7). O servidor roda contra Postgres real em `tests/smoke_machine.sh`; as
+telas foram percorridas no Playwright de ponta a ponta (retirar, vender sem
+NSU, completar NSU, devolver, a loja confirmar, importar extrato com
+divergência, gerar lote e dar baixa), sem erro de console.
+
+- **Custódia de dois lados de verdade.** A primeira versão fechava a
+  custódia no "devolvi" do entregador — e o navegador mostrou o efeito: ela
+  sumia das duas telas e a loja nunca via o botão de confirmar. Agora a
+  custódia fica aberta até `confirmed_by`; a máquina só sai de novo depois da
+  conferência no balcão (`device_taken`), e o entregador que já devolveu pode
+  retirar outra enquanto isso.
+- **Completar o NSU atualiza a mesma venda**, não cria uma segunda; NSU de
+  outra venda é recusado (`nsu_already_used`, a `UNIQUE (acquirer, nsu)`).
 
 - **"A máquina é do estabelecimento" (10.4) é a regra de contabilidade.**
   Venda na maquininha NÃO lança `courier_cash`: o dinheiro cai na adquirente
@@ -2521,8 +2534,7 @@ checando `boundingBox()` via Playwright, não só lendo o código.
    endereço com área e frete no servidor, 14.4 agendamento), a Fase 15.1 a
    15.3 e o painel da plataforma (12.1 a 12.3 e a política da 10.5);
    faltam a fila de upload offline e o push (o resto de 7.1 e o 7.2 inteiro),
-   as TELAS de 9.6, 9.7, 10.4 e 10.6 (o backend das quatro está pronto e
-   testado — seção própria acima), a exportação contábil em CSV que a 12.3 promete (os
+   a exportação contábil em CSV que a 12.3 promete (os
    números dela estão na tela) e o que falta da Fase 15 -- rodadas, raio
    crescente e `dispatch_attempts` (15.1, 15.2 e 15.3 estão construídas, cada
    uma com seção própria acima).

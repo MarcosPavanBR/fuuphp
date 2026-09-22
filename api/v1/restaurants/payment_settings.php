@@ -80,7 +80,9 @@ function settings_payload(PDO $pdo, string $restaurantId, array $policy, bool $o
         "SELECT d.*,
                 c.id AS custody_id, c.taken_at, c.due_at, c.returned_at,
                 u.full_name AS holder_name,
-                (c.id IS NOT NULL AND c.returned_at IS NULL) AS out_with_courier,
+                -- Fora do balcão até a loja CONFIRMAR, não até ele marcar
+                -- devolvi: é esta linha que mostra o botão de confirmar.
+                (c.id IS NOT NULL AND c.confirmed_by IS NULL) AS out_with_courier,
                 (c.id IS NOT NULL AND c.returned_at IS NULL AND c.due_at < now()) AS overdue
            FROM pos_devices d
            LEFT JOIN LATERAL (

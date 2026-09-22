@@ -20,11 +20,29 @@ declare(strict_types=1);
 const POS_LATE_ALERT_MINUTES = 30;
 
 /**
- * A maquininha que está com este entregador agora, se houver.
+ * A máquina está livre pra sair? Só quando a última custódia dela foi
+ * confirmada pela loja. O índice `pos_one_holder` do banco cobre o caso
+ * "ninguém devolveu"; este cobre "devolveu e a loja ainda não conferiu".
+ */
+function pos_device_free(PDO $pdo, string $deviceId): bool
+{
+    $stmt = $pdo->prepare(
+        'SELECT 1 FROM pos_custody WHERE device_id = :id AND confirmed_by IS NULL LIMIT 1'
+    );
+    $stmt->execute(['id' => $deviceId]);
+
+    return $stmt->fetchColumn() === false;
+}
+
+/**
+ * A custódia deste entregador que ainda não FECHOU, se houver.
  *
- * O índice único parcial `pos_one_holder` (migração 006) garante que uma
- * máquina esteja com UMA pessoa; esta consulta é o outro lado — quem está
- * com o quê, pra tela do entregador e pro bloqueio de nova retirada.
+ * Fechar é a loja confirmar (`confirmed_by`), não ele marcar "devolvi"
+ * (`returned_at`): "custódia com dois lados: ele marca 'devolvi', a loja
+ * confirma no painel" (tela 10.6). Uma versão anterior deste código
+ * considerava fechada no "devolvi" -- e aí a custódia sumia das duas telas
+ * antes de a loja confirmar, e a segunda ponta nunca aparecia pra ninguém.
+ * Achado no navegador.
  */
 function pos_custody_open(PDO $pdo, string $courierId): ?array
 {
@@ -35,7 +53,7 @@ function pos_custody_open(PDO $pdo, string $courierId): ?array
            FROM pos_custody c
            JOIN pos_devices d ON d.id = c.device_id
            JOIN restaurants r ON r.id = d.restaurant_id
-          WHERE c.courier_id = :id AND c.returned_at IS NULL
+          WHERE c.courier_id = :id AND c.confirmed_by IS NULL
           ORDER BY c.taken_at DESC LIMIT 1"
     );
     $stmt->execute(['id' => $courierId]);

@@ -14,6 +14,7 @@
   import EarningsScreen from './lib/screens/courier/EarningsScreen.svelte';
   import ApplyScreen from './lib/screens/courier/ApplyScreen.svelte';
   import IncidentScreen from './lib/screens/courier/IncidentScreen.svelte';
+  import MachineScreen from './lib/screens/courier/MachineScreen.svelte';
 
   // App do entregador (Fase 8 + 9), numa página própria: o terceiro público
   // do projeto, no terceiro bundle. "Aplicativo separado, feito para ser
@@ -30,6 +31,8 @@
   // 13.3 — o "Problema" da tela 8.5. Fica no mesmo nível de `settling`
   // porque é a mesma coisa: uma tela que toma conta do app até terminar.
   let reporting = $state(false);
+  // 10.6 — a maquininha da loja em mãos. Mesmo padrão: toma a tela até sair.
+  let machine = $state(false);
 
   // Mesma decisão do painel da loja: polling, não SSE, porque `php -S`
   // atende uma requisição por vez (ver README). 4 s porque corrida é
@@ -86,7 +89,9 @@
     </header>
 
     <main>
-      {#if settling}
+      {#if machine}
+        <MachineScreen onBack={() => { machine = false; pull(); }} />
+      {:else if settling}
         <SettleScreen {me} onDone={() => { settling = false; pull(); }} />
       {:else if reporting && ride}
         <IncidentScreen
@@ -101,6 +106,7 @@
         <RideScreen
           order={ride}
           onProblem={() => (reporting = true)}
+          onMachine={() => (machine = true)}
           onDone={() => {
             tab = 'home';
             pull();
@@ -116,13 +122,16 @@
       {/if}
     </main>
 
-    {#if !ride && !settling && !reporting}
+    {#if !ride && !settling && !reporting && !machine}
       <nav class="tabs">
         <button type="button" class:on={tab === 'home'} onclick={() => (tab = 'home')}>
           <i class="bi bi-scooter"></i> Corridas
         </button>
         <button type="button" class:on={tab === 'earnings'} onclick={() => (tab = 'earnings')}>
           <i class="bi bi-journal-text"></i> Ganhos
+        </button>
+        <button type="button" onclick={() => (machine = true)}>
+          <i class="bi bi-credit-card-2-front"></i> Maquininha
         </button>
       </nav>
     {/if}

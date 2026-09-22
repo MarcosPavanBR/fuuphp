@@ -25,7 +25,29 @@ $pdo = db();
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $custody = pos_custody_open($pdo, $courierId);
 
+    // As máquinas que ele PODE retirar agora: as livres da loja da corrida
+    // de maquininha em andamento. Sem corrida de maquininha, não há por que
+    // sair com equipamento -- e a lista vem vazia de propósito.
+    $available = [];
+    if ($custody === null || $custody['returned_at'] !== null) {
+        $stmt = $pdo->prepare(
+            "SELECT d.id, d.label, d.acquirer, r.name AS restaurant_name
+               FROM orders o
+               JOIN pos_devices d ON d.restaurant_id = o.restaurant_id AND d.active
+               JOIN restaurants r ON r.id = o.restaurant_id
+              WHERE o.courier_id = :courier
+                AND o.payment_method = 'pos_machine'
+                AND o.status IN ('ready','delivering')
+                AND NOT EXISTS (SELECT 1 FROM pos_custody c
+                                 WHERE c.device_id = d.id AND c.confirmed_by IS NULL)
+              ORDER BY d.label"
+        );
+        $stmt->execute(['courier' => $courierId]);
+        $available = $stmt->fetchAll();
+    }
+
     json_response(200, [
+        'available_devices' => $available,
         'custody' => $custody,
         'deadline_label' => $custody === null
             ? null
@@ -50,7 +72,7 @@ if ($action === 'take') {
     }
     // "Atraso [...] bloqueia nova retirada": sair com a segunda máquina antes
     // de devolver a primeira é como equipamento some.
-    if ($open !== null) {
+    if ($open !== null && $open['returned_at'] === null) {
         error_response(409, 'already_holding', 'Você já está com a ' . $open['label'] . '. Devolva antes de pegar outra.');
     }
 
@@ -63,6 +85,9 @@ if ($action === 'take') {
     $device = $deviceStmt->fetch();
     if ($device === false) {
         error_response(404, 'device_not_found', 'Máquina não encontrada.');
+    }
+    if (!pos_device_free($pdo, $deviceId)) {
+        error_response(409, 'device_taken', 'Essa máquina ainda não foi conferida no balcão — a loja confirma a devolução antes de ela sair de novo.');
     }
 
     // O prazo é política da plataforma, não combinação de balcão.
@@ -94,7 +119,7 @@ if ($action === 'take') {
     ]);
 }
 
-if ($open === null) {
+if ($open === null || ($open['returned_at'] !== null && $action === 'return')) {
     error_response(409, 'no_custody', 'Você não está com nenhuma maquininha agora.');
 }
 
@@ -122,25 +147,51 @@ if ($action === 'sale') {
         error_response(422, 'amount_mismatch', 'O valor do pedido é R$ ' . number_format((float) $order['total'], 2, ',', '.') . '.', fields: ['amount' => 'diferente do pedido']);
     }
 
+    // Completar o NSU de uma venda que entrou sem ele ("informe para fechar o
+    // dia") é a MESMA venda, não uma segunda: atualiza a linha pendente deste
+    // pedido nesta máquina em vez de inserir outra.
+    $existing = $pdo->prepare(
+        'SELECT id FROM card_transactions
+          WHERE order_id = :order AND device_id = :device AND nsu IS NULL
+          ORDER BY id LIMIT 1'
+    );
+    $existing->execute(['order' => $orderId, 'device' => $open['device_id']]);
+    $pendingId = $existing->fetchColumn();
+
+    $params = [
+        'nsu' => $nsu === '' ? null : $nsu,
+        'amount' => $amount,
+        'brand' => isset($body['brand']) ? trim((string) $body['brand']) : null,
+    ];
+
     try {
-        $stmt = $pdo->prepare(
-            "INSERT INTO card_transactions
-                (order_id, device_id, acquirer, nsu, amount_app, brand, kind, state)
-             VALUES (:order, :device, :acq, :nsu, :amount, :brand, :kind, 'pending')
-             ON CONFLICT (acquirer, nsu) DO UPDATE
-               SET amount_app = EXCLUDED.amount_app, order_id = EXCLUDED.order_id
-             RETURNING *"
-        );
-        $stmt->execute([
-            'order' => $orderId,
-            'device' => $open['device_id'],
-            'acq' => $open['acquirer'],
-            'nsu' => $nsu === '' ? null : $nsu,
-            'amount' => $amount,
-            'brand' => isset($body['brand']) ? trim((string) $body['brand']) : null,
-            'kind' => ($order['machine_kind'] ?? 'credit') === 'debit' ? 'debit' : 'credit',
-        ]);
+        if ($pendingId !== false) {
+            $stmt = $pdo->prepare(
+                'UPDATE card_transactions
+                    SET nsu = :nsu, amount_app = :amount, brand = COALESCE(:brand, brand)
+                  WHERE id = :id RETURNING *'
+            );
+            $stmt->execute($params + ['id' => $pendingId]);
+        } else {
+            $stmt = $pdo->prepare(
+                "INSERT INTO card_transactions
+                    (order_id, device_id, acquirer, nsu, amount_app, brand, kind, state)
+                 VALUES (:order, :device, :acq, :nsu, :amount, :brand, :kind, 'pending')
+                 RETURNING *"
+            );
+            $stmt->execute($params + [
+                'order' => $orderId,
+                'device' => $open['device_id'],
+                'acq' => $open['acquirer'],
+                'kind' => ($order['machine_kind'] ?? 'credit') === 'debit' ? 'debit' : 'credit',
+            ]);
+        }
     } catch (PDOException $e) {
+        // UNIQUE (acquirer, nsu): o mesmo NSU não se repete na adquirente.
+        // Digitar o NSU de outra venda é erro de digitação, não venda nova.
+        if (str_contains($e->getMessage(), 'card_transactions_acquirer_nsu_key')) {
+            error_response(409, 'nsu_already_used', 'Esse NSU já foi informado em outra venda. Confira o comprovante.');
+        }
         throw $e;
     }
 

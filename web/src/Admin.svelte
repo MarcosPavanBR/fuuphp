@@ -10,6 +10,7 @@
   import CampaignsScreen from './lib/screens/admin/CampaignsScreen.svelte';
   import RefundsScreen from './lib/screens/admin/RefundsScreen.svelte';
   import IncidentQueue from './lib/screens/admin/IncidentQueue.svelte';
+  import NettingScreen from './lib/screens/admin/NettingScreen.svelte';
 
   // Painel da plataforma (Fase 12 + tela 10.5). Quarto bundle, quarto
   // público: quem opera o negócio, não quem usa o app.
@@ -68,6 +69,7 @@
         <button type="button" class:on={tab === 'refunds'} onclick={() => (tab = 'refunds')}>
           Reembolsos
         </button>
+        <button type="button" class:on={tab === 'netting'} onclick={() => (tab = 'netting')}>Financeiro</button>
         <button type="button" class:on={tab === 'reports'} onclick={() => (tab = 'reports')}>Relatórios</button>
         <button type="button" class:on={tab === 'campaigns'} onclick={() => (tab = 'campaigns')}>
           Campanhas
@@ -90,6 +92,9 @@
              são a mesma conversa, com o mesmo pedido na frente. -->
         <IncidentQueue onDecided={pull} />
         <RefundsScreen />
+      {:else if tab === 'netting'}
+        <!-- 9.7: netting semanal, repasse e bloqueios. -->
+        <NettingScreen />
       {:else if tab === 'reports'}
         <ReportsScreen />
       {:else if tab === 'campaigns'}

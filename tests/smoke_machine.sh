@@ -40,6 +40,10 @@ CPF2="$(gen_cpf)"
 ACCESS_CODE="313131"
 STAMP="$(date +%s%N)"
 ADMIN_PHONE="1197$(( RANDOM % 9000000 + 1000000 ))"
+# NSU é UNIQUE por adquirente no banco: fixos, colidiriam com a execução
+# anterior no mesmo banco. Seis dígitos derivados do carimbo desta execução.
+NSU_BASE=$(( $(date +%s) % 900000 + 100000 ))
+NSU1="$NSU_BASE"; NSU_B=$(( NSU_BASE + 1 )); NSU_ORPHAN=$(( NSU_BASE + 2 ))
 
 echo "== semear loja, duas maquininhas, dois entregadores e admin =="
 psql_run <<SQL
@@ -198,11 +202,11 @@ echo "== 9.6: venda na maquininha é conferência, não dívida =="
 O1=$(machine_order)
 TOTAL=$(query "SELECT total FROM orders WHERE id=${O1}")
 WRONG=$(curl -s -X POST "$BASE/couriers/pos.php" -H "Content-Type: application/json" "${COURIER_AUTH[@]}" \
-  -d "{\"action\":\"sale\",\"order_id\":${O1},\"nsu\":\"004182\",\"amount\":10.00}")
+  -d "{\"action\":\"sale\",\"order_id\":${O1},\"nsu\":\"${NSU1}\",\"amount\":10.00}")
 [ "$(echo "$WRONG" | jq -r '.code')" = "amount_mismatch" ] || fail "aceitou valor diferente do pedido: $WRONG"
 
 SALE=$(curl -s -X POST "$BASE/couriers/pos.php" -H "Content-Type: application/json" "${COURIER_AUTH[@]}" \
-  -d "{\"action\":\"sale\",\"order_id\":${O1},\"nsu\":\"004182\",\"amount\":${TOTAL},\"brand\":\"Visa\"}")
+  -d "{\"action\":\"sale\",\"order_id\":${O1},\"nsu\":\"${NSU1}\",\"amount\":${TOTAL},\"brand\":\"Visa\"}")
 [ "$(echo "$SALE" | jq -r '.transaction.state')" = "pending" ] || fail "venda não entrou como pendente: $SALE"
 [ "$(echo "$SALE" | jq -r '.transaction.kind')" = "debit" ] || fail "o tipo veio do pedido, não do corpo: $SALE"
 CASH_AFTER=$(query "SELECT COALESCE(SUM(amount),0) FROM ledger_entries WHERE account='courier_cash' AND party_id='${COURIER_ID}'")
@@ -237,13 +241,13 @@ echo "== 9.6: importar o extrato concilia por NSU =="
 EXTRATO="/tmp/extrato-${STAMP}.csv"
 cat > "$EXTRATO" <<CSV
 nsu,valor,data_hora,bandeira,tipo
-004182,${TOTAL},$(date '+%Y-%m-%d %H:%M:%S'),Visa,debito
+${NSU1},${TOTAL},$(date '+%Y-%m-%d %H:%M:%S'),Visa,debito
 CSV
 IMPORT=$(curl -s -X POST "$BASE/restaurants/reconciliation.php" "${STAFF_AUTH[@]}" \
   -F "acquirer=stone" -F "day=${TODAY}" -F "statement=@${EXTRATO};type=text/csv")
 [ "$(echo "$IMPORT" | jq -r '.matched')" = "1" ] || fail "o extrato não casou pelo NSU: $IMPORT"
 [ "$(echo "$IMPORT" | jq -r '.statement.rows_total')" = "1" ] || fail "o import não ficou registrado: $IMPORT"
-[ "$(query "SELECT state FROM card_transactions WHERE nsu='004182'")" = "reconciled" ] \
+[ "$(query "SELECT state FROM card_transactions WHERE nsu='${NSU1}'")" = "reconciled" ] \
   || fail "a venda não ficou conciliada"
 
 echo "== 9.6: o mesmo arquivo não entra duas vezes =="
@@ -252,8 +256,16 @@ AGAIN=$(curl -s -X POST "$BASE/restaurants/reconciliation.php" "${STAFF_AUTH[@]}
 [ "$(echo "$AGAIN" | jq -r '.code')" = "statement_already_imported" ] || fail "reimportou o mesmo extrato: $AGAIN"
 
 echo "== 9.6: divergência de valor vira ocorrência e não fecha o dia =="
-NSU2="004190"
-psql_run -c "UPDATE card_transactions SET nsu='${NSU2}' WHERE order_id=${O2}"
+NSU2="${NSU_B}"
+# Completar o NSU pelo app atualiza a MESMA venda -- não cria uma segunda.
+FILL=$(curl -s -X POST "$BASE/couriers/pos.php" -H "Content-Type: application/json" "${COURIER_AUTH[@]}" \
+  -d "{\"action\":\"sale\",\"order_id\":${O2},\"nsu\":\"${NSU2}\",\"amount\":${TOTAL2}}")
+[ "$(echo "$FILL" | jq -r '.transaction.nsu')" = "${NSU2}" ] || fail "o NSU não completou a venda: $FILL"
+[ "$(query "SELECT count(*) FROM card_transactions WHERE order_id=${O2}")" = "1" ] \
+  || fail "completar o NSU duplicou a venda"
+REUSE=$(curl -s -X POST "$BASE/couriers/pos.php" -H "Content-Type: application/json" "${COURIER_AUTH[@]}" \
+  -d "{\"action\":\"sale\",\"order_id\":${O2},\"nsu\":\"${NSU1}\",\"amount\":${TOTAL2}}")
+[ "$(echo "$REUSE" | jq -r '.code')" = "nsu_already_used" ] || fail "aceitou NSU de outra venda: $REUSE"
 DIVERG="/tmp/extrato-div-${STAMP}.csv"
 DIFF_TOTAL=$(php -r "echo number_format(${TOTAL2} - 10, 2, '.', '');")
 cat > "$DIVERG" <<CSV
@@ -273,7 +285,7 @@ echo "== 9.6: linha do extrato sem venda informada fica como órfã =="
 ORFA="/tmp/extrato-orfa-${STAMP}.csv"
 cat > "$ORFA" <<CSV
 nsu,valor,data_hora,bandeira,tipo
-009999,12.34,$(date '+%Y-%m-%d %H:%M:%S'),Elo,credito
+${NSU_ORPHAN},12.34,$(date '+%Y-%m-%d %H:%M:%S'),Elo,credito
 CSV
 IMPORT3=$(curl -s -X POST "$BASE/restaurants/reconciliation.php" "${STAFF_AUTH[@]}" \
   -F "acquirer=stone" -F "day=${TODAY}" -F "statement=@${ORFA};type=text/csv")
@@ -286,6 +298,14 @@ RET=$(curl -s -X POST "$BASE/couriers/pos.php" -H "Content-Type: application/jso
 [ "$(echo "$RET" | jq -r '.custody.returned_at')" != "null" ] || fail "devolução não registrou: $RET"
 [ "$(query "SELECT confirmed_by FROM pos_custody WHERE id=${CUSTODY}")" = "" ] \
   || fail "a devolução se confirmou sozinha -- a loja é a outra ponta"
+# "Devolvi" é uma ponta só: até a loja conferir, a máquina não sai de novo e
+# continua aparecendo no painel como fora do balcão.
+EARLY=$(curl -s -X POST "$BASE/couriers/pos.php" -H "Content-Type: application/json" "${COURIER2_AUTH[@]}" \
+  -d "{\"action\":\"take\",\"device_id\":\"${DEVICE1}\"}")
+[ "$(echo "$EARLY" | jq -r '.code')" = "device_taken" ] || fail "máquina saiu antes da loja conferir a devolução: $EARLY"
+PANEL=$(curl -s "$BASE/restaurants/payment_settings.php" "${STAFF_AUTH[@]}")
+[ "$(echo "$PANEL" | jq -r "[.devices[] | select(.id == \"${DEVICE1}\")][0].out_with_courier")" = "true" ] \
+  || fail "a custódia sumiu do painel antes da confirmação: $PANEL"
 CONFIRM=$(curl -s -X POST "$BASE/restaurants/pos_devices.php" -H "Content-Type: application/json" "${STAFF_AUTH[@]}" \
   -d "{\"action\":\"confirm_return\",\"custody_id\":${CUSTODY}}")
 [ "$(echo "$CONFIRM" | jq -r '.custody.confirmed_by')" != "null" ] || fail "a loja não confirmou: $CONFIRM"

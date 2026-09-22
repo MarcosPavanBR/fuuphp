@@ -19,6 +19,8 @@
   import PauseScreen from './lib/screens/panel/PauseScreen.svelte';
   import MenuScreen from './lib/screens/panel/MenuScreen.svelte';
   import HoursScreen from './lib/screens/panel/HoursScreen.svelte';
+  import PaymentSettingsScreen from './lib/screens/panel/PaymentSettingsScreen.svelte';
+  import ReconciliationScreen from './lib/screens/panel/ReconciliationScreen.svelte';
   import OrderChat from './lib/components/OrderChat.svelte';
 
   // Painel da loja (telas 7.3 e 11.1). Roda numa página própria
@@ -169,6 +171,12 @@
         </button>
         <button type="button" class:active={tab === 'menu'} onclick={() => (tab = 'menu')}>Cardápio</button>
         <button type="button" class:active={tab === 'hours'} onclick={() => (tab = 'hours')}>Horário</button>
+        <!-- 10.4 e 9.6: dinheiro que não passa pelo caixa -- as formas que
+             a loja aceita e a conferência da maquininha. -->
+        <button type="button" class:active={tab === 'payments'} onclick={() => (tab = 'payments')}>
+          Pagamentos
+        </button>
+        <button type="button" class:active={tab === 'recon'} onclick={() => (tab = 'recon')}>Conciliação</button>
       </nav>
 
       <div class="meta">
@@ -200,6 +208,10 @@
       <MenuScreen />
     {:else if tab === 'hours'}
       <HoursScreen onChanged={() => pull({ withStats: true })} />
+    {:else if tab === 'payments'}
+      <PaymentSettingsScreen />
+    {:else if tab === 'recon'}
+      <ReconciliationScreen />
     {:else}
       <div class="overview-layout">
         <aside class="side">

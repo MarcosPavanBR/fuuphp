@@ -8,7 +8,7 @@
   // quatro telas diferentes.
   //   ready      -> rota até a coleta (8.3) e coleta com troco (8.4)
   //   delivering -> entrega, cobrança (8.5) e prova (8.6)
-  let { order, onDone, onProblem } = $props();
+  let { order, onDone, onProblem, onMachine } = $props();
 
   let detail = $state(null);
   let code = $state('');
@@ -87,6 +87,33 @@
     }
   }
 
+  // 9.6 — NSU e valor da venda na maquininha da loja. Vai pro servidor
+  // conferir com o extrato; sem NSU a venda entra do mesmo jeito, mas trava o
+  // fechamento do dia até ser completada.
+  let nsu = $state('');
+  let saleSaved = $state(false);
+
+  async function registerSale() {
+    if (busy) return;
+    busy = true;
+    try {
+      const res = await api.post('/couriers/pos.php', {
+        token: courierToken(),
+        body: { action: 'sale', order_id: order.id, nsu: nsu.replace(/\D/g, ''), amount: Number(order.total) },
+      });
+      saleSaved = true;
+      toastr.success(res.notice);
+    } catch (e) {
+      toastr.error(
+        e instanceof ApiError && e.code === 'no_custody'
+          ? 'Registre a retirada da maquininha antes (botão Maquininha).'
+          : (e.message ?? 'Não deu pra registrar a venda.')
+      );
+    } finally {
+      busy = false;
+    }
+  }
+
   let collecting = $derived(order.status === 'ready');
   let changeDue = $derived(detail?.change_due ?? null);
 </script>
@@ -128,6 +155,16 @@
         </div>
       {/if}
 
+      {#if order.payment_method === 'pos_machine'}
+        <!-- 10.4: "o entregador retira a máquina registrando a posse no app
+             dele". É na coleta que ela sai do balcão. -->
+        <div class="change">
+          <p class="k">LEVE A MAQUININHA DA LOJA</p>
+          <p class="sub">{order.machine_kind === 'debit' ? 'Débito' : 'Crédito'} · {money(order.total)}</p>
+          <button type="button" class="linkish" onclick={onMachine}>Registrar a retirada da maquininha</button>
+        </div>
+      {/if}
+
       <button type="button" class="btn-fuu-primary w-100 big" disabled={busy} onclick={() => mark('picked_up')}>
         Peguei o pedido
       </button>
@@ -150,6 +187,18 @@
         <p class="k">PASSAR NA MAQUININHA</p>
         <p class="huge fuu-display">{money(order.total)}</p>
         <p class="sub">{order.machine_kind === 'debit' ? 'Débito' : 'Crédito'}</p>
+      </div>
+      <!-- 9.6/10.6: a venda na maquininha não vira dívida, vira NSU pra
+           conferência. Registrar aqui é o que deixa o dia da loja fechar. -->
+      <div class="card">
+        <p class="k">NSU DO COMPROVANTE</p>
+        <div class="nsu-row">
+          <input type="text" inputmode="numeric" class="fuu-mono" placeholder="000000" bind:value={nsu} />
+          <button type="button" disabled={busy || saleSaved} onclick={registerSale}>
+            {saleSaved ? 'Registrado' : 'Registrar'}
+          </button>
+        </div>
+        <button type="button" class="linkish" onclick={onMachine}>Ver a maquininha em mãos</button>
       </div>
     {:else}
       <div class="paid">
@@ -317,6 +366,37 @@
     margin: 12px 0 0;
     line-height: 1.5;
     text-align: center;
+  }
+  .nsu-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .nsu-row input {
+    flex: 1;
+    border: 1px solid var(--fuu-line-3);
+    border-radius: 9px;
+    padding: 10px;
+    font-size: 16px;
+  }
+  .nsu-row button {
+    border: 0;
+    background: var(--fuu-ink-1);
+    color: var(--fuu-white);
+    border-radius: 9px;
+    padding: 0 16px;
+    font-family: inherit;
+    font-weight: 700;
+  }
+  .linkish {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    margin-top: 10px;
+    font-size: 12.5px;
+    color: var(--fuu-ink-3);
+    text-decoration: underline;
+    font-family: inherit;
   }
   .problem {
     width: 100%;
