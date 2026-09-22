@@ -5,7 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
 // Tela 6.3 — "Baixar meus dados (LGPD)". Devolve um JSON com tudo que o
-// sistema guarda sobre o cliente logado (lib/account_privacy.php decide o
+// sistema guarda sobre o cliente logado (lib/account/account_privacy.php decide o
 // que entra e o que fica de fora), como anexo pra download.
 
 require_method('GET');

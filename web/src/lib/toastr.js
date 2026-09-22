@@ -6,7 +6,7 @@
 // próprio package.json dele). As duas regras da mesma cláusula, seguidas ao
 // pé da letra, se contradizem para código escrito do zero.
 //
-// Resolvido do mesmo jeito que o JWT em lib/jwt.php: a MESMA interface que
+// Resolvido do mesmo jeito que o JWT em lib/core/jwt.php: a MESMA interface que
 // o resto do app vai chamar (toastr.success/error/warning/info, com as
 // mesmas opções mais comuns), reimplementada em ~60 linhas de DOM puro. Se
 // algum dia isso não bastar, é proposta de mudança de stack -- não decisão

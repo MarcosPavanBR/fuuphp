@@ -47,7 +47,7 @@ function push_key_path(): string
 {
     $path = (string) env('VAPID_PRIVATE_KEY_FILE', 'storage/vapid/private.pem');
 
-    return str_starts_with($path, '/') ? $path : __DIR__ . '/../' . $path;
+    return app_path($path);
 }
 
 /** A chave privada VAPID, ou null se ainda não foi gerada. */

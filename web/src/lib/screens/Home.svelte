@@ -7,7 +7,7 @@
   // api/restaurants.php)
   //
   // O card mostra nota (4,8), tempo e frete como no mock -- calculados pelo
-  // servidor das mesmas fontes que o checkout usa (lib/restaurant_facts.php):
+  // servidor das mesmas fontes que o checkout usa (lib/catalog/restaurant_facts.php):
   // nota das avaliações (só com 3 ou mais), frete da tarifa da política pro
   // lugar escolhido, tempo = preparo informado pela loja + viagem. O que não
   // dá pra calcular (sem coordenada, sem avaliações) simplesmente não aparece.

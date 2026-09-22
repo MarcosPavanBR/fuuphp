@@ -314,7 +314,7 @@ STORE_AFTER=$(query "SELECT COALESCE(SUM(amount),0) FROM ledger_entries WHERE ac
 # dinheiro está com a plataforma, que estorna. Com a taxa perdoada, a loja
 # fica sem a taxa e com a comida perdida -- cobrá-la dos R$ 66 do estorno
 # seria fazê-la pagar por dinheiro que nunca passou por ela (a primeira
-# versão fazia isso; ver lib/refunds.php, refund_ledger).
+# versão fazia isso; ver lib/payments/refunds.php, refund_ledger).
 [ "$(echo "$STORE_AFTER - $STORE_BEFORE" | bc)" = "0" ] \
   || fail "o estorno de pedido não entregue cobrou a loja (${STORE_BEFORE} -> ${STORE_AFTER})"
 [ "$(query "SELECT status FROM payments WHERE order_id=${O_CARD}")" = "refunded" ] \

@@ -8,7 +8,7 @@ require_once __DIR__ . '/../lib/bootstrap.php';
 //
 // Lê a outbox, transforma aprovação e saída pra entrega em notificação,
 // varre os Pix manuais perto de vencer, e acorda os aparelhos
-// (lib/push.php). Tudo idempotente: rodar duas vezes não avisa duas vezes.
+// (lib/messaging/push.php). Tudo idempotente: rodar duas vezes não avisa duas vezes.
 //
 // COMO RODAR (uma linha no cron, a cada minuto):
 //

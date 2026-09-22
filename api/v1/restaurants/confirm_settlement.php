@@ -13,7 +13,7 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 // Os dois lançamentos:
 //   courier_cash     -= valor  (sai das mãos do entregador)
 //   store_receivable += valor  (a loja recebeu a parte dela, que devíamos
-//                               desde a entrega -- lib/order_ledger.php)
+//                               desde a entrega -- lib/ledger/order_ledger.php)
 //
 // "O dinheiro do pedido em espécie é seu — o entregador é apenas portador."
 // Na entrega, a plataforma passa a dever à loja a parte dela (−G); quando o

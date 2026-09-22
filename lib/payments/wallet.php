@@ -75,7 +75,7 @@ function wallet_offers(PDO $pdo, string $userId): array
  *
  * Decisão de contabilidade registrada, porque é o ponto que costuma ficar
  * errado: o custo do crédito JÁ FOI lançado no livro quando a oferta foi
- * aceita (refund_ledger, em lib/refunds.php) -- a plataforma ficou com o
+ * aceita (refund_ledger, em lib/payments/refunds.php) -- a plataforma ficou com o
  * dinheiro do cliente e com a dívida no passivo. Gastar, aqui, só consome
  * esse passivo. Lançar de novo agora contaria a mesma despesa duas vezes.
  *

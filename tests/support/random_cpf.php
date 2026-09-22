@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 // Gera um CPF aleatório com dígitos verificadores válidos, pra seed de teste
 // não colidir na UNIQUE de users.cpf entre execuções no mesmo banco. Mesmo
-// algoritmo de lib/validation.php::is_valid_cpf, ao contrário.
+// algoritmo de lib/core/validation.php::is_valid_cpf, ao contrário.
 
 function cpf_digit(string $base): int
 {

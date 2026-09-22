@@ -32,7 +32,7 @@ if (!is_string($key) || $key === '') {
 }
 
 $storageDir = rtrim((string) env('PROOF_STORAGE_DIR', 'storage/proofs'), '/') . '/delivery';
-$absoluteDir = str_starts_with($storageDir, '/') ? $storageDir : __DIR__ . '/../../../' . $storageDir;
+$absoluteDir = app_path($storageDir);
 // basename(): a chave é gerada pelo servidor, mas o arquivo é lido do disco.
 $path = $absoluteDir . '/' . basename($key);
 if (!is_file($path)) {

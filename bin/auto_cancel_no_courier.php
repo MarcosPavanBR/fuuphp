@@ -13,7 +13,7 @@ declare(strict_types=1);
 //
 // POR QUE NÃO É UM JOB DO pg_cron, como o timeout do Pix (migração 009):
 // porque aqui não é só mudar status -- é decidir dinheiro. Quem decide por
-// onde o estorno volta, quanto volta e de que bolso sai é lib/refunds.php, em
+// onde o estorno volta, quanto volta e de que bolso sai é lib/payments/refunds.php, em
 // PHP, com a rota de cada forma de pagamento escrita num lugar só. Reescrever
 // essa tabela em PL/pgSQL criaria uma segunda fonte de verdade sobre o
 // dinheiro, e as duas iam divergir no primeiro ajuste. O expire_pending_
@@ -76,7 +76,7 @@ foreach ($candidates as $order) {
     $reason = sprintf('Nenhum entregador aceitou em %d min', (int) round($timeout / 60));
 
     // 'no_courier' é a causa que zera a taxa e manda a conta pra plataforma
-    // (refund_payer, lib/refunds.php): a comida já feita é paga por nós, não
+    // (refund_payer, lib/payments/refunds.php): a comida já feita é paga por nós, não
     // pela loja. É o que o rodapé da tela promete, palavra por palavra.
     $plan = refund_plan($order, $policy, 'no_courier');
 

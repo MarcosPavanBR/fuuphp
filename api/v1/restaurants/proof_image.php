@@ -11,7 +11,7 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 //
 // O painel busca esta rota com fetch + Authorization e converte em blob
 // URL pra por no <img> -- de propósito, pra NÃO precisar aceitar token por
-// query string aqui (a exceção documentada em lib/auth_guard.php vale só
+// query string aqui (a exceção documentada em lib/core/auth_guard.php vale só
 // pro SSE, onde o EventSource não deixa mandar header).
 
 require_method('GET');
@@ -36,7 +36,7 @@ if ($proof === false || $proof['restaurant_id'] !== ($claims['restaurant_id'] ??
 }
 
 $storageDir = rtrim((string) env('PROOF_STORAGE_DIR', 'storage/proofs'), '/');
-$absoluteDir = str_starts_with($storageDir, '/') ? $storageDir : __DIR__ . '/../../../' . $storageDir;
+$absoluteDir = app_path($storageDir);
 // basename() blinda contra storage_key com "../" -- hoje ele é sempre
 // "<sha256>.<ext>" gerado pelo servidor, mas o arquivo é lido do disco:
 // não custa não confiar.

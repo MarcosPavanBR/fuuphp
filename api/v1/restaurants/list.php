@@ -63,7 +63,7 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $restaurants = $stmt->fetchAll();
 
-// Nota, frete e tempo do card (tela 2.1): lib/restaurant_facts.php.
+// Nota, frete e tempo do card (tela 2.1): lib/catalog/restaurant_facts.php.
 $facts = restaurant_card_facts($pdo, array_column($restaurants, 'id'), $lat, $lng);
 foreach ($restaurants as &$r) {
     $r += $facts[$r['id']] ?? [];

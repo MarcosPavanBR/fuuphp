@@ -39,7 +39,7 @@ $products = $stmt->fetchAll();
 
 // Os filtros da tela 2.2 (Entrega grátis / Até 30 min / 4,5+) são sobre a
 // LOJA do produto: cada resultado leva os números da loja dele, calculados
-// como no card da Home (lib/restaurant_facts.php). Com ?lat&lng, frete e
+// como no card da Home (lib/catalog/restaurant_facts.php). Com ?lat&lng, frete e
 // tempo são do lugar de quem busca.
 $lat = isset($_GET['lat']) && $_GET['lat'] !== '' ? (float) $_GET['lat'] : null;
 $lng = isset($_GET['lng']) && $_GET['lng'] !== '' ? (float) $_GET['lng'] : null;

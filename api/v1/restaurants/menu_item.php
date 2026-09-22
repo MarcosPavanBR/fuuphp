@@ -13,7 +13,7 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 // no README que fechar o painel sem publicar perde a edição.
 //
 // Preço continua sendo decidido pelo servidor no checkout (price_line(),
-// lib/cart.php): esta rota muda a fonte da verdade, não o cálculo.
+// lib/ordering/cart.php): esta rota muda a fonte da verdade, não o cálculo.
 
 require_method('POST');
 $claims = require_auth();

@@ -13,7 +13,7 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 //         {"forfeit_wallet": true}: crédito é dinheiro, e ninguém perde
 //         dinheiro por um toque sem ter lido.
 //
-// Excluir = anonimizar (ver lib/account_privacy.php e migração 026).
+// Excluir = anonimizar (ver lib/account/account_privacy.php e migração 026).
 
 $claims = require_auth();
 if (($claims['role'] ?? null) !== 'customer') {

@@ -33,10 +33,10 @@ if ($courier === false) {
 
 // Fase 15: antes de montar a vitrine, as rodadas andam. O app pergunta a
 // cada 4 s, e é isso que faz o raio crescer no tempo certo entre um minuto
-// de cron e outro (lib/dispatch.php, dispatch_tick).
+// de cron e outro (lib/dispatch/dispatch.php, dispatch_tick).
 dispatch_tick($pdo);
 
-// A distância é a mesma conta de Haversine da descoberta (lib/db.php), entre
+// A distância é a mesma conta de Haversine da descoberta (lib/core/db.php), entre
 // a loja e o endereço de entrega -- "distância" na tela do entregador é o
 // trecho que ele vai rodar depois da coleta.
 //

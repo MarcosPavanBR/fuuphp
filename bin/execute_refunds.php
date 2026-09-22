@@ -7,7 +7,7 @@ require_once __DIR__ . '/../lib/bootstrap.php';
 // Varredura que executa os reembolsos decididos na tela 13.4.
 //
 // POR QUE NÃO NO pg_cron: chamar a API do Mercado Pago é HTTP, e o banco não
-// faz HTTP. Mesmo motivo de lib/refund_executor.php morar em PHP.
+// faz HTTP. Mesmo motivo de lib/payments/refund_executor.php morar em PHP.
 //
 // COMO RODAR (uma linha no cron, a cada minuto):
 //

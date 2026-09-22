@@ -39,3 +39,17 @@ function env_required(string $key): string
     }
     return $value;
 }
+
+// Raiz do projeto (onde ficam .env, storage/, api/). Definida uma vez aqui
+// pra nenhum arquivo precisar contar "../" a partir de onde está -- a conta
+// quebrava a cada pasta que um arquivo mudava de lugar.
+define('APP_ROOT', dirname(__DIR__, 2));
+
+/**
+ * Caminho absoluto de algo do projeto. Caminho que já é absoluto (vindo de
+ * variável de ambiente, ex.: PROOF_STORAGE_DIR=/var/fuu/proofs) passa direto.
+ */
+function app_path(string $path): string
+{
+    return str_starts_with($path, '/') ? $path : APP_ROOT . '/' . ltrim($path, '/');
+}

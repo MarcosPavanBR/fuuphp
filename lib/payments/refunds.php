@@ -259,7 +259,7 @@ function refund_with_fee(array $refund, string $adjustment): array
  * dinheiro que ela nunca recebeu (que era o defeito da primeira versão):
  *
  *   1. O pedido chegou a ser entregue? Só depois da entrega a parte da loja
- *      foi lançada (lib/order_ledger.php). Antes, a loja não recebeu nada.
+ *      foi lançada (lib/ledger/order_ledger.php). Antes, a loja não recebeu nada.
  *   2. Onde está o dinheiro? Cartão e Pix automático estão com a
  *      plataforma, que é quem estorna; Pix manual e maquininha da loja estão
  *      na conta da loja, que é quem devolve.

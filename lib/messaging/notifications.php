@@ -19,7 +19,7 @@ declare(strict_types=1);
 // tarde não dá tempo de achar o print.
 const PROOF_DEADLINE_WARN_MINUTES = 5;
 
-// A velocidade média da estimativa (DELIVERY_AVG_KMH) mora em lib/delivery.php.
+// A velocidade média da estimativa (DELIVERY_AVG_KMH) mora em lib/ordering/delivery.php.
 
 /**
  * Lê a outbox pendente, gera as notificações dos tópicos que viram aviso e

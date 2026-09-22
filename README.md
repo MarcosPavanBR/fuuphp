@@ -490,7 +490,7 @@ A especificação descreve o *quê* (OTP, refresh com rotação e detecção de
 reuso, login de parceiro) mas não o *como* em código. Decisões tomadas para
 fechar essa lacuna:
 
-- **JWT escrito à mão** (`lib/jwt.php`, HS256), em vez de uma biblioteca via
+- **JWT escrito à mão** (`lib/core/jwt.php`, HS256), em vez de uma biblioteca via
   Composer — a cláusula zero não autoriza nenhuma, e o formato é simples o
   bastante para não precisar. Se algum dia crescer (RS256, JWKS, revogação
   por `jti`), isso é proposta de mudança de stack, não decisão de código.
@@ -526,7 +526,7 @@ fechar essa lacuna:
   responsabilidade de um módulo futuro (dispatch ou um serviço de tarifação
   à parte).
 - **`policy_overrides` com `scope='city'` não entra no merge de
-  `lib/policy.php`.** Só `scope='restaurant'` é aplicado — um override por
+  `lib/catalog/policy.php`.** Só `scope='restaurant'` é aplicado — um override por
   praça exigiria cruzar `city_ibge_code` do endereço de entrega contra a
   praça da loja, e essa resolução geográfica não existe neste módulo ainda.
   Fica comentado no código.
@@ -538,10 +538,10 @@ fechar essa lacuna:
   Isso significa dois níveis de erro diferentes por design: 403 quando o
   papel não pode pedir aquilo, 409 quando o banco recusa a transição em si.
 - **RLS por restaurante (migração 009) ainda não está em uso real.** As
-  policies existem no banco, mas a conexão PHP de `lib/db.php` usa o que
+  policies existem no banco, mas a conexão PHP de `lib/core/db.php` usa o que
   `DATABASE_URL` apontar — em dev/CI isso é o superusuário `postgres`, que
   ignora RLS por padrão (é dono das tabelas). A autorização de acesso a
-  pedido hoje é feita inteiramente em `lib/orders.php`
+  pedido hoje é feita inteiramente em `lib/ordering/orders.php`
   (`authorize_order_access()`), comparando `user_id`/`restaurant_id` do
   token com os do pedido. Rodar como o role `app_rw` (já com `GRANT`
   configurado em `009`) e emitir `SET LOCAL app.role` / `app.restaurant_id`
@@ -583,7 +583,7 @@ mock é item por item, com `toastr` confirmando cada adição, e "o carrinho
 vive num store Svelte e é espelhado no PostgreSQL como pedido em
 status='cart'". Os dois modelos convivem — nenhum substituiu o outro.
 
-- **`price_line()` foi extraída pra `lib/cart.php` e reaproveitada em
+- **`price_line()` foi extraída pra `lib/ordering/cart.php` e reaproveitada em
   `orders/create.php`.** Precificar uma linha (validar item+variação
   contra o cardápio atual, nunca confiar no preço que o cliente mandou) é
   a mesma regra nos dois fluxos; duplicar essa validação seria o tipo de
@@ -629,7 +629,7 @@ faltava a ponte entre o carrinho incremental (Fase 3, `status='cart'`) e
 o pagamento — ele não existia antes deste módulo.
 
 - **Limite honesto: não há conta sandbox real do Mercado Pago neste
-  ambiente.** `lib/mercadopago.php` implementa o cliente HTTP contra o
+  ambiente.** `lib/payments/mercadopago.php` implementa o cliente HTTP contra o
   contrato documentado da Payments API de verdade (`POST /v1/payments`,
   cartão tokenizado + Pix), mas sem `MERCADOPAGO_ACCESS_TOKEN` configurado
   ele cai em `MERCADOPAGO_MODE=fake`: simula aprovação/recusa de cartão
@@ -648,7 +648,7 @@ o pagamento — ele não existia antes deste módulo.
   X-Idempotency-Key"); este projeto amplia a exigência pros cinco —
   nenhum método pode rodar duas vezes por um retry de rede, nem os de
   validação humana (dois comprovantes pro mesmo clique, por exemplo).
-  `lib/idempotency.php` grava a chave com o hash da rota+corpo antes de
+  `lib/core/idempotency.php` grava a chave com o hash da rota+corpo antes de
   chamar o handler e devolve a MESMA resposta HTTP em replay; reusar a
   chave numa requisição diferente dá 409. Um `register_shutdown_function`
   libera a reserva se o handler terminar a requisição por dentro (ex.:
@@ -673,7 +673,7 @@ o pagamento — ele não existia antes deste módulo.
   automático ficou sem tela nesta passada (registrado em "Próximos
   passos").
 - **Pix copia-e-cola é um gerador real de BR Code (EMV/Pix estático)**,
-  não uma string decorativa: `lib/pix.php` monta os campos TLV do Banco
+  não uma string decorativa: `lib/payments/pix.php` monta os campos TLV do Banco
   Central e fecha com CRC16. Como é dinheiro de verdade saindo da conta de
   alguém (o código embarcado num QR real teria que ser aceito por
   qualquer banco), o CRC16 foi conferido contra o vetor de teste padrão do
@@ -768,7 +768,7 @@ A Fase 5 no front (as 5 telas de verdade) ainda não foi portada — ver
   necessário.
 - **`EventSource` não manda header customizado — o token vai por query
   string nesta rota, como exceção documentada.** `require_auth_header_or_query()`
-  (`lib/auth_guard.php`) aceita `?token=` só aqui; toda outra rota continua
+  (`lib/core/auth_guard.php`) aceita `?token=` só aqui; toda outra rota continua
   exigindo `Authorization: Bearer` normalmente. É `GET`, então o token na
   URL não é mais exposto do que qualquer outro parâmetro de leitura —
   ainda assim, um access token de 15 minutos de vida, não um refresh.
@@ -805,7 +805,7 @@ puro: CRUD de endereços completo e cartão salvo via Mercado Pago.
 - **Cartão salvo usa o modelo real do Mercado Pago: Customer → Cards.**
   Um Customer por usuário (`users.mp_customer_id`, criado na primeira vez
   que alguém salva um cartão), N cartões por Customer — sem guardar esse
-  id, cada cartão novo criaria um Customer à toa. `lib/mercadopago.php`
+  id, cada cartão novo criaria um Customer à toa. `lib/payments/mercadopago.php`
   ganhou `mp_create_customer()`/`mp_create_card()`/`mp_delete_card()`,
   seguindo o mesmo contrato documentado da API real, com o mesmo modo
   fake já usado pelo módulo de pagamentos (sem conta sandbox neste
@@ -1105,7 +1105,7 @@ web/
   redesenha a imagem num `<canvas>` (máximo 1280px no lado maior, JPEG
   80%) e mostra o tamanho antes/depois, exatamente como o chip da tela
   4.4 descreve.
-- **Pix copia-e-cola (BR Code) veio de `lib/pix.php` de verdade** — não é
+- **Pix copia-e-cola (BR Code) veio de `lib/payments/pix.php` de verdade** — não é
   texto decorativo. `PixPayment.svelte` exibe o payload EMV completo
   (testado visualmente: começa com `000201`, contém `br.gov.bcb.pix`).
   O CNPJ mostrado na tela exigiu adicionar a coluna `cnpj` na resposta de
@@ -1304,7 +1304,7 @@ mock).
 que acontece quando alguém desiste — e para onde vai o dinheiro — não existia
 em lugar nenhum além da tabela `refunds`, vazia desde a migração `005`.
 
-- **`lib/refunds.php` é a tabela da tela 13.4 escrita em código.** Por onde o
+- **`lib/payments/refunds.php` é a tabela da tela 13.4 escrita em código.** Por onde o
   dinheiro volta em cada forma de pagamento (cartão → `gateway`, Pix →
   `pix_return`, maquininha → `acquirer_void`, dinheiro → `none`), em quanto
   tempo, e quem arca. Os canais são os do `CHECK` de `refunds.channel`, não
@@ -1584,7 +1584,7 @@ divergência, gerar lote e dar baixa), sem erro de console.
 
 - **O despacho era uma rodada só**, sem raio: todo entregador da praça via
   toda corrida. Agora a oferta sobe de rodada enquanto ninguém aceita
-  (`DISPATCH_ROUNDS` em `lib/dispatch.php`): 2 km → 4 km → 7 km com R$ 2 de
+  (`DISPATCH_ROUNDS` em `lib/dispatch/dispatch.php`): 2 km → 4 km → 7 km com R$ 2 de
   surge → praça inteira com R$ 4. **Os números são parâmetros de operação,
   não do mock** — a especificação pede rodada, raio e surge sem fixar
   valores; ficam num lugar só pra ajustar.
@@ -1617,7 +1617,7 @@ divergência, gerar lote e dar baixa), sem erro de console.
 - **O livro não tinha a linha principal.** `store_receivable` se mexia em
   cupom, estorno, ocorrência e baixa, mas nenhum pedido entregue dizia quanto
   a loja tinha a receber ou a pagar — a coluna "a cobrar" da 9.7 somava um
-  livro incompleto. `lib/order_ledger.php` lança, na mesma transação da
+  livro incompleto. `lib/ledger/order_ledger.php` lança, na mesma transação da
   entrega (e da retirada no balcão), o acerto do pedido: **a plataforma passa
   a dever à loja a parte dela (subtotal − comissão); quem entregar o dinheiro
   à loja abate essa dívida.** Cartão e Pix automático: −parte (repasse).
@@ -1640,7 +1640,7 @@ divergência, gerar lote e dar baixa), sem erro de console.
   produzida", quando o pagador inclui a plataforma e a cozinha tinha
   começado). O teste da 13.4 que esperava a loja pagando R$ 66 de um pedido
   cancelado em preparo foi corrigido com a explicação.
-- **Executor de estornos** (`lib/refund_executor.php` +
+- **Executor de estornos** (`lib/payments/refund_executor.php` +
   `bin/execute_refunds.php`, cron a cada minuto): cartão e Pix automático vão
   pra `POST /v1/payments/{id}/refunds` do Mercado Pago com o `refund_key`
   como chave de idempotência. Falha vira `last_error`; três falhas, `failed`,
@@ -1728,7 +1728,7 @@ virou funcionalidade. Uma varredura por "ainda não" no front achou a lista.
 
 - **LGPD de verdade (tela 6.3).** "Baixar meus dados" entrega um JSON com
   tudo que o sistema guarda sobre a pessoa (`profile/export.php`,
-  `lib/account_privacy.php`) e nada que seja segredo (hash de sessão, código
+  `lib/account/account_privacy.php`) e nada que seja segredo (hash de sessão, código
   OTP, token do cartão no MP). "Excluir conta" é **anonimização**: nome,
   CPF, telefone, e-mail, nascimento, cartões, push e sessões somem; pedidos e
   pagamentos ficam, sem identificar ninguém, porque a lei fiscal obriga
@@ -1763,7 +1763,7 @@ virou funcionalidade. Uma varredura por "ainda não" no front achou a lista.
   imutável e guardada pelo service worker pro cardápio offline. Sobe na hora,
   fora do rascunho do editor (foto não muda preço nem regra).
 - **Nota, tempo e frete no card da loja e nos filtros da busca (2.1/2.2)**
-  (`lib/restaurant_facts.php`): nota das avaliações (só com 3 ou mais),
+  (`lib/catalog/restaurant_facts.php`): nota das avaliações (só com 3 ou mais),
   frete pelo MESMO `delivery_quote()` que o checkout cobra (o teste confere
   que card e cobrança batem), tempo = preparo informado pela loja com a
   fila + viagem a `DELIVERY_AVG_KMH`. "Entrega grátis", "Até 30 min" e
@@ -2196,7 +2196,7 @@ começa no pedido em andamento, não numa lista de perguntas."
   automático" ali é dizer o que vai acontecer em seguida, não fingir que
   conferiu.
 - **O chamado nasce com prazo, e o prazo é por categoria.** `sla_due_at` sai
-  de uma tabela escrita num lugar só (`lib/support.php`): 15 min pra pedido
+  de uma tabela escrita num lugar só (`lib/messaging/support.php`): 15 min pra pedido
   atrasado e Pix não confirmado, 30 min pra item errado, um dia útil pra
   estorno. Os valores não estão na especificação -- o critério registrado é o
   custo de esperar: comida esfriando e dinheiro parado são minutos; estorno
@@ -2274,7 +2274,7 @@ script de seed. Estas três telas fecham isso.
   `OrderTracking.svelte`, que ninguém na loja podia corrigir. Agora é
   `restaurants.prep_minutes` + uma margem de viagem, e o "aumentar sozinho
   quando a fila passar de 8 pedidos" é calculado na LEITURA
-  (`lib/store.php`), nunca gravado por cima do valor combinado — se fosse
+  (`lib/catalog/store.php`), nunca gravado por cima do valor combinado — se fosse
   gravado, a fila esvaziaria e o número normal da loja teria sumido.
 - **Esgotar tem rota própria.** É a ação mais frequente do dia e a única que
   não passa por rascunho; mandá-la pelo mesmo endpoint de edição faria um
@@ -2385,7 +2385,7 @@ aguarda entregador" e não tinha saída nenhuma. Esta tela é o contrário disso
   minuto. O timeout do Pix (migração `009`) pode viver dentro do banco porque
   lá nada foi cobrado; aqui a varredura precisa decidir dinheiro, e quem sabe
   por onde o estorno volta, quanto volta e de que bolso sai é
-  `lib/refunds.php`. Reescrever essa tabela em PL/pgSQL criaria uma segunda
+  `lib/payments/refunds.php`. Reescrever essa tabela em PL/pgSQL criaria uma segunda
   fonte de verdade sobre o dinheiro, e as duas iam divergir no primeiro
   ajuste. O prazo lido é o da política congelada em cada pedido, não a de
   agora: encurtar o prazo hoje não pode cancelar mais cedo o pedido de ontem.
@@ -2406,7 +2406,7 @@ aguarda entregador" e não tinha saída nenhuma. Esta tela é o contrário disso
   - *"Avisamos assim que alguém aceitar"* — seria push (7.2), que não existe.
     A tela se atualiza sozinha enquanto está aberta, e é isso que ela diz.
   - *`dispatch_attempts`, raio crescente e rodadas* — o despacho continua
-    sendo uma rodada só (`lib/dispatch.php`). O surge por pedido existe agora
+    sendo uma rodada só (`lib/dispatch/dispatch.php`). O surge por pedido existe agora
     porque a tela precisa dele; o resto da Fase 15 não.
   - *"· 1,2 km de você"* — essa existe: `restaurants.lat/lng` (migração
     `010`) e o endereço do cliente dão a distância real, em Haversine no SQL.
@@ -2477,7 +2477,7 @@ offline."
   rigor por rigor: como o livro é append-only, um número errado não teria
   desfazimento -- "abrir ocorrência" é justamente não registrar um valor que
   ninguém sabe se é o certo.
-- **Despacho mínimo, e assumido como tal.** `lib/dispatch.php` cria UMA oferta
+- **Despacho mínimo, e assumido como tal.** `lib/dispatch/dispatch.php` cria UMA oferta
   quando o pedido fica pronto, com o frete do pedido e bônus zero. A Fase 15
   desenha rodadas, raio crescente, surge e `dispatch_attempts`: dessas, só o
   surge por pedido passou a existir (a tela 15.1 precisa dele, e o bônus
@@ -2669,7 +2669,7 @@ Um bug real apareceu e foi corrigido durante essa validação: com
 `PDO::ATTR_EMULATE_PREPARES` desligado (necessário pra prepared statement
 de verdade, não só client-side), `PDO::execute()` manda um `false` do PHP
 como string vazia `''` — e o PostgreSQL rejeita `''` como `boolean`
-("invalid input syntax for type boolean"). `lib/db.php` ganhou `pg_bool()`
+("invalid input syntax for type boolean"). `lib/core/db.php` ganhou `pg_bool()`
 pra isso; qualquer parâmetro booleano futuro deve passar por ela.
 
 O módulo de descoberta também: lista por distância real (Haversine)

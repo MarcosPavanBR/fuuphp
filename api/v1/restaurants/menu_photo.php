@@ -25,7 +25,7 @@ function menu_photo_dir(): string
 {
     $dir = rtrim((string) env('MENU_PHOTO_DIR', 'storage/menu'), '/');
 
-    return str_starts_with($dir, '/') ? $dir : __DIR__ . '/../../../' . $dir;
+    return app_path($dir);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {

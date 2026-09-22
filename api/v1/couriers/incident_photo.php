@@ -67,7 +67,7 @@ if ($reused) {
 }
 
 $storageDir = rtrim((string) env('PROOF_STORAGE_DIR', 'storage/proofs'), '/') . '/delivery';
-$absoluteDir = str_starts_with($storageDir, '/') ? $storageDir : __DIR__ . '/../../../' . $storageDir;
+$absoluteDir = app_path($storageDir);
 if (!is_dir($absoluteDir) && !mkdir($absoluteDir, 0770, true) && !is_dir($absoluteDir)) {
     error_response(500, 'storage_unavailable', 'Não deu pra guardar a foto agora.');
 }

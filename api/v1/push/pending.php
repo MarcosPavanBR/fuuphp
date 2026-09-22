@@ -7,7 +7,7 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 /*
  * POST /v1/push/pending.php — o que o service worker mostra ao ser acordado.
  *
- * O push chega sem conteúdo (ver lib/push.php). O service worker não tem o
+ * O push chega sem conteúdo (ver lib/messaging/push.php). O service worker não tem o
  * token da sessão -- ele roda com o app fechado --, então a credencial é o
  * ENDPOINT da própria assinatura: um endereço longo e único que só o
  * navegador daquele aparelho conhece. Vai no corpo (POST), não na URL, pra

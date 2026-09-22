@@ -12,7 +12,7 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
  * tabela UNLOGGED com uma linha por entregador (UPSERT, sem histórico)."
  *
  * É esta posição que decide quem enxerga uma corrida em cada rodada do
- * despacho (lib/dispatch.php): o raio cresce a partir da loja, e só entra
+ * despacho (lib/dispatch/dispatch.php): o raio cresce a partir da loja, e só entra
  * quem está dentro dele. Só vale com turno aberto -- fora do turno não há
  * motivo pra saber onde a pessoa está.
  */

@@ -103,7 +103,7 @@ async function cacheFirst(request) {
 
 // ── Tela 7.2 — notificações push ─────────────────────────────────────────
 //
-// O push chega SEM conteúdo (lib/push.php explica por quê). Ao acordar, o
+// O push chega SEM conteúdo (lib/messaging/push.php explica por quê). Ao acordar, o
 // SW busca o texto na API usando o endpoint da própria assinatura como
 // credencial -- ele não tem o token da sessão, porque roda com o app
 // fechado. O endereço da API vem na URL de registro (?api=), porque em dev

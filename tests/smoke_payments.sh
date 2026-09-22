@@ -4,7 +4,7 @@
 # idempotência de payments/pay.php, upload+validação humana de comprovante
 # de Pix manual (com aprovação dupla barrada por FOR UPDATE) e o webhook
 # assíncrono do Pix automático. Roda inteiramente em MERCADOPAGO_MODE=fake
-# (Especificação, lib/mercadopago.php): não há conta sandbox real disponível
+# (Especificação, lib/payments/mercadopago.php): não há conta sandbox real disponível
 # neste ambiente, então o cliente HTTP do Mercado Pago é substituído por uma
 # simulação no mesmo formato de resposta -- documentado no README.
 set -euo pipefail

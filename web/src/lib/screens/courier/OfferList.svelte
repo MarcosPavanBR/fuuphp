@@ -7,7 +7,7 @@
   // de pagamento e troco."
   //
   // O timer de 15 s é o tempo de DECISÃO, não a validade da oferta: o
-  // servidor segura a corrida por 5 min (lib/dispatch.php explica por quê).
+  // servidor segura a corrida por 5 min (lib/dispatch/dispatch.php explica por quê).
   // Quando os 15 s acabam a oferta some DESTA tela e vai pro fim da fila --
   // ela continua existindo pros outros, o que é o comportamento certo:
   // ninguém perde corrida porque este entregador ficou olhando.

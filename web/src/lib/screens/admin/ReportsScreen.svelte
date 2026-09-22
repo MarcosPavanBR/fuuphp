@@ -132,7 +132,7 @@
       <span class="fuu-mono">{money(data?.totals?.commission)}</span>
     </div>
     <!-- O saldo é o livro inteiro: cada pedido entregue lança a parte da
-         loja (lib/order_ledger.php), a baixa de espécie paga essa parte, e o
+         loja (lib/ledger/order_ledger.php), a baixa de espécie paga essa parte, e o
          que sobra é comissão + frete. Positivo, a loja nos deve; negativo,
          devemos a ela (repasse). O acerto semana a semana é a aba
          Financeiro (9.7). -->

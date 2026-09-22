@@ -4,7 +4,7 @@ declare(strict_types=1);
 // Gera um CNPJ aleatório com dígito verificador válido, pra seed de teste
 // que não colide entre scripts de smoke test rodando no mesmo banco (a
 // UNIQUE de restaurants.cnpj não perdoa dois scripts usando o mesmo valor
-// fixo). Mesmo algoritmo de lib/validation.php::is_valid_cnpj, ao contrário.
+// fixo). Mesmo algoritmo de lib/core/validation.php::is_valid_cnpj, ao contrário.
 
 function calc_digit(string $base): int
 {

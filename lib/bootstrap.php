@@ -1,40 +1,63 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/env.php';
-load_env(__DIR__ . '/../.env');
+// Ponto de entrada de TODO script PHP (api/v1/*, bin/*): carrega o .env, as
+// bibliotecas e o CORS de desenvolvimento. Cada endpoint começa com
+// `require_once .../lib/bootstrap.php` e mais nada -- nenhum arquivo de lib
+// é incluído direto, então mover um deles é mudar uma linha aqui.
+//
+// Camadas (docs/ARCHITECTURE.md): `core` não sabe nada de delivery; as
+// pastas de domínio usam `core` e umas às outras só por função (sem estado
+// global). A ordem abaixo só importa pro `core`, que vem primeiro.
 
-require_once __DIR__ . '/db.php';
-require_once __DIR__ . '/response.php';
-require_once __DIR__ . '/validation.php';
-require_once __DIR__ . '/uuid.php';
-require_once __DIR__ . '/jwt.php';
-require_once __DIR__ . '/sessions.php';
-require_once __DIR__ . '/otp.php';
-require_once __DIR__ . '/auth_guard.php';
-require_once __DIR__ . '/policy.php';
-require_once __DIR__ . '/orders.php';
-require_once __DIR__ . '/cart.php';
-require_once __DIR__ . '/idempotency.php';
-require_once __DIR__ . '/pix.php';
-require_once __DIR__ . '/mercadopago.php';
-require_once __DIR__ . '/order_ledger.php';
-require_once __DIR__ . '/refunds.php';
-require_once __DIR__ . '/dispatch.php';
-require_once __DIR__ . '/store.php';
-require_once __DIR__ . '/support.php';
-require_once __DIR__ . '/delivery.php';
-require_once __DIR__ . '/scheduling.php';
-require_once __DIR__ . '/coupons.php';
-require_once __DIR__ . '/incidents.php';
-require_once __DIR__ . '/wallet.php';
-require_once __DIR__ . '/pos.php';
-require_once __DIR__ . '/netting.php';
-require_once __DIR__ . '/refund_executor.php';
-require_once __DIR__ . '/push.php';
-require_once __DIR__ . '/notifications.php';
-require_once __DIR__ . '/account_privacy.php';
-require_once __DIR__ . '/restaurant_facts.php';
+// ── core: ambiente, banco, HTTP, segurança ─────────────────────────────
+require_once __DIR__ . '/core/env.php';
+load_env(APP_ROOT . '/.env');
+require_once __DIR__ . '/core/db.php';
+require_once __DIR__ . '/core/response.php';
+require_once __DIR__ . '/core/validation.php';
+require_once __DIR__ . '/core/uuid.php';
+require_once __DIR__ . '/core/jwt.php';
+require_once __DIR__ . '/core/sessions.php';
+require_once __DIR__ . '/core/otp.php';
+require_once __DIR__ . '/core/auth_guard.php';
+require_once __DIR__ . '/core/idempotency.php';
+
+// ── catálogo: loja, política comercial, card da loja ───────────────────
+require_once __DIR__ . '/catalog/policy.php';
+require_once __DIR__ . '/catalog/store.php';
+require_once __DIR__ . '/catalog/restaurant_facts.php';
+
+// ── pedido: carrinho, cupom, agendamento, frete, máquina de estados ────
+require_once __DIR__ . '/ordering/orders.php';
+require_once __DIR__ . '/ordering/cart.php';
+require_once __DIR__ . '/ordering/coupons.php';
+require_once __DIR__ . '/ordering/scheduling.php';
+require_once __DIR__ . '/ordering/delivery.php';
+
+// ── pagamentos: Mercado Pago, Pix, estornos, carteira ──────────────────
+require_once __DIR__ . '/payments/mercadopago.php';
+require_once __DIR__ . '/payments/pix.php';
+require_once __DIR__ . '/payments/refunds.php';
+require_once __DIR__ . '/payments/refund_executor.php';
+require_once __DIR__ . '/payments/wallet.php';
+
+// ── livro contábil: acerto do pedido, maquininha, netting semanal ──────
+require_once __DIR__ . '/ledger/order_ledger.php';
+require_once __DIR__ . '/ledger/pos.php';
+require_once __DIR__ . '/ledger/netting.php';
+
+// ── entrega: despacho em rodadas, ocorrências ──────────────────────────
+require_once __DIR__ . '/dispatch/dispatch.php';
+require_once __DIR__ . '/dispatch/incidents.php';
+
+// ── mensagens: push, notificações, suporte ─────────────────────────────
+require_once __DIR__ . '/messaging/push.php';
+require_once __DIR__ . '/messaging/notifications.php';
+require_once __DIR__ . '/messaging/support.php';
+
+// ── conta: privacidade (LGPD) ──────────────────────────────────────────
+require_once __DIR__ . '/account/account_privacy.php';
 
 // Em produção, PWA e API ficam atrás do mesmo domínio via Cloudflare (a
 // especificação nunca fala em domínios separados) -- CORS não seria
@@ -48,7 +71,7 @@ if ($__allowedOrigin !== '') {
     header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
     header('Access-Control-Allow-Credentials: false');
 }
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') { // CLI (bin/*) não tem REQUEST_METHOD
     http_response_code(204);
     exit;
 }
