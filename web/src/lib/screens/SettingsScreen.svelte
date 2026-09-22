@@ -1,12 +1,14 @@
 <script>
   import { toastr } from '../toastr.js';
+  import { pushState, enablePush, disablePush, savePushPrefs } from '../push.js';
 
   // Tela 6.3 — Configurações. "Push separado por tipo (status × promoção)
-  // para o usuário não desligar tudo e perder o aviso da aprovação." Não
-  // há Web Push de verdade neste repositório (outbox+worker é Fase 7.2,
-  // ainda não construída) -- os toggles abaixo são preferência local real
-  // (localStorage, sobrevive a reload deste aparelho), prontos pro dia que
-  // o worker de push existir e precisar checar "esse tipo está ligado?".
+  // para o usuário não desligar tudo e perder o aviso da aprovação."
+  //
+  // Os três interruptores são as preferências da ASSINATURA de push deste
+  // aparelho (push_subscriptions.want_*, migração 024): o worker da tela
+  // 7.2 só acorda o aparelho pros tipos ligados aqui. Com o push desligado,
+  // a preferência fica guardada no aparelho e vai junto quando ligar.
   let { onBack } = $props();
 
   const DEFAULTS = { orderStatus: true, paymentApproval: true, promotions: false };
@@ -22,13 +24,49 @@
 
   let prefs = $state(loadPrefs());
 
-  function toggle(key) {
+  // Nome da preferência no front → nome no servidor.
+  const serverPrefs = () => ({
+    status: prefs.orderStatus,
+    payment: prefs.paymentApproval,
+    promotion: prefs.promotions,
+  });
+
+  let push = $state('checking');
+  let pushBusy = $state(false);
+  pushState()
+    .then((v) => (push = v))
+    .catch(() => (push = 'unsupported'));
+
+  async function toggle(key) {
     prefs = { ...prefs, [key]: !prefs[key] };
     try {
       localStorage.setItem('fuu_notification_prefs', JSON.stringify(prefs));
     } catch {
       // localStorage pode falhar (aba privada) -- a preferência só não
       // sobrevive a um reload, não é motivo pra travar a tela.
+    }
+    if (push === 'on') {
+      savePushPrefs(serverPrefs()).catch(() => toastr.error('Não deu pra salvar a preferência no servidor.'));
+    }
+  }
+
+  async function togglePush() {
+    pushBusy = true;
+    try {
+      if (push === 'on') {
+        await disablePush();
+        push = 'off';
+        toastr.info('Notificações desligadas neste aparelho.');
+      } else {
+        await enablePush(serverPrefs());
+        push = 'on';
+        toastr.success('Notificações ligadas neste aparelho.');
+      }
+    } catch (e) {
+      toastr.error(e.message ?? 'Não deu pra mudar as notificações.');
+      push = await pushState().catch(() => 'unsupported');
+    } finally {
+      pushBusy = false;
     }
   }
 
@@ -62,7 +100,21 @@
       <input type="checkbox" checked={prefs.promotions} onchange={() => toggle('promotions')} />
     </label>
   </div>
-  <p class="note">Push de verdade (Fase 7.2) ainda não foi construído — isto guarda a preferência pra quando existir.</p>
+  {#if push === 'unsupported'}
+    <p class="note">Este navegador não recebe notificações push (ou a página não está em https).</p>
+  {:else if push === 'denied'}
+    <p class="note">As notificações estão bloqueadas nas permissões do navegador para este site.</p>
+  {:else if push !== 'checking'}
+    <button type="button" class="push-btn" disabled={pushBusy} onclick={togglePush}>
+      <i class="bi {push === 'on' ? 'bi-bell-slash' : 'bi-bell'}"></i>
+      {push === 'on' ? 'Desligar notificações neste aparelho' : 'Ligar notificações neste aparelho'}
+    </button>
+    <p class="note">
+      {push === 'on'
+        ? 'Os três tipos acima valem para este aparelho — o celular pode querer promoção e o computador não.'
+        : 'Ligue para receber a aprovação do Pix, a saída para entrega e o aviso de prazo do comprovante.'}
+    </p>
+  {/if}
 
   <p class="section-label">APARÊNCIA E DADOS</p>
   <div class="menu">
@@ -96,6 +148,18 @@
 </div>
 
 <style>
+  .push-btn {
+    width: 100%;
+    margin-top: 10px;
+    border: 1.5px solid var(--fuu-line-2);
+    background: var(--fuu-white);
+    border-radius: 12px;
+    padding: 12px;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--fuu-ink-1);
+  }
   .settings-screen {
     padding: 12px 20px 40px;
   }

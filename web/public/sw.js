@@ -12,7 +12,7 @@
 //   - cardápio e listas públicas: rede primeiro com cópia no cache. Preço
 //     velho é pior que espera, então a rede sempre ganha quando existe --
 //     o cache é o plano B, e a tela avisa que está mostrando o que salvou.
-const VERSION = 'fuu-v1';
+const VERSION = 'fuu-v2';
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 
@@ -97,3 +97,92 @@ async function cacheFirst(request) {
     throw err;
   }
 }
+
+// ── Tela 7.2 — notificações push ─────────────────────────────────────────
+//
+// O push chega SEM conteúdo (lib/push.php explica por quê). Ao acordar, o
+// SW busca o texto na API usando o endpoint da própria assinatura como
+// credencial -- ele não tem o token da sessão, porque roda com o app
+// fechado. O endereço da API vem na URL de registro (?api=), porque em dev
+// ela mora em outra porta.
+const API_BASE = new URL(self.location.href).searchParams.get('api') || '/api/v1';
+
+self.addEventListener('push', (event) => {
+  event.waitUntil(showPending());
+});
+
+async function showPending() {
+  let items = [];
+  try {
+    const sub = await self.registration.pushManager.getSubscription();
+    if (sub) {
+      const res = await fetch(`${API_BASE}/push/pending.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: sub.endpoint }),
+      });
+      items = (await res.json()).notifications ?? [];
+    }
+  } catch {
+    items = [];
+  }
+
+  // O navegador exige mostrar ALGO a cada push (userVisibleOnly). Sem texto
+  // novo -- outro aparelho já mostrou, ou a rede falhou --, um aviso
+  // genérico e honesto em vez de nada.
+  if (items.length === 0) {
+    return self.registration.showNotification('FUUdelivery', {
+      body: 'Seu pedido teve uma atualização.',
+      icon: '/icon-192.png',
+      tag: 'fuu-generic',
+    });
+  }
+
+  await Promise.all(
+    items.map((n) =>
+      self.registration.showNotification(n.title, {
+        body: n.body,
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        // Mesmo pedido, mesma "etiqueta": o aviso novo substitui o velho em
+        // vez de empilhar três notificações do mesmo pedido.
+        tag: n.order_id ? `fuu-order-${n.order_id}` : `fuu-${n.id}`,
+        data: { orderId: n.order_id },
+      })
+    )
+  );
+}
+
+// Tocar na notificação abre o app no pedido -- ou traz pra frente a aba que
+// já estava aberta, em vez de abrir outra.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const orderId = event.notification.data?.orderId;
+  const target = orderId ? `/?order=${orderId}` : '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      const open = windows.find((w) => new URL(w.url).origin === self.location.origin);
+      if (open) {
+        open.postMessage({ type: 'open-order', orderId });
+        return open.focus();
+      }
+      return self.clients.openWindow(target);
+    })
+  );
+});
+
+// ── Tela 7.1 — fila de upload offline (Background Sync) ─────────────────
+//
+// Quando a rede volta, o navegador dispara `sync`. Quem sobe o arquivo é a
+// PÁGINA (ela tem o token); o SW só avisa as abas abertas. Se nenhuma está
+// aberta, o comprovante espera o app abrir -- e o `waitUntil` falha de
+// propósito pra o navegador tentar o sync de novo mais tarde.
+self.addEventListener('sync', (event) => {
+  if (event.tag !== 'fuu-upload-proofs') return;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      if (windows.length === 0) throw new Error('sem aba aberta pra enviar a fila');
+      windows.forEach((w) => w.postMessage({ type: 'flush-uploads' }));
+    })
+  );
+});

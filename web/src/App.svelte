@@ -19,6 +19,8 @@
   import AuthFlow from './lib/screens/AuthFlow.svelte';
   import { isAuthenticated, loadProfile, signupPending } from './lib/session.svelte.js';
   import { startPwa, isOnline, canInstall, promptInstall, dismissInstall } from './lib/pwa.svelte.js';
+  import { startUploadQueue, queuedCount } from './lib/uploadQueue.svelte.js';
+  import { toastr } from './lib/toastr.js';
 
   // Fase 1 (onboarding) -> Fase 2 (navegação principal, abas) -> Fase 3
   // (loja/item/carrinho, tela cheia por cima das abas -- o mock não mostra
@@ -52,6 +54,10 @@
   }
 
   startPwa();
+  // 7.1: a fila de comprovantes esvazia sozinha quando a rede volta.
+  startUploadQueue((n) =>
+    toastr.success(n === 1 ? 'O comprovante que estava na fila subiu ✓' : `${n} comprovantes da fila subiram ✓`)
+  );
 
   function goToState() {
     step = 'state';
@@ -92,6 +98,21 @@
     paymentOpen = false;
     trackingOrderId = orderId;
   }
+  // 7.2: tocar na notificação abre o pedido. Com o app fechado, o SW abre
+  // `/?order=ID`; com o app aberto, manda uma mensagem.
+  $effect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('order');
+    if (fromUrl && isAuthenticated()) {
+      openTracking(Number(fromUrl));
+      history.replaceState(null, '', window.location.pathname);
+    }
+    const onMessage = (e) => {
+      if (e.data?.type === 'open-order' && e.data.orderId && isAuthenticated()) openTracking(Number(e.data.orderId));
+    };
+    navigator.serviceWorker?.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker?.removeEventListener('message', onMessage);
+  });
+
   function closeTracking() {
     trackingOrderId = null;
     tab = 'home';
@@ -116,6 +137,15 @@
        está no app. -->
   <div class="offline-bar">
     <i class="bi bi-wifi-off"></i> Você está offline — mostrando o que está salvo
+  </div>
+{/if}
+{#if queuedCount() > 0}
+  <!-- 7.1: "1 comprovante na fila. Vai subir sozinho quando a conexão
+       voltar (background sync)." -- número real, lido do IndexedDB. -->
+  <div class="offline-bar queue-bar">
+    <i class="bi bi-cloud-arrow-up"></i>
+    {queuedCount() === 1 ? '1 comprovante na fila' : `${queuedCount()} comprovantes na fila`}. Vai subir sozinho
+    quando a conexão voltar.
   </div>
 {/if}
 
@@ -213,6 +243,10 @@
     display: flex;
     flex-direction: column;
     background: var(--fuu-paper);
+  }
+  .queue-bar {
+    background: var(--fuu-wait-bg);
+    color: var(--fuu-wait-text);
   }
   .offline-bar {
     background: var(--fuu-ink-1);

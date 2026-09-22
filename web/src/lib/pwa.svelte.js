@@ -8,6 +8,8 @@
 // navegador já decidiu que o app é instalável (manifest válido, SW ativo,
 // https). Por isso o banner só aparece quando o evento chegou -- um botão
 // "Instalar" que não instala seria pior que nenhum.
+import { BASE } from './api.js';
+
 let online = $state(typeof navigator === 'undefined' ? true : navigator.onLine);
 let installPrompt = $state(null);
 let dismissed = $state(readDismissed());
@@ -66,7 +68,10 @@ export function startPwa() {
   // Em dev o Vite serve o app de /src; o SW mora em /sw.js (public/) nos
   // dois modos, então o registro é o mesmo.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
+    // O endereço da API vai na URL do SW: em produção é o mesmo domínio
+    // (/api/v1), em dev é outra porta (VITE_API_BASE) -- e o SW precisa dele
+    // pra buscar o texto do push (tela 7.2).
+    navigator.serviceWorker.register(`/sw.js?api=${encodeURIComponent(BASE)}`).catch(() => {
       // navegador sem suporte ou origem insegura: o app funciona igual,
       // só não offline
     });

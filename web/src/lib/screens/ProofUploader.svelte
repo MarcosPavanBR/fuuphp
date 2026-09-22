@@ -1,6 +1,7 @@
 <script>
   import { toastr } from '../toastr.js';
   import { ApiError, BASE, getStoredToken } from '../api.js';
+  import { enqueueProof } from '../uploadQueue.svelte.js';
 
   // Tela 4.4 — Upload do comprovante. "Compressão via canvas antes do
   // envio; no servidor, MIME real por finfo, marca d'água, hash sha256 e
@@ -15,6 +16,8 @@
   let uploading = $state(false);
   let originalSize = $state(0);
   let compressedSize = $state(0);
+  // Tela 7.1: sem rede, o comprovante vai pra fila e sobe sozinho depois.
+  let queuedOffline = $state(false);
 
   function money(v) {
     return `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
@@ -89,7 +92,11 @@
         if (xhr.status >= 200 && xhr.status < 300) resolve(data);
         else reject(new ApiError(xhr.status, data));
       };
-      xhr.onerror = () => reject(new Error('Falha de rede no envio do comprovante.'));
+      xhr.onerror = () => {
+        const err = new Error('Falha de rede no envio do comprovante.');
+        err.network = true;
+        reject(err);
+      };
       xhr.send(form);
     });
   }
@@ -99,6 +106,11 @@
       toastr.warning('Escolha uma foto do comprovante primeiro.');
       return;
     }
+    // Offline declarado: nem tenta -- vai direto pra fila (tela 7.1).
+    if (!navigator.onLine) {
+      await queue();
+      return;
+    }
     uploading = true;
     progress = 0;
     try {
@@ -106,9 +118,25 @@
       toastr.success('Comprovante enviado ✓');
       onUploaded(data);
     } catch (e) {
-      toastr.error(e.message ?? 'Não deu pra enviar o comprovante.');
+      // A rede caiu no meio: o mesmo arquivo vai pra fila, e o UUID dela
+      // garante que um envio que chegou a entrar não vira dois.
+      if (e.network) {
+        await queue();
+      } else {
+        toastr.error(e.message ?? 'Não deu pra enviar o comprovante.');
+      }
     } finally {
       uploading = false;
+    }
+  }
+
+  async function queue() {
+    try {
+      await enqueueProof(orderId, file);
+      queuedOffline = true;
+      toastr.info('Sem conexão. O comprovante está na fila e sobe sozinho quando a rede voltar.');
+    } catch {
+      toastr.error('Sem conexão, e este navegador não deixou guardar o comprovante. Tente de novo com rede.');
     }
   }
 </script>
@@ -162,13 +190,26 @@
   </div>
 
   <div class="footer">
-    <button type="button" class="btn-fuu-primary w-100" disabled={!file || uploading} onclick={submit}>
-      {uploading ? 'Enviando…' : 'Enviar comprovante'}
+    {#if queuedOffline}
+      <!-- 7.1: "1 comprovante na fila. Vai subir sozinho quando a conexão
+           voltar (background sync)." -->
+      <p class="queued"><i class="bi bi-cloud-arrow-up"></i> Comprovante na fila. Vai subir sozinho quando a conexão voltar.</p>
+    {/if}
+    <button type="button" class="btn-fuu-primary w-100" disabled={!file || uploading || queuedOffline} onclick={submit}>
+      {uploading ? 'Enviando…' : queuedOffline ? 'Na fila' : 'Enviar comprovante'}
     </button>
   </div>
 </div>
 
 <style>
+  .queued {
+    font-size: 12.5px;
+    color: var(--fuu-wait-text);
+    background: var(--fuu-wait-bg);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin: 0 0 10px;
+  }
   .proof-uploader {
     padding: 12px 20px 100px;
   }

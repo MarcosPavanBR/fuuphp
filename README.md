@@ -30,7 +30,7 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (vinte e três migrações SQL), os módulos **identity**,
+A **fundação de banco** (vinte e quatro migrações SQL), os módulos **identity**,
 **catálogo + pedido + checkout**, **descoberta** (busca de loja e
 produto), **carrinho incremental**, **pagamentos** (cartão via Mercado
 Pago, Pix automático e manual, dinheiro, maquininha, validação humana do
@@ -1765,13 +1765,58 @@ há, e o que ele faz é limitado de propósito.
   banner é desenhado pela tela (`beforeinstallprompt` com `preventDefault`),
   mas nunca é mostrado sem o evento -- um botão "Instalar" que não instala
   seria pior que nenhum. "Depois" fica salvo.
-- **O que a tela 7.1 mostra e não foi construído: a fila de upload offline**
-  ("1 comprovante na fila... background sync"). O comprovante é o único
-  envio que o mock permite enfileirar, e fazer isso direito é IndexedDB mais
-  o evento `sync` do service worker. Fica registrado; o que existe hoje é o
-  upload direto, que falha claramente sem rede em vez de fingir que subiu.
-- **Push (7.2) continua fora.** A `outbox` existe no banco desde a migração
-  `004`, mas não há worker que leia e publique, nem chaves VAPID.
+- **A fila de upload offline existe (tela 7.1, migração 024).** Só o
+  comprovante entra nela, como o mock manda ("Pagamento nunca é enfileirado
+  offline"). Sem rede -- ou com a rede caindo no meio do envio -- o arquivo
+  vai pro IndexedDB (`fuu-offline` / `proof-uploads`,
+  `web/src/lib/uploadQueue.svelte.js`) com um UUID gerado no aparelho. Esse
+  UUID viaja como `X-Idempotency-Key` e fica em `payment_proofs.upload_key`
+  (índice único parcial): reenviar o mesmo item devolve `200
+  {replayed: true}` e o MESMO comprovante, nunca um segundo.
+- **Quem esvazia a fila é a página, não o service worker.** A página tem o
+  token da sessão; o SW não. O SW só recebe o `sync` (Background Sync, onde
+  existe) e pede pra página esvaziar; nos navegadores sem Background Sync,
+  o evento `online` e a abertura do app cobrem. 401 deixa o item na fila até
+  a pessoa entrar de novo; recusa definitiva (pedido cancelado) tira.
+
+## Push (Fase 7.2 + migração 024) — decisões de implementação
+
+- **O push é um "acorda" sem conteúdo, assinado com VAPID (RFC 8292).** Ao
+  acordar, o service worker busca o texto em `push/pending.php`, usando o
+  endpoint da própria assinatura como credencial (é segredo do navegador,
+  URL longa e aleatória). Mandar o texto dentro do push exigiria cifrar o
+  corpo por assinante (RFC 8291: ECDH + HKDF + AES-GCM) -- dá pra escrever
+  com o openssl do PHP, mas é o tipo de erro que o navegador engole em
+  silêncio. Assinatura dá pra conferir em teste (`tests/support/verify_vapid.php`
+  verifica o JWT ES256 com a chave pública), cifra caseira não.
+- **Origem é a outbox, "então nada se perde".** `bin/push_worker.php` é O
+  publicador da `outbox` (migração 004): gera aviso para `order.paid` (só
+  Pix -- "Pix confirmado 🎉 / A cozinha já começou o pedido #X"; cartão
+  aprovado com a pessoa olhando a tela não precisa) e `order.delivering`
+  ("Jonas saiu para entrega / Chega em torno de 20:35", estimativa a
+  20 km/h, fuso de São Paulo; retirada no balcão não avisa) e marca toda
+  linha como publicada, com aviso ou sem. O terceiro tipo, "Faltam 5 min
+  para expirar", não é evento -- é relógio --, então sai de uma varredura
+  dos pedidos em Pix manual perto do `verification_deadline`.
+- **Uma notificação por fato.** Índices únicos em `(outbox_id, kind)` e,
+  no prazo, por pedido: o worker pode rodar duas vezes sem avisar duas.
+- **Preferências por aparelho (tela 6.3): status × pagamento × promoção.**
+  Guardadas na assinatura (`push_subscriptions.want_*`), filtradas no envio
+  e de novo no `pending.php`. Endpoint que responde 404/410 é apagado.
+- **Modo `fake` por padrão (`PUSH_MODE`).** Este ambiente não alcança os
+  serviços de push dos navegadores; o fake grava a notificação e conta o
+  "acorda" sem sair da máquina. `PUSH_MODE=live` chama o endpoint de verdade.
+  A chave fica num PEM fora da raiz servida (`VAPID_PRIVATE_KEY_FILE`,
+  padrão `storage/vapid/private.pem`), gerado por
+  `php bin/generate_vapid_keys.php` com permissão 0600 e que nunca
+  sobrescreve uma chave existente (trocar a chave invalida todas as
+  assinaturas).
+- **Agendar:** `* * * * * php bin/push_worker.php` (cron do cPanel).
+- **Não validado:** a entrega real por FCM/Mozilla/APNs, que depende de
+  internet aberta. O teste (`tests/smoke_push.sh`) cobre assinatura,
+  preferências, outbox → notificação, idempotência, o prazo, o `pending`
+  e a validade criptográfica do JWT.
+
 - **Validado com navegador real, offline de verdade.** Playwright registra o
   service worker, confere o manifest (`display: standalone`, tema `#CC2B1D`,
   três ícones), navega com rede, corta a rede com `setOffline(true)`,
@@ -2449,7 +2494,7 @@ docker compose up -d
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
 bash db/migrate.sh up           # aplica as 20, em ordem
 bash db/migrate.sh down 3       # reverte as 3 últimas
-bash db/migrate.sh down 23      # reverte tudo
+bash db/migrate.sh down 24      # reverte tudo
 
 cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN se precisar
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
@@ -2492,13 +2537,13 @@ Os smoke tests semeiam dados próprios a cada execução, mas contam com um
 banco recém-migrado: rodar a suíte várias vezes no mesmo banco acumula
 lojas de teste e faz as asserções de contagem (ex.: "filtro de categoria
 trouxe 1 loja") falharem por dado velho, não por regressão. `bash
-db/migrate.sh down 23 && bash db/migrate.sh up` devolve o banco ao zero.
+db/migrate.sh down 24 && bash db/migrate.sh up` devolve o banco ao zero.
 
 `MERCADOPAGO_MODE=fake` é o padrão quando `MERCADOPAGO_ACCESS_TOKEN` não
 está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
 de conta sandbox pra rodar nada disto localmente.
 
-As vinte e três migrações foram validadas de ponta a ponta (`up` completo, `down`
+As vinte e quatro migrações foram validadas de ponta a ponta (`up` completo, `down`
 completo em ordem reversa, `up` de novo) contra um PostgreSQL 16 real com
 `pg_cron` instalado, incluindo um teste funcional de `advance_order()`
 confirmando que transições legais avançam o pedido e transições ilegais
@@ -2634,7 +2679,7 @@ checando `boundingBox()` via Playwright, não só lendo o código.
    do erro inteiro (13.1 a 13.4), a Fase 14 inteira (14.1 ajuda, 14.2 chat, 14.3
    endereço com área e frete no servidor, 14.4 agendamento), a Fase 15.1 a
    15.3 e o painel da plataforma (12.1 a 12.3 e a política da 10.5);
-   faltam a fila de upload offline e o push (o resto de 7.1 e o 7.2 inteiro),
+   a fila de upload offline e o push (7.1 e 7.2) — FEITO, ver seções próprias —,
    a exportação contábil em CSV que a 12.3 promete (os
    números dela estão na tela — FEITO, ver "Pontas de dinheiro") e o que falta da Fase 15 -- rodadas, raio
    crescente e `dispatch_attempts` (15.1, 15.2 e 15.3 estão construídas, cada
@@ -2649,10 +2694,9 @@ checando `boundingBox()` via Playwright, não só lendo o código.
    pagar com cartão salvo exige o fluxo de CVV + token de uso único que o
    próprio mock descreve ("pagar com ele ainda exige CVV e gera novo token
    de uso único"), que depende do MercadoPago.js real.
-4. **Fase 7.2 (push) e impressão ESC/POS** — `restaurants/approve_pix.php`
-   já grava o evento e avança o pedido, mas notificar o cliente e imprimir
-   a comanda dependem de uma fila de push (outbox + worker) e de conexão
-   com impressora térmica que ainda não existem neste repositório.
+4. **Impressão ESC/POS** — o push da 7.2 está FEITO (seção própria); imprimir
+   a comanda depende de conexão com impressora térmica, que não existe
+   neste repositório.
 5. **Mapa e posição do entregador (Fase 5.3 e Fase 8).**
    `OrderTracking.svelte` já mostra a linha do tempo real, mas o mapa é um
    placeholder explícito — depende do app do entregador (Fase 8) existir

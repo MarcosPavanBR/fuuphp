@@ -36,6 +36,24 @@ if ($order === null) {
 }
 authorize_order_access($order, $claims);
 
+// Tela 7.1 — "só o upload do comprovante [é enfileirado offline], que é
+// idempotente por UUID". A fila do app manda o mesmo `X-Idempotency-Key`
+// em cada tentativa; se esse envio já entrou, devolve-se o MESMO
+// comprovante em vez de tentar criar outro (o pedido já saiu de
+// 'pending_payment', e a segunda tentativa bateria no 409 abaixo).
+$uploadKey = $_SERVER['HTTP_X_IDEMPOTENCY_KEY'] ?? null;
+if ($uploadKey !== null && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $uploadKey) !== 1) {
+    error_response(422, 'invalid_idempotency_key', 'X-Idempotency-Key precisa ser um UUID.');
+}
+if ($uploadKey !== null) {
+    $already = $pdo->prepare('SELECT * FROM payment_proofs WHERE upload_key = :key AND order_id = :order');
+    $already->execute(['key' => $uploadKey, 'order' => $orderId]);
+    $previous = $already->fetch();
+    if ($previous !== false) {
+        json_response(200, ['order' => fetch_order($pdo, $orderId), 'proof' => $previous, 'replayed' => true]);
+    }
+}
+
 if ($order['status'] !== 'pending_payment' || $order['payment_method'] !== 'pix_manual') {
     error_response(409, 'proof_not_applicable', 'Esse pedido não está aguardando comprovante de Pix.');
 }
@@ -82,8 +100,8 @@ file_put_contents("{$absoluteDir}/{$storageKey}", $watermarked ?? $bytes);
 $pdo->beginTransaction();
 try {
     $insert = $pdo->prepare(
-        'INSERT INTO payment_proofs (payment_id, order_id, restaurant_id, storage_key, sha256, phash, uploaded_by)
-         VALUES (:payment_id, :order_id, :restaurant_id, :storage_key, :sha256, :phash, :uploaded_by) RETURNING *'
+        'INSERT INTO payment_proofs (payment_id, order_id, restaurant_id, storage_key, sha256, phash, uploaded_by, upload_key)
+         VALUES (:payment_id, :order_id, :restaurant_id, :storage_key, :sha256, :phash, :uploaded_by, :upload_key) RETURNING *'
     );
     $insert->execute([
         'payment_id' => $payment['id'],
@@ -93,6 +111,7 @@ try {
         'sha256' => $sha256,
         'phash' => $phash,
         'uploaded_by' => $claims['sub'],
+        'upload_key' => $uploadKey,
     ]);
     $proof = $insert->fetch();
 
