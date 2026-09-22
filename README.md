@@ -30,7 +30,7 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (vinte e uma migrações SQL), os módulos **identity**,
+A **fundação de banco** (vinte e duas migrações SQL), os módulos **identity**,
 **catálogo + pedido + checkout**, **descoberta** (busca de loja e
 produto), **carrinho incremental**, **pagamentos** (cartão via Mercado
 Pago, Pix automático e manual, dinheiro, maquininha, validação humana do
@@ -343,6 +343,11 @@ tests/
                                  resumo do dia, KDS e as transições da loja
                                  (aceitar, pronto, entregue ao motoboy),
                                  mais o isolamento entre lojas
+  smoke_machine.sh              maquininha e fechamento (9.6, 9.7, 10.4,
+                                 10.6): custódia com duas pontas, NSU x
+                                 extrato, divergência virando ocorrência,
+                                 netting pelo livro, baixa como contrapartida
+                                 e os bloqueios automáticos
   smoke_incident.sh             ocorrência na entrega (13.3) e console de
                                  reembolso (13.4): prova obrigatória, os 10
                                  min como regra do servidor, corrida garantida
@@ -411,6 +416,8 @@ db/
                                           das 42 tabelas originais, sem
                                           coluna de nota agregada em
                                           restaurants, ver seção própria)
+    022_acquirer_statement.up.sql / .down.sql  acquirer_statements, o registro
+                                           de cada extrato importado (tela 9.6)
     021_incident_refund.up.sql / .down.sql  delivery_attempts, wallet_credits
                                            e refunds.fee/note/decided_at
                                            (telas 13.3 e 13.4)
@@ -1501,6 +1508,60 @@ era literalmente a fila que não existia.
   do mock) e oferece o crédito; o cliente aceita no perfil e fica com
   R$ 88,40 de saldo. Zero erros de console.
 
+## Maquininha, conciliação e netting semanal (9.6, 9.7, 10.4, 10.6) — backend
+
+**Estado honesto: o servidor das quatro telas está construído e testado; as
+telas Svelte ainda não.** Tudo abaixo roda contra Postgres real em
+`tests/smoke_machine.sh`.
+
+- **"A máquina é do estabelecimento" (10.4) é a regra de contabilidade.**
+  Venda na maquininha NÃO lança `courier_cash`: o dinheiro cai na adquirente
+  da loja, e o entregador "não deve nada por essas vendas. Só o equipamento
+  e os NSUs." Espécie vira dívida; maquininha vira conferência.
+- **O esquema já existia quase todo** (`card_transactions`, `pos_devices`,
+  `pos_custody`, `payouts`, `restaurant_payment_settings`, e na política
+  `cash_ceiling`, `cash_settle_deadline`, `store_debit_dow`,
+  `pos_return_deadline`, `allow_courier_own_pos`). A migração `022` cria só
+  `acquirer_statements`: a memória de cada extrato importado ("Último
+  extrato: 15/09 23:58 · 17 transações"), com `sha256` pra o mesmo arquivo
+  não entrar duas vezes.
+- **10.4 — formas de pagamento da loja** (`restaurants/payment_settings.php`):
+  cada método vem com a consequência operacional escrita pelo servidor; o
+  teto de dinheiro da loja não passa do teto da plataforma; loja com
+  `online_only_until` vigente só enxerga e só consegue ligar as formas
+  online. `restaurants/pos_devices.php` cadastra, desativa (nunca máquina na
+  rua) e **confirma a devolução** — a segunda ponta da custódia.
+- **10.6 — custódia** (`couriers/pos.php`): retirar grava posse com prazo da
+  política; `pos_one_holder` impede a mesma máquina com duas pessoas, e quem
+  já está com uma não pega outra. A venda é conferida contra o total do
+  pedido na hora (`amount_mismatch`), e venda sem NSU entra mesmo assim —
+  ela existiu, e é justamente ela que trava o fechamento do dia. Devolver
+  não fecha sozinho: a loja confirma.
+- **9.6 — conciliação** (`restaurants/reconciliation.php`): importa o CSV da
+  adquirente e casa por NSU, com fallback valor+horário (janela de 30 min, só
+  em linha ainda pendente). Divergência vira `disputes` com kind
+  `nsu_divergent` — a fila do admin que já existe — e o dia só fecha sem
+  nenhuma linha aberta. Linha do extrato sem venda informada fica como órfã:
+  não se inventa venda. **Não há API de adquirente** ("conecte a API" da
+  tela); o CSV é o caminho real.
+- **9.7 — netting** (`admin/netting.php`): a coluna "a cobrar" é
+  `store_receivable` da semana, direto do livro; "taxa já split" (cartão e Pix
+  automático) é separada de "taxa em aberto" pra não cobrar duas vezes. Gerar
+  usa a mesma `generate_weekly_payouts()` do pg_cron (idempotente). "Gerar
+  lote de Pix" marca `sent` — **não há Pix em lote integrado**, a
+  transferência é feita no banco com a lista. Baixa é **lançamento negativo
+  de contrapartida** com origem `payout`, nunca edição, e quitar o débito
+  tira a loja da trava de só-online.
+- **Bloqueios automáticos** (`bin/apply_financial_blocks.php`, cron de hora
+  em hora): `couriers.cash_blocked` e `restaurants.online_only_until` eram
+  lidos por todo mundo e **escritos por ninguém**. A varredura liga e desliga
+  os dois a partir da política — espécie acima do teto ou mais velha que o
+  prazo de baixa; débito semanal vencido. Em PHP pelo mesmo motivo do
+  auto-cancel da 15.1: a interpretação da política mora aqui.
+- **Não modelado:** maquininha do próprio entregador. A política tem
+  `allow_courier_own_pos`, mas `pos_devices` só pertence a loja; cadastrar
+  máquina de entregador pede decisão de esquema, não um campo improvisado.
+
 ## Painel da plataforma (Fase 12 + tela 10.5) — decisões de implementação
 
 O quarto público do projeto, no quarto bundle (`admin.html`): quem opera o
@@ -2276,7 +2337,7 @@ docker compose up -d
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
 bash db/migrate.sh up           # aplica as 20, em ordem
 bash db/migrate.sh down 3       # reverte as 3 últimas
-bash db/migrate.sh down 21      # reverte tudo
+bash db/migrate.sh down 22      # reverte tudo
 
 cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN se precisar
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
@@ -2298,6 +2359,7 @@ JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_address.sh    # end
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_schedule.sh   # pedido agendado: faixas, vaga e fila da cozinha (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_growth.sh     # entrada de entregador e campanhas com teto (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_incident.sh   # ocorrência na entrega e console de reembolso (semeia sozinho)
+JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_machine.sh    # maquininha, conciliação e netting semanal (semeia sozinho)
 
 # O único processo de fundo do projeto (tela 15.1). Em produção é uma linha
 # no cron do cPanel, a cada minuto; localmente, roda à mão quando quiser ver
@@ -2316,13 +2378,13 @@ Os smoke tests semeiam dados próprios a cada execução, mas contam com um
 banco recém-migrado: rodar a suíte várias vezes no mesmo banco acumula
 lojas de teste e faz as asserções de contagem (ex.: "filtro de categoria
 trouxe 1 loja") falharem por dado velho, não por regressão. `bash
-db/migrate.sh down 21 && bash db/migrate.sh up` devolve o banco ao zero.
+db/migrate.sh down 22 && bash db/migrate.sh up` devolve o banco ao zero.
 
 `MERCADOPAGO_MODE=fake` é o padrão quando `MERCADOPAGO_ACCESS_TOKEN` não
 está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
 de conta sandbox pra rodar nada disto localmente.
 
-As vinte e uma migrações foram validadas de ponta a ponta (`up` completo, `down`
+As vinte e duas migrações foram validadas de ponta a ponta (`up` completo, `down`
 completo em ordem reversa, `up` de novo) contra um PostgreSQL 16 real com
 `pg_cron` instalado, incluindo um teste funcional de `advance_order()`
 confirmando que transições legais avançam o pedido e transições ilegais
@@ -2459,9 +2521,8 @@ checando `boundingBox()` via Playwright, não só lendo o código.
    endereço com área e frete no servidor, 14.4 agendamento), a Fase 15.1 a
    15.3 e o painel da plataforma (12.1 a 12.3 e a política da 10.5);
    faltam a fila de upload offline e o push (o resto de 7.1 e o 7.2 inteiro),
-   a conciliação de maquininha e o netting semanal (9.6 e 9.7), duas telas de
-   configuração da Fase 10 (10.4 formas de pagamento da loja e 10.6 devolução
-   de maquininha), a exportação contábil em CSV que a 12.3 promete (os
+   as TELAS de 9.6, 9.7, 10.4 e 10.6 (o backend das quatro está pronto e
+   testado — seção própria acima), a exportação contábil em CSV que a 12.3 promete (os
    números dela estão na tela) e o que falta da Fase 15 -- rodadas, raio
    crescente e `dispatch_attempts` (15.1, 15.2 e 15.3 estão construídas, cada
    uma com seção própria acima).
