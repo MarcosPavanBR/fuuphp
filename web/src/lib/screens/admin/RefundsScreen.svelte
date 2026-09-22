@@ -19,6 +19,26 @@
   let note = $state('');
   let bonus = $state(10);
   let busy = $state(false);
+  // Referência digitada por linha na fila "em execução" (E2E do Pix,
+  // protocolo da adquirente).
+  let refs = $state({});
+
+  async function inflightAction(body, fallback) {
+    if (busy) return;
+    busy = true;
+    try {
+      const res = await api.post('/admin/refunds.php', { token: adminToken(), body });
+      toastr.success(res.notice ?? fallback);
+      await pull();
+    } catch (e) {
+      toastr.error(e.message ?? 'Não deu pra concluir.');
+    } finally {
+      busy = false;
+    }
+  }
+  const runRefund = (r) => inflightAction({ refund_id: r.id, action: 'execute' }, 'Enviado.');
+  const confirmManual = (r) =>
+    inflightAction({ refund_id: r.id, action: 'confirm_manual', provider_ref: refs[r.id] }, 'Confirmado.');
 
   function money(v) {
     return v === null || v === undefined ? '—' : `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
@@ -130,6 +150,38 @@
     </div>
   </section>
 
+  {#if data?.inflight?.length}
+    <!-- A segunda fila: decidido e ainda não chegou. O estorno que o gateway
+         recusou e o Pix que a loja ainda não devolveu moram aqui -- decidir e
+         esquecer é como reembolso fica parado por semanas. -->
+    <section class="inflight">
+      <p class="k">EM EXECUÇÃO — DECIDIDO, AINDA NÃO CHEGOU</p>
+      {#each data.inflight as r (r.id)}
+        <div class="flight" class:failed={r.state === 'failed'}>
+          <span class="fuu-mono">#{r.public_code}</span>
+          <span>{money(r.amount)} · {r.how}</span>
+          {#if r.state === 'failed'}
+            <span class="err">recusado: {r.last_error}</span>
+          {:else if r.automatic}
+            <span class="muted">o executor manda pro gateway{r.attempts > 0 ? ` (tentativa ${r.attempts})` : ''}</span>
+          {:else}
+            <span class="muted">devolução pela loja — confirme com a referência</span>
+          {/if}
+          {#if r.automatic}
+            <button type="button" class="mini" disabled={busy} onclick={() => runRefund(r)}>
+              {r.state === 'failed' ? 'Tentar de novo' : 'Executar agora'}
+            </button>
+          {:else}
+            <span class="manual">
+              <input placeholder="E2E / protocolo" bind:value={refs[r.id]} />
+              <button type="button" class="mini" disabled={busy || !refs[r.id]} onclick={() => confirmManual(r)}>Confirmar</button>
+            </span>
+          {/if}
+        </div>
+      {/each}
+    </section>
+  {/if}
+
   <aside class="decide">
     {#if selected === null}
       <p class="k">DECIDIR</p>
@@ -197,6 +249,7 @@
 <style>
   .refunds {
     display: flex;
+    flex-wrap: wrap;
     gap: 0;
     align-items: stretch;
     min-height: 70vh;
@@ -314,6 +367,55 @@
     line-height: 1.8;
     color: var(--fuu-ink-2);
     margin: 0;
+  }
+  .inflight {
+    order: 3;
+    flex: 1 1 100%;
+    padding: 0 20px 20px;
+  }
+  .flight {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    background: var(--fuu-white);
+    border: 1px solid var(--fuu-line-3);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 7px;
+    font-size: 12.5px;
+  }
+  .flight.failed {
+    border-color: var(--fuu-alert);
+    background: var(--fuu-red-tint);
+  }
+  .flight .err {
+    color: var(--fuu-alert);
+    flex: 1;
+  }
+  .flight .muted {
+    color: var(--fuu-ink-3);
+    flex: 1;
+  }
+  .flight .manual {
+    display: flex;
+    gap: 6px;
+  }
+  .flight input {
+    border: 1px solid var(--fuu-line-3);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 12px;
+    width: 150px;
+  }
+  .mini {
+    border: 1px solid var(--fuu-line-2);
+    background: var(--fuu-white);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
   }
   .decide {
     width: 330px;

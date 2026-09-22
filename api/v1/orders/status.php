@@ -103,6 +103,11 @@ try {
         $refund = record_refund($pdo, $order, $plan, (string) $claims['sub']);
     }
 
+    // Retirada no balcão fechada pela loja: o mesmo acerto da entrega.
+    if ($to === 'delivered') {
+        ledger_order_delivered($pdo, fetch_order($pdo, $orderId), (string) $claims['sub']);
+    }
+
     $pdo->commit();
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) {

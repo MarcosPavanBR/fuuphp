@@ -207,7 +207,10 @@ REPLAY=$(curl -s -X POST "$BASE/couriers/deliver.php" -H "Content-Type: applicat
   -H "X-Idempotency-Key: ${KEY}" "${CAUTH[@]}" \
   -d "{\"order_id\":${ORDER_ID},\"delivery_code\":\"${REAL_CODE}\",\"lat\":-23.56,\"lng\":-46.64}")
 [ "$(echo "$REPLAY" | jq -r '.balances.cash')" = "67" ] || fail "replay não bateu: $REPLAY"
-[ "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM ledger_entries WHERE order_id=${ORDER_ID}")" = "2" ] \
+# Três lançamentos por entrega em espécie: a espécie com o entregador, o
+# frete dele e a parte da loja que passa a ser devida (lib/order_ledger.php).
+# O replay não pode acrescentar nenhum.
+[ "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM ledger_entries WHERE order_id=${ORDER_ID}")" = "3" ] \
   || fail "replay duplicou lançamento no livro"
 
 echo "== ganhos: livro de lançamentos, não campo de saldo =="

@@ -1,5 +1,5 @@
 <script>
-  import { api } from '../../api.js';
+  import { api, BASE } from '../../api.js';
   import { toastr } from '../../toastr.js';
   import { adminToken } from '../../adminSession.svelte.js';
   import { parsePgTimestamp } from '../../datetime.js';
@@ -26,6 +26,27 @@
   function hm(raw) {
     const d = parsePgTimestamp(raw);
     return d ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : '';
+  }
+
+  // A foto da porta mora em disco privado: busca com o token no cabeçalho e
+  // vira um blob local. Nunca uma URL pública, nunca token na query string.
+  let photos = $state({});
+  async function loadPhoto(incident) {
+    if (!incident.photo_key || photos[incident.id]) return;
+    try {
+      const res = await fetch(`${BASE}/admin/incident_photo.php?id=${incident.id}`, {
+        headers: { Authorization: `Bearer ${adminToken()}` },
+      });
+      if (!res.ok) throw new Error();
+      photos = { ...photos, [incident.id]: URL.createObjectURL(await res.blob()) };
+    } catch {
+      photos = { ...photos, [incident.id]: 'missing' };
+    }
+  }
+
+  function toggle(row) {
+    openId = openId === row.id ? null : row.id;
+    if (openId !== null) loadPhoto(row);
   }
 
   const ATTEMPT_LABEL = { arrival: 'chegou', call: 'ligou', bell: 'campainha' };
@@ -88,7 +109,7 @@
 
     {#each data.queue as row (row.id)}
       <article class="card" class:on={openId === row.id}>
-        <button type="button" class="line" onclick={() => (openId = openId === row.id ? null : row.id)}>
+        <button type="button" class="line" onclick={() => toggle(row)}>
           <span class="code fuu-mono">#{row.public_code}</span>
           <span class="what">
             <strong>{data.kinds[row.kind]?.label ?? row.kind}</strong>
@@ -109,7 +130,13 @@
               {/if}
             </p>
 
-            <p class="proof fuu-mono">prova: {row.photo_key ?? 'sem foto'}</p>
+            {#if photos[row.id] && photos[row.id] !== 'missing'}
+              <img class="photo" src={photos[row.id]} alt="Foto do local enviada pelo entregador" />
+            {:else if photos[row.id] === 'missing'}
+              <p class="proof">A foto não está mais disponível (retenção de 180 dias).</p>
+            {:else}
+              <p class="proof fuu-mono">carregando a foto…</p>
+            {/if}
             {#if row.geo_lat}
               <p class="proof fuu-mono">gps: {row.geo_lat}, {row.geo_lng}</p>
             {/if}
@@ -236,6 +263,14 @@
     color: var(--fuu-ink-4);
     margin: 0 0 3px;
     word-break: break-all;
+  }
+  .photo {
+    display: block;
+    max-width: 100%;
+    max-height: 260px;
+    border-radius: 9px;
+    border: 1px solid var(--fuu-line-3);
+    margin-bottom: 6px;
   }
   .guarantee {
     font-size: 12px;

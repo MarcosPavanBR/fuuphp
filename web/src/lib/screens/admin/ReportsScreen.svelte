@@ -1,5 +1,6 @@
 <script>
-  import { api } from '../../api.js';
+  import { api, BASE } from '../../api.js';
+  import { toastr } from '../../toastr.js';
   import { adminToken } from '../../adminSession.svelte.js';
 
   // Tela 12.3 — "Os números que mudam decisão".
@@ -38,6 +39,32 @@
     pos_machine: 'Maquininha',
   };
   const NEEDS_HUMAN = new Set(['pix_manual', 'cash', 'pos_machine']);
+
+  // O download passa por fetch com o token no cabeçalho (nunca na URL) e
+  // vira um link temporário -- o mesmo cuidado das imagens privadas.
+  let exporting = $state(null);
+  async function exportCsv(kind) {
+    exporting = kind;
+    try {
+      const to = new Date();
+      const from = new Date(Date.now() - days * 86400000);
+      const iso = (d) => d.toISOString().slice(0, 10);
+      const res = await fetch(`${BASE}/admin/export.php?kind=${kind}&from=${iso(from)}&to=${iso(to)}`, {
+        headers: { Authorization: `Bearer ${adminToken()}` },
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message ?? 'Falha ao exportar.');
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `fuu-${kind}-${iso(from)}-a-${iso(to)}.csv`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) {
+      toastr.error(e.message ?? 'Não deu pra exportar.');
+    } finally {
+      exporting = null;
+    }
+  }
 </script>
 
 <div class="head">
@@ -104,16 +131,14 @@
       <span>Comissão calculada no período</span>
       <span class="fuu-mono">{money(data?.totals?.commission)}</span>
     </div>
-    <!-- Honestidade sobre o que estes números são hoje: só a metade do
-         livro existe. O débito (baixa de espécie, ocorrência) é lançado; o
-         crédito por pedido -- comissão + frete que a loja deve -- é o
-         netting semanal da tela 9.7, que não foi construído. Por isso o
-         saldo aparece negativo, e chamar isso de "a cobrar na terça" seria
-         inventar um número. -->
+    <!-- O saldo é o livro inteiro: cada pedido entregue lança a parte da
+         loja (lib/order_ledger.php), a baixa de espécie paga essa parte, e o
+         que sobra é comissão + frete. Positivo, a loja nos deve; negativo,
+         devemos a ela (repasse). O acerto semana a semana é a aba
+         Financeiro (9.7). -->
     <p class="note">
-      Só a metade do livro existe: baixas e ocorrências são lançadas, o crédito por pedido (comissão +
-      frete que a loja devolve) é o netting semanal da tela 9.7, ainda não construído. A comissão ao
-      lado é calculada, não lançada.
+      Positivo: as lojas nos devem (comissão + frete de pedidos que receberam direto). Negativo:
+      devemos repasse a elas (pedidos pagos no app). O acerto semanal fica na aba Financeiro.
     </p>
   </div>
 </div>
@@ -130,12 +155,41 @@
       </div>
     {/each}
   {/if}
-  <p class="note fuu-mono">
-    exportar CSV e fechar com o livro contábil (12.3) ainda não foi construído
+</div>
+
+<!-- 12.3: "fechar com o livro contábil". Três arquivos, as três perguntas do
+     contador: o livro, as vendas e os acertos. -->
+<div class="fuu-card block">
+  <p class="section">EXPORTAR PARA A CONTABILIDADE (CSV)</p>
+  <p class="note">
+    Período: últimos {days} dias. Separador <code>;</code> e vírgula decimal — abre direto no Excel
+    em português.
   </p>
+  <div class="exports">
+    {#each [['ledger', 'Livro (lançamentos)'], ['orders', 'Pedidos'], ['payouts', 'Acertos semanais']] as [kind, label] (kind)}
+      <button type="button" disabled={exporting === kind} onclick={() => exportCsv(kind)}>
+        <i class="bi bi-download"></i> {exporting === kind ? 'Gerando…' : label}
+      </button>
+    {/each}
+  </div>
 </div>
 
 <style>
+  .exports {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  .exports button {
+    border: 1.5px solid var(--fuu-line-2);
+    background: var(--fuu-white);
+    border-radius: 10px;
+    padding: 9px 14px;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 13px;
+  }
   .head {
     display: flex;
     align-items: center;

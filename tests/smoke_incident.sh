@@ -299,7 +299,7 @@ echo "== 13.4: só admin entra nesta fila =="
 [ "$(curl -s "$BASE/admin/refunds.php" "${AUTH[@]}" | jq -r '.code')" = "forbidden" ] \
   || fail "cliente abriu a fila de reembolso"
 
-echo "== 13.4: perdoar a taxa aumenta o estorno e o custo fica com a loja =="
+echo "== 13.4: perdoar a taxa aumenta o estorno, e a loja não paga por dinheiro que não recebeu =="
 STORE_BEFORE=$(query "SELECT COALESCE(SUM(amount),0) FROM ledger_entries WHERE account='store_receivable' AND party_id='${RESTAURANT_ID}'")
 DECIDE=$(curl -s -X POST "$BASE/admin/refunds.php" -H "Content-Type: application/json" "${ADMIN_AUTH[@]}" \
   -d "{\"refund_id\":${REFUND_ID},\"action\":\"refund\",\"fee_adjustment\":\"forgive\",\"note\":\"Loja anunciou 25 min e estava com 41.\"}")
@@ -308,17 +308,23 @@ DECIDE=$(curl -s -X POST "$BASE/admin/refunds.php" -H "Content-Type: application
 [ "$(echo "$DECIDE" | jq -r '.refund.state')" = "sent" ] || fail "o estorno não saiu: $DECIDE"
 [ "$(echo "$DECIDE" | jq -r '.how')" = "Estorno automático na API" ] || fail "rota do estorno errada: $DECIDE"
 STORE_AFTER=$(query "SELECT COALESCE(SUM(amount),0) FROM ledger_entries WHERE account='store_receivable' AND party_id='${RESTAURANT_ID}'")
-[ "$(echo "$STORE_AFTER - $STORE_BEFORE" | bc)" = "66.00" ] \
-  || fail "o estorno não debitou o repasse da loja (${STORE_BEFORE} -> ${STORE_AFTER})"
+# O pedido nunca foi entregue: a parte da loja nunca foi lançada, e o
+# dinheiro está com a plataforma, que estorna. Com a taxa perdoada, a loja
+# fica sem a taxa e com a comida perdida -- cobrá-la dos R$ 66 do estorno
+# seria fazê-la pagar por dinheiro que nunca passou por ela (a primeira
+# versão fazia isso; ver lib/refunds.php, refund_ledger).
+[ "$(echo "$STORE_AFTER - $STORE_BEFORE" | bc)" = "0" ] \
+  || fail "o estorno de pedido não entregue cobrou a loja (${STORE_BEFORE} -> ${STORE_AFTER})"
 [ "$(query "SELECT status FROM payments WHERE order_id=${O_CARD}")" = "refunded" ] \
   || fail "o pagamento não foi marcado como estornado"
 [ "$(query "SELECT status FROM orders WHERE id=${O_CARD}")" = "refunded" ] || fail "o pedido não virou 'refunded'"
 
 echo "== 13.4: decidir de novo não paga duas vezes (idempotente por refund_key) =="
+BOOKED=$(query "SELECT count(*) FROM ledger_entries WHERE origin='refund' AND origin_id=(SELECT refund_key::text FROM refunds WHERE id=${REFUND_ID})")
 TWICE=$(curl -s -X POST "$BASE/admin/refunds.php" -H "Content-Type: application/json" "${ADMIN_AUTH[@]}" \
   -d "{\"refund_id\":${REFUND_ID},\"action\":\"refund\",\"fee_adjustment\":\"keep\"}")
 [ "$(echo "$TWICE" | jq -r '.code')" = "already_decided" ] || fail "decidiu o mesmo reembolso duas vezes: $TWICE"
-[ "$(query "SELECT count(*) FROM ledger_entries WHERE origin='refund' AND origin_id=(SELECT refund_key::text FROM refunds WHERE id=${REFUND_ID})")" = "1" ] \
+[ "$(query "SELECT count(*) FROM ledger_entries WHERE origin='refund' AND origin_id=(SELECT refund_key::text FROM refunds WHERE id=${REFUND_ID})")" = "${BOOKED}" ] \
   || fail "o livro ganhou um segundo lançamento pela mesma chave"
 
 echo "== 13.4: metade da taxa é metade mesmo =="

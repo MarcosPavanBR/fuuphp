@@ -30,7 +30,7 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (vinte e duas migrações SQL), os módulos **identity**,
+A **fundação de banco** (vinte e três migrações SQL), os módulos **identity**,
 **catálogo + pedido + checkout**, **descoberta** (busca de loja e
 produto), **carrinho incremental**, **pagamentos** (cartão via Mercado
 Pago, Pix automático e manual, dinheiro, maquininha, validação humana do
@@ -343,6 +343,11 @@ tests/
                                  resumo do dia, KDS e as transições da loja
                                  (aceitar, pronto, entregue ao motoboy),
                                  mais o isolamento entre lojas
+  smoke_money.sh                executor de estornos (automático, falha,
+                                 retentativa, Pix manual com referência),
+                                 CSV contábil, foto privada da ocorrência,
+                                 o livro do pedido (espécie e cartão) e a
+                                 maquininha do próprio entregador
   smoke_machine.sh              maquininha e fechamento (9.6, 9.7, 10.4,
                                  10.6): custódia com duas pontas, NSU x
                                  extrato, divergência virando ocorrência,
@@ -416,6 +421,9 @@ db/
                                           das 42 tabelas originais, sem
                                           coluna de nota agregada em
                                           restaurants, ver seção própria)
+    023_refund_execution_own_pos.up.sql / .down.sql  execução de estorno
+                                           (provider_ref, tentativas, erro) e
+                                           maquininha com dono entregador
     022_acquirer_statement.up.sql / .down.sql  acquirer_statements, o registro
                                            de cada extrato importado (tela 9.6)
     021_incident_refund.up.sql / .down.sql  delivery_attempts, wallet_credits
@@ -1575,6 +1583,61 @@ divergência, gerar lote e dar baixa), sem erro de console.
   `allow_courier_own_pos`, mas `pos_devices` só pertence a loja; cadastrar
   máquina de entregador pede decisão de esquema, não um campo improvisado.
 
+## Pontas de dinheiro: livro do pedido, estornos executados, CSV — decisões
+
+- **O livro não tinha a linha principal.** `store_receivable` se mexia em
+  cupom, estorno, ocorrência e baixa, mas nenhum pedido entregue dizia quanto
+  a loja tinha a receber ou a pagar — a coluna "a cobrar" da 9.7 somava um
+  livro incompleto. `lib/order_ledger.php` lança, na mesma transação da
+  entrega (e da retirada no balcão), o acerto do pedido: **a plataforma passa
+  a dever à loja a parte dela (subtotal − comissão); quem entregar o dinheiro
+  à loja abate essa dívida.** Cartão e Pix automático: −parte (repasse).
+  Pix manual e maquininha da loja: +(total − parte), porque o dinheiro caiu na
+  conta dela. Dinheiro e maquininha do entregador: −parte na entrega, e a
+  baixa no balcão lança +total. Depois da baixa sobra exatamente comissão +
+  frete + gorjeta — o teste confere essa igualdade.
+- **Correção de sinal na baixa de espécie (9.3).** A versão anterior lançava
+  `store_receivable −total` na baixa e nada na entrega: o saldo da loja
+  ficava negativo pra sempre. Pela frase da tela ("o dinheiro do pedido em
+  espécie é seu — o entregador é apenas portador"), a baixa PAGA a parte da
+  loja: `+total`.
+- **A gorjeta agora vai pro entregador** (`courier_payable`, origem
+  `tip:<pedido>`). Antes ela entrava no total e não saía pra ninguém.
+- **Estorno de pedido nunca entregue não cobra a loja.** `refund_ledger`
+  cobrava a loja pelo valor inteiro do estorno mesmo quando ela nunca tinha
+  recebido nada. Agora depende de duas perguntas — o pedido foi entregue? o
+  dinheiro está com quem? Antes da entrega, o custo real é a taxa ("fica com
+  a loja") e a comida já feita ("FUUDelivery paga tudo, inclusive a comida
+  produzida", quando o pagador inclui a plataforma e a cozinha tinha
+  começado). O teste da 13.4 que esperava a loja pagando R$ 66 de um pedido
+  cancelado em preparo foi corrigido com a explicação.
+- **Executor de estornos** (`lib/refund_executor.php` +
+  `bin/execute_refunds.php`, cron a cada minuto): cartão e Pix automático vão
+  pra `POST /v1/payments/{id}/refunds` do Mercado Pago com o `refund_key`
+  como chave de idempotência. Falha vira `last_error`; três falhas, `failed`,
+  que aparece na fila "em execução" do console com "Tentar de novo". Pix
+  manual e maquininha não passam pela nossa conta: ficam esperando
+  confirmação humana **com referência obrigatória** (E2E do Pix, protocolo da
+  adquirente). `FOR UPDATE SKIP LOCKED` deixa duas instâncias rodarem juntas.
+- **Exportação contábil (12.3)** — `admin/export.php`: livro, pedidos e
+  acertos, CSV com `;`, vírgula decimal e BOM UTF-8 (abre certo no Excel em
+  português). O front baixa com o token no cabeçalho, nunca na URL.
+- **Foto da ocorrência no painel** — `admin/incident_photo.php`, mesmo
+  desenho do comprovante de Pix: disco privado, rota autenticada, blob no
+  navegador, `Cache-Control: private, no-store`. Foto apagada pela retenção
+  de 180 dias aparece como tal, não como erro.
+- **Maquininha do próprio entregador** (migração 023): `pos_devices` passa a
+  ter UM dono — loja ou entregador (`CHECK`). Só com
+  `allow_courier_own_pos` na política. A venda nela lança `courier_cash`
+  (dinheiro na conta dele, dívida com a loja) uma vez só — completar o NSU
+  depois não cobra de novo — e não aparece na conciliação da loja, que confere
+  o extrato da adquirente DELA.
+- **O que continua sem integração real:** a chamada ao Mercado Pago roda em
+  modo `fake` neste ambiente (sem credencial); em produção, com
+  `MERCADOPAGO_ACCESS_TOKEN`, o mesmo código chama a API. O split
+  (`application_fee`) não é usado: sem ele o dinheiro online cai na conta da
+  plataforma, e é exatamente isso que o livro do pedido registra.
+
 ## Painel da plataforma (Fase 12 + tela 10.5) — decisões de implementação
 
 O quarto público do projeto, no quarto bundle (`admin.html`): quem opera o
@@ -2350,7 +2413,7 @@ docker compose up -d
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery
 bash db/migrate.sh up           # aplica as 20, em ordem
 bash db/migrate.sh down 3       # reverte as 3 últimas
-bash db/migrate.sh down 22      # reverte tudo
+bash db/migrate.sh down 23      # reverte tudo
 
 cp .env.example .env            # ajuste DATABASE_URL/JWT_SECRET/ALLOWED_ORIGIN se precisar
 JWT_SECRET=dev-secret bash tests/smoke_identity.sh    # fluxo completo de identity
@@ -2373,6 +2436,7 @@ JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_schedule.sh   # ped
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_growth.sh     # entrada de entregador e campanhas com teto (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_incident.sh   # ocorrência na entrega e console de reembolso (semeia sozinho)
 JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_machine.sh    # maquininha, conciliação e netting semanal (semeia sozinho)
+JWT_SECRET=dev-secret MERCADOPAGO_MODE=fake bash tests/smoke_money.sh      # estornos executados, CSV, livro do pedido (semeia sozinho)
 
 # O único processo de fundo do projeto (tela 15.1). Em produção é uma linha
 # no cron do cPanel, a cada minuto; localmente, roda à mão quando quiser ver
@@ -2391,13 +2455,13 @@ Os smoke tests semeiam dados próprios a cada execução, mas contam com um
 banco recém-migrado: rodar a suíte várias vezes no mesmo banco acumula
 lojas de teste e faz as asserções de contagem (ex.: "filtro de categoria
 trouxe 1 loja") falharem por dado velho, não por regressão. `bash
-db/migrate.sh down 22 && bash db/migrate.sh up` devolve o banco ao zero.
+db/migrate.sh down 23 && bash db/migrate.sh up` devolve o banco ao zero.
 
 `MERCADOPAGO_MODE=fake` é o padrão quando `MERCADOPAGO_ACCESS_TOKEN` não
 está configurado (ver seção "Módulo de pagamentos" abaixo) — não precisa
 de conta sandbox pra rodar nada disto localmente.
 
-As vinte e duas migrações foram validadas de ponta a ponta (`up` completo, `down`
+As vinte e três migrações foram validadas de ponta a ponta (`up` completo, `down`
 completo em ordem reversa, `up` de novo) contra um PostgreSQL 16 real com
 `pg_cron` instalado, incluindo um teste funcional de `advance_order()`
 confirmando que transições legais avançam o pedido e transições ilegais
@@ -2535,7 +2599,7 @@ checando `boundingBox()` via Playwright, não só lendo o código.
    15.3 e o painel da plataforma (12.1 a 12.3 e a política da 10.5);
    faltam a fila de upload offline e o push (o resto de 7.1 e o 7.2 inteiro),
    a exportação contábil em CSV que a 12.3 promete (os
-   números dela estão na tela) e o que falta da Fase 15 -- rodadas, raio
+   números dela estão na tela — FEITO, ver "Pontas de dinheiro") e o que falta da Fase 15 -- rodadas, raio
    crescente e `dispatch_attempts` (15.1, 15.2 e 15.3 estão construídas, cada
    uma com seção própria acima).
 2. **Cálculo de frete no servidor.** FEITO na Fase 14.3 (migração 019):
@@ -2556,7 +2620,9 @@ checando `boundingBox()` via Playwright, não só lendo o código.
    `OrderTracking.svelte` já mostra a linha do tempo real, mas o mapa é um
    placeholder explícito — depende do app do entregador (Fase 8) existir
    pra ter posição de verdade pra mostrar.
-6. **Reembolso é DECIDIDO e gravado, não EXECUTADO.** A tela 13.4 agora
+6. **Reembolso — EXECUTADO no cartão e Pix automático; manual no resto.**
+   O executor existe (seção "Pontas de dinheiro"). O parágrafo abaixo é o
+   histórico de antes dele. A tela 13.4 agora
    existe (console do admin, com ajuste de taxa, lançamento no livro pela
    conta de quem paga e crédito em carteira que a pessoa aceita ou recusa —
    seção própria acima), e `refunds.state` passa de `'pending'` a `'sent'`

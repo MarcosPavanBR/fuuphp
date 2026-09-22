@@ -52,7 +52,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     }
     unset($row);
 
+    // A segunda fila: o que já foi decidido e ainda não chegou. É onde se vê
+    // o estorno que o gateway recusou e o Pix que a loja ainda não devolveu
+    // -- decidir e esquecer é como reembolso fica parado por semanas.
+    $inflight = $pdo->query(
+        "SELECT r.*, o.public_code, o.payment_method, rest.name AS restaurant_name
+           FROM refunds r
+           JOIN orders o ON o.id = r.order_id
+           JOIN restaurants rest ON rest.id = o.restaurant_id
+          WHERE r.state IN ('sent','failed')
+          ORDER BY r.state DESC, r.decided_at"
+    )->fetchAll();
+    foreach ($inflight as &$row) {
+        $row['automatic'] = refund_is_automatic($row);
+        $labels = REFUND_CHANNEL_LABELS[(string) $row['channel']] ?? ['how' => '—', 'eta' => '—'];
+        $row['how'] = $labels['how'];
+    }
+    unset($row);
+
     json_response(200, [
+        'inflight' => $inflight,
         'queue' => $queue,
         'count' => count($queue),
         'amount_in_analysis' => round($inAnalysis, 2),
@@ -71,8 +90,45 @@ $action = (string) ($body['action'] ?? 'refund');
 $adjustment = (string) ($body['fee_adjustment'] ?? 'keep');
 $note = isset($body['note']) ? trim((string) $body['note']) : null;
 
-if ($refundId <= 0 || !in_array($action, ['refund', 'wallet_offer'], true)) {
-    error_response(422, 'invalid_request', 'Informe refund_id e action (refund ou wallet_offer).');
+if ($refundId <= 0 || !in_array($action, ['refund', 'wallet_offer', 'execute', 'confirm_manual'], true)) {
+    error_response(422, 'invalid_request', 'Informe refund_id e action (refund, wallet_offer, execute ou confirm_manual).');
+}
+
+// Executar agora: o mesmo caminho do bin/execute_refunds.php, pra quem não
+// quer esperar o próximo minuto do cron (ou quer tentar de novo um que
+// falhou -- 'failed' volta pra 'sent' e ganha mais uma rodada).
+if ($action === 'execute') {
+    $pdo->prepare("UPDATE refunds SET state = 'sent', attempts = 0 WHERE id = :id AND state = 'failed'")
+        ->execute(['id' => $refundId]);
+    $result = refund_execute($pdo, $refundId);
+    $row = $pdo->prepare('SELECT * FROM refunds WHERE id = :id');
+    $row->execute(['id' => $refundId]);
+    $refund = $row->fetch();
+    json_response(200, [
+        'refund' => $refund,
+        'notice' => match ($refund['state'] ?? '') {
+            'done' => 'Estorno confirmado pelo gateway.',
+            'failed' => 'O gateway recusou de novo: ' . ($refund['last_error'] ?? ''),
+            default => $result['skipped']
+                ? 'Esse reembolso não é automático — confirme manualmente com a referência.'
+                : 'Não deu desta vez; o executor tenta de novo: ' . ($refund['last_error'] ?? ''),
+        },
+    ]);
+}
+
+// Confirmação humana: Pix manual devolvido pela loja, cancelamento na
+// adquirente. A referência é obrigatória -- é ela que se apresenta quando o
+// cliente disser que não recebeu.
+if ($action === 'confirm_manual') {
+    $ref = trim((string) ($body['provider_ref'] ?? ''));
+    if ($ref === '') {
+        error_response(422, 'provider_ref_required', 'Informe o identificador (E2E do Pix, protocolo da adquirente).', fields: ['provider_ref' => 'obrigatório']);
+    }
+    $refund = refund_confirm_manual($pdo, $refundId, $ref, $adminId);
+    if ($refund === []) {
+        error_response(409, 'not_in_flight', 'Esse reembolso não está esperando confirmação.');
+    }
+    json_response(200, ['refund' => $refund, 'notice' => 'Reembolso confirmado com a referência ' . $ref . '.']);
 }
 if (!array_key_exists($adjustment, REFUND_FEE_ADJUSTMENTS)) {
     error_response(422, 'invalid_adjustment', 'Ajuste da taxa inválido: perdoar, metade ou manter.', fields: ['fee_adjustment' => 'inválido']);

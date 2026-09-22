@@ -116,6 +116,12 @@ idempotent_response($pdo, 'POST /v1/couriers/deliver', $key, $body, function () 
             'frete da corrida'
         );
 
+        // O acerto do pedido com a loja (lib/order_ledger.php): a parte dela
+        // passa a ser devida, e a gorjeta vai pro entregador. Mesma
+        // transação -- pedido entregue sem o acerto lançado é o livro que a
+        // tela 9.7 somava sem a linha principal.
+        ledger_order_delivered($pdo, fetch_order($pdo, $orderId), (string) $claims['sub']);
+
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {

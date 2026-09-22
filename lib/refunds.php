@@ -252,57 +252,88 @@ function refund_with_fee(array $refund, string $adjustment): array
 /**
  * Lança no livro o custo de um reembolso decidido.
  *
- * Este é o "+ ledger_entries" do chip da tela. Até aqui, `refunds.payer` era
- * um rótulo: a linha existia, o dinheiro não andava. As contas são as mesmas
- * do cupom (lib/coupons.php), pelo mesmo motivo -- é o mesmo tipo de custo:
- * dinheiro que ia pra loja e voltou pro cliente.
+ * `origin_id` de cada lançamento é o `refund_key` -- é isso que faz
+ * "idempotente por refund_key" valer no livro, não só na tabela.
  *
- * `origin_id` é o refund_key, e é isso que faz "idempotente por refund_key"
- * ser verdade no livro, não só na tabela de reembolsos.
+ * O custo depende de DUAS perguntas, e errar qualquer uma cobra a loja por
+ * dinheiro que ela nunca recebeu (que era o defeito da primeira versão):
+ *
+ *   1. O pedido chegou a ser entregue? Só depois da entrega a parte da loja
+ *      foi lançada (lib/order_ledger.php). Antes, a loja não recebeu nada.
+ *   2. Onde está o dinheiro? Cartão e Pix automático estão com a
+ *      plataforma, que é quem estorna; Pix manual e maquininha da loja estão
+ *      na conta da loja, que é quem devolve.
+ *
+ * Depois da entrega:
+ *   - dinheiro com a plataforma: a parte "loja" do custo vira dívida dela
+ *     (+), a parte "plataforma" vira despesa nossa.
+ *   - dinheiro com a loja: ela já devolveu do bolso; a parte "plataforma"
+ *     é compensação nossa a ela (−) e despesa nossa.
+ *
+ * Antes da entrega (cancelamento, recusa, falta de entregador):
+ *   - "taxa fica com a loja" (tela 13.4): se o dinheiro está com a
+ *     plataforma, devemos a taxa à loja (−taxa).
+ *   - "FUUDelivery paga tudo, inclusive a comida produzida": quando a
+ *     cozinha já tinha começado e o pagador inclui a plataforma, pagamos a
+ *     parte dela da comida (−G) como despesa nossa.
  */
 function refund_ledger(PDO $pdo, array $order, array $refund, float $amount, ?string $actorId): void
 {
-    if ($amount <= 0) {
-        return;
-    }
-
     $restaurantId = (string) $order['restaurant_id'];
     $orderId = (int) $order['id'];
     $originId = (string) $refund['refund_key'];
+    $code = (string) $order['public_code'];
+    $payer = (string) $refund['payer'];
 
-    $storeShare = match ((string) $refund['payer']) {
-        'store' => $amount,
-        'platform' => 0.0,
-        'shared' => round($amount / 2, 2),
+    // Fração do custo que é da plataforma: 1, 0 ou meio.
+    $platformPart = match ($payer) {
+        'platform' => 1.0,
+        'shared' => 0.5,
         default => 0.0,
     };
-    $platformShare = round($amount - $storeShare, 2);
+    $atStore = in_array((string) $order['payment_method'], ORDER_MONEY_AT_STORE, true)
+        && !order_paid_on_courier_device($pdo, $orderId);
 
-    if ($storeShare > 0) {
-        ledger_add(
-            $pdo,
-            'store_receivable',
-            $restaurantId,
-            $storeShare,
-            'refund',
-            $originId,
-            $orderId,
-            $actorId,
-            "estorno do pedido {$order['public_code']} debitado do repasse da loja"
-        );
+    $book = static function (string $account, float $value, string $memo) use ($pdo, $restaurantId, $originId, $orderId, $actorId): void {
+        if (abs($value) >= 0.005) {
+            ledger_add($pdo, $account, $restaurantId, round($value, 2), 'refund', $originId, $orderId, $actorId, $memo);
+        }
+    };
+
+    if (order_was_delivered($pdo, $orderId)) {
+        if ($amount <= 0) {
+            return;
+        }
+        $ours = round($amount * $platformPart, 2);
+        $theirs = round($amount - $ours, 2);
+        if ($atStore) {
+            // A loja devolveu do bolso dela; compensamos a nossa parte.
+            $book('store_receivable', -$ours, "estorno do pedido {$code}: nossa parte, compensada à loja");
+        } else {
+            // Nós estornamos; a parte da loja sai do repasse dela.
+            $book('store_receivable', $theirs, "estorno do pedido {$code} debitado do repasse da loja");
+        }
+        $book('platform_expense', $ours, "estorno do pedido {$code} bancado pela plataforma");
+
+        return;
     }
-    if ($platformShare > 0) {
-        ledger_add(
-            $pdo,
-            'platform_expense',
-            $restaurantId,
-            $platformShare,
-            'refund',
-            $originId,
-            $orderId,
-            $actorId,
-            "estorno do pedido {$order['public_code']} bancado pela plataforma"
-        );
+
+    // Nunca entregue: a loja não recebeu a parte dela. O estorno em si só
+    // devolve ao cliente o que estava parado; o custo real é a taxa e a
+    // comida já feita.
+    $fee = (float) ($refund['fee'] ?? 0);
+    if (!$atStore && $fee > 0) {
+        $book('store_receivable', -$fee, "taxa de cancelamento do pedido {$code}: fica com a loja");
+    }
+
+    $kitchenStarted = $pdo->prepare(
+        "SELECT 1 FROM order_events WHERE order_id = :id AND to_status = 'preparing' LIMIT 1"
+    );
+    $kitchenStarted->execute(['id' => $orderId]);
+    if ($platformPart > 0 && $kitchenStarted->fetchColumn() !== false) {
+        $food = round(((float) $order['subtotal'] - (float) $order['commission']) * $platformPart, 2);
+        $book('store_receivable', -$food, "comida produzida do pedido {$code}, paga pela plataforma");
+        $book('platform_expense', $food, "comida produzida do pedido {$code}, paga pela plataforma");
     }
 }
 

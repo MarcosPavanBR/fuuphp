@@ -240,3 +240,50 @@ function mp_verify_webhook_signature(string $xSignature, string $xRequestId, str
     $expected = hash_hmac('sha256', $manifest, $secret);
     return hash_equals($expected, $parts['v1']);
 }
+
+/**
+ * Estorno de um pagamento no Mercado Pago (tela 13.4, chip "MP refund API").
+ *
+ * `POST /v1/payments/{id}/refunds` com `amount` pra estorno parcial; sem
+ * `amount`, o gateway estorna tudo. O `X-Idempotency-Key` é o `refund_key`
+ * da linha em `refunds`: se o executor cair entre mandar e gravar a
+ * resposta, a segunda tentativa devolve o MESMO estorno em vez de criar
+ * outro -- "idempotente por refund_key" de ponta a ponta, inclusive fora
+ * do nosso banco.
+ *
+ * Modo fake: aprova sempre, com um id sintético, no mesmo formato da
+ * resposta real. Pagamento cujo provider_ref começa com "FAIL" simula a
+ * recusa do gateway -- é o que deixa o teste exercitar o caminho de falha.
+ *
+ * @return array{provider_ref:string,status:string,raw:array}
+ */
+function mp_refund_payment(string $paymentProviderRef, float $amount, string $idempotencyKey): array
+{
+    if (mp_mode() === 'fake') {
+        if (str_starts_with(strtoupper($paymentProviderRef), 'FAIL')) {
+            throw new RuntimeException('Mercado Pago recusou o estorno: payment not refundable (simulado)');
+        }
+
+        return [
+            'provider_ref' => 'fake-refund-' . substr(hash('sha256', $idempotencyKey), 0, 12),
+            'status' => 'approved',
+            'raw' => ['simulated' => true, 'amount' => $amount, 'payment_id' => $paymentProviderRef],
+        ];
+    }
+
+    $resp = mp_request(
+        'POST',
+        '/v1/payments/' . rawurlencode($paymentProviderRef) . '/refunds',
+        ['amount' => round($amount, 2)],
+        $idempotencyKey
+    );
+    if ($resp['http_status'] >= 400 || !isset($resp['body']['id'])) {
+        throw new RuntimeException('Mercado Pago recusou o estorno: ' . json_encode($resp['body'], JSON_UNESCAPED_UNICODE));
+    }
+
+    return [
+        'provider_ref' => (string) $resp['body']['id'],
+        'status' => (string) ($resp['body']['status'] ?? 'approved'),
+        'raw' => $resp['body'],
+    ];
+}

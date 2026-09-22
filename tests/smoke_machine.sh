@@ -340,7 +340,9 @@ NET=$(curl -s "$BASE/admin/netting.php?start=${LAST_MON}&end=${LAST_SUN}" "${ADM
 [ "$(echo "$NET" | jq -r '.rules | length')" = "4" ] || fail "as quatro regras da tela não vieram: $NET"
 STORE_ROW=$(echo "$NET" | jq -r "[.stores[] | select(.id == \"${RESTAURANT_ID}\")][0]")
 [ "$STORE_ROW" != "null" ] || fail "a loja não apareceu no acerto: $NET"
-[ "$(echo "$STORE_ROW" | jq -r '.to_charge')" = "120" ] || fail "'a cobrar' não veio do livro: $STORE_ROW"
+OWED_WEEK=$(query "SELECT SUM(amount) FROM ledger_entries WHERE account='store_receivable' AND party_id='${RESTAURANT_ID}' AND created_at >= '${LAST_MON}'::date AND created_at < '${LAST_SUN}'::date + 1")
+[ "$(echo "$(echo "$STORE_ROW" | jq -r '.to_charge') == ${OWED_WEEK}" | bc)" = "1" ] \
+  || fail "'a cobrar' não é a soma do livro da semana (${OWED_WEEK}): $STORE_ROW"
 [ "$(echo "$STORE_ROW" | jq -r '.status')" != "null" ] || fail "linha sem status: $STORE_ROW"
 [ "$(echo "$NET" | jq -r '.summary.courier_freight > 0')" = "true" ] || fail "frete da semana zerado: $NET"
 

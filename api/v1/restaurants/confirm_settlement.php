@@ -11,9 +11,17 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 // Valor diferente do declarado abre ocorrência, nunca edição de saldo."
 //
 // Os dois lançamentos:
-//   courier_cash    -= valor   (sai das mãos do entregador)
-//   store_receivable -= valor  (a loja recebeu dinheiro nosso de volta,
-//                               abatendo o que ela nos deve)
+//   courier_cash     -= valor  (sai das mãos do entregador)
+//   store_receivable += valor  (a loja recebeu a parte dela, que devíamos
+//                               desde a entrega -- lib/order_ledger.php)
+//
+// "O dinheiro do pedido em espécie é seu — o entregador é apenas portador."
+// Na entrega, a plataforma passa a dever à loja a parte dela (−G); quando o
+// entregador entrega o bruto (T) no balcão, essa dívida é paga (+T), e o
+// que sobra (T − G) é exatamente comissão + frete: o que a loja nos devolve
+// no acerto semanal (tela 9.7). A primeira versão deste arquivo lançava −T
+// aqui e nada na entrega -- o livro da loja ficava negativo pra sempre, e a
+// coluna "a cobrar" da 9.7 não tinha de onde sair.
 //
 // Divergência entre o contado e o declarado marca a intenção como 'disputed'
 // e NÃO lança nada -- porque o lançamento errado não tem desfazimento
@@ -110,7 +118,7 @@ try {
             $pdo,
             'store_receivable',
             (string) $restaurantId,
-            -$declared,
+            $declared,
             'cash_settlement',
             (string) $intent['id'],
             null,

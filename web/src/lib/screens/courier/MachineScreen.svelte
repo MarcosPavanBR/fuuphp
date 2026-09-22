@@ -19,6 +19,8 @@
   let data = $state(null);
   let busy = $state(false);
   let nsuDraft = $state({});
+  // Máquina própria (tela 9.6): só aparece quando a política libera.
+  let ownForm = $state({ label: '', acquirer: '' });
 
   function money(v) {
     return `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
@@ -79,6 +81,30 @@
   {#if data === null}
     <p class="empty">Carregando…</p>
   {:else if custody === null}
+    {#if data.allow_own_pos}
+      <!-- 9.6: "Maquininha do próprio entregador: o valor cai na conta dele,
+           então vira dívida com a loja e segue o mesmo fluxo da espécie." -->
+      <p class="k">SUA MAQUININHA</p>
+      {#each data.own_devices as d (d.id)}
+        <div class="own"><i class="bi bi-credit-card"></i> <strong>{d.label}</strong> · {d.acquirer}</div>
+      {:else}
+        <div class="own-form">
+          <input placeholder="Apelido (minha-stone)" bind:value={ownForm.label} />
+          <input placeholder="Adquirente (sumup, stone…)" bind:value={ownForm.acquirer} />
+          <button
+            type="button"
+            disabled={busy || !ownForm.label.trim() || !ownForm.acquirer.trim()}
+            onclick={() => act({ action: 'register_own', ...ownForm }, 'Cadastrada.')}
+          >
+            Cadastrar minha máquina
+          </button>
+        </div>
+      {/each}
+      <p class="hint">
+        Venda na sua máquina cai na sua conta: o valor vira dívida com a loja e segue a mesma baixa do
+        dinheiro, com prazo de D+1.
+      </p>
+    {/if}
     {#if data.available_devices.length === 0}
       <p class="empty">
         Você não está com nenhuma maquininha. Ela só aparece aqui pra retirar quando você tem uma
@@ -201,6 +227,33 @@
     font-size: 11.5px;
     color: var(--fuu-ink-3);
     margin-top: 2px;
+  }
+  .own {
+    border: 1px solid var(--fuu-line-3);
+    background: var(--fuu-white);
+    border-radius: 11px;
+    padding: 12px 14px;
+    font-size: 13.5px;
+  }
+  .own-form {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .own-form input {
+    border: 1px solid var(--fuu-line-3);
+    border-radius: 9px;
+    padding: 10px;
+    font-family: inherit;
+  }
+  .own-form button {
+    border: 0;
+    background: var(--fuu-ink-1);
+    color: var(--fuu-white);
+    border-radius: 9px;
+    padding: 11px;
+    font-family: inherit;
+    font-weight: 700;
   }
   .card {
     border: 1px solid var(--fuu-line-3);
