@@ -88,10 +88,12 @@ if ($phone !== null && isset($body['channel'])) {
     }
 }
 
-$pdo->prepare(
+$insertOtp = $pdo->prepare(
     'INSERT INTO otp_codes (user_id, channel, code_hash, purpose, expires_at)
-     VALUES (:user_id, :channel, :code_hash, :purpose, now() + (:ttl || \' seconds\')::interval)'
-)->execute([
+     VALUES (:user_id, :channel, :code_hash, :purpose, now() + (:ttl || \' seconds\')::interval)
+     RETURNING id'
+);
+$insertOtp->execute([
     'user_id' => $userId,
     'channel' => $channel,
     'code_hash' => hash_otp($code),
@@ -99,9 +101,15 @@ $pdo->prepare(
     'ttl' => OTP_TTL_SECONDS,
 ]);
 
-// Envio real (SMS/WhatsApp/e-mail) é integração externa, fora deste módulo.
-// Por ora, registra em log estruturado para quem for ligar o provedor depois.
-error_log(sprintf('[%s] otp issued user=%s purpose=%s channel=%s', trace_id(), $userId, $purpose, $channel));
+$otpId = (int) $insertOtp->fetchColumn();
+
+// Envio pelo provedor configurado (lib/messaging/otp_sender.php). Se não
+// saiu, o código é apagado: não conta como enviado (nem no limite de pedidos)
+// e a pessoa pode pedir de novo.
+if (!send_otp($channel, (string) ($phone ?? $email), $code)) {
+    $pdo->prepare('DELETE FROM otp_codes WHERE id = :id')->execute(['id' => $otpId]);
+    error_response(502, 'otp_send_failed', 'Não conseguimos enviar o código agora. Tente de novo em instantes.');
+}
 
 $response = [
     'sent' => true,
@@ -109,10 +117,9 @@ $response = [
     'expires_in' => OTP_TTL_SECONDS,
 ];
 
-// Nunca em produção: sem isso, testar o fluxo localmente exigiria ler o
-// banco a cada chamada. O gate por APP_ENV é a única coisa que impede isso
-// de vazar um código real.
-if (env('APP_ENV', 'development') !== 'production') {
+// Só em development/testing: sem isso, testar o fluxo localmente exigiria ler
+// o banco a cada chamada. Staging também NÃO recebe: lá o OTP é real.
+if (in_array(app_env(), OTP_DEV_ENVS, true)) {
     $response['dev_code'] = $code;
 }
 

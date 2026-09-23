@@ -12,7 +12,9 @@ declare(strict_types=1);
 
 // ── core: ambiente, banco, HTTP, segurança ─────────────────────────────
 require_once __DIR__ . '/core/env.php';
-load_env(APP_ROOT . '/.env');
+// FUU_ENV_FILE aponta outro arquivo (ex.: /etc/fuuphp/staging.env, ou
+// /dev/null nos testes da trava de produção); o padrão é o .env da raiz.
+load_env(getenv('FUU_ENV_FILE') ?: APP_ROOT . '/.env');
 require_once __DIR__ . '/core/db.php';
 require_once __DIR__ . '/core/response.php';
 require_once __DIR__ . '/core/validation.php';
@@ -22,6 +24,7 @@ require_once __DIR__ . '/core/sessions.php';
 require_once __DIR__ . '/core/otp.php';
 require_once __DIR__ . '/core/auth_guard.php';
 require_once __DIR__ . '/core/idempotency.php';
+require_once __DIR__ . '/core/production_guard.php';
 
 // ── catálogo: loja, política comercial, card da loja ───────────────────
 require_once __DIR__ . '/catalog/policy.php';
@@ -56,6 +59,7 @@ require_once __DIR__ . '/dispatch/incidents.php';
 require_once __DIR__ . '/messaging/push.php';
 require_once __DIR__ . '/messaging/notifications.php';
 require_once __DIR__ . '/messaging/support.php';
+require_once __DIR__ . '/messaging/otp_sender.php';
 
 // ── impressão: ESC/POS da comanda e do recibo de baixa ──────────────────
 require_once __DIR__ . '/printing/escpos.php';
@@ -110,3 +114,8 @@ function jwt_secret(): string
 
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
+
+// Produção falha fechado (lib/core/production_guard.php): em production/
+// staging com integração simulada ou sem segredo, nada abaixo daqui roda.
+enforce_production_guard();
+

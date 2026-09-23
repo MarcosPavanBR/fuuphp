@@ -245,7 +245,10 @@ function mp_verify_webhook_signature(string $xSignature, string $xRequestId, str
 {
     $secret = env('MERCADOPAGO_WEBHOOK_SECRET', '');
     if ($secret === '') {
-        return true;
+        // Sem segredo não há como provar que a notificação veio do Mercado
+        // Pago. Em desenvolvimento aceita (o modo fake não assina nada); em
+        // produção/homologação, NUNCA -- senão qualquer um aprova pagamento.
+        return !is_production_like();
     }
 
     $parts = [];

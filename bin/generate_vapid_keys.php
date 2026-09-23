@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+// Roda ANTES da trava de produção passar: a chave que ela exige é criada aqui.
+const FUU_SKIP_PRODUCTION_GUARD = true;
 require_once __DIR__ . '/../lib/bootstrap.php';
 
 // Gera o par de chaves VAPID (P-256) do push (tela 7.2).

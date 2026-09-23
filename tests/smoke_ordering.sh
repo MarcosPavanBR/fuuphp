@@ -30,9 +30,9 @@ INSERT INTO users (id, role, full_name, email)
   WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'staff-smoke@test.com');
 
 INSERT INTO platform_policies (version, enabled_methods, delivery_base_fee, created_by)
-  SELECT 1, ARRAY['mp_card','pix_auto','pix_manual','cash','pos_machine']::payment_method[], 8.00, id
-  FROM users ORDER BY created_at LIMIT 1
-  ON CONFLICT (version) DO NOTHING;
+  SELECT (SELECT COALESCE(MAX(version), 0) + 1 FROM platform_policies),
+         ARRAY['mp_card','pix_auto','pix_manual','cash','pos_machine']::payment_method[], 8.00, id
+  FROM users ORDER BY created_at LIMIT 1;
 
 INSERT INTO restaurants (id, name, cnpj, city_ibge_code, is_open, commission_bps)
 VALUES ('${RESTAURANT_ID}', 'Smoke Test Restaurant', '${CNPJ}', '3550308', true, 800);

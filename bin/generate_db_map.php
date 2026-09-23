@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+// Ferramenta de documentação: roda em qualquer ambiente, sem a trava de produção.
+const FUU_SKIP_PRODUCTION_GUARD = true;
 require_once __DIR__ . '/../lib/bootstrap.php';
 
 // Gera docs/DATABASE.md -- o mapa do banco: cada tabela com a migração que

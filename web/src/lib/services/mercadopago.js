@@ -13,6 +13,11 @@
 //   fake  → não carrega nada: devolve um token de teste local. O backend em
 //           MERCADOPAGO_MODE=fake aprova qualquer token (e recusa os de teste
 //           que começam com OTHE/CONT/FUND, como o sandbox do MP).
+//
+// Falha fechado: se não der pra saber o modo (config indisponível) ou o
+// servidor estiver em live sem Public Key, o pagamento com cartão é
+// BLOQUEADO com erro -- nunca cai pro modo de teste (que mandaria o número do
+// cartão como "token").
 
 import { api } from './api.js';
 
@@ -22,8 +27,19 @@ let configPromise = null;
 let sdkPromise = null;
 
 function config() {
-  configPromise ??= api.get('/payments/config.php').catch(() => ({ mode: 'fake', public_key: null }));
+  configPromise ??= api.get('/payments/config.php').catch((e) => {
+    configPromise = null; // tenta de novo na próxima vez
+    throw new Error('Não deu pra falar com o pagamento agora. Confira a conexão e tente de novo.', { cause: e });
+  });
   return configPromise;
+}
+
+/** O modo de teste só vale se o SERVIDOR disser que está em fake. */
+async function liveKeyOrTest() {
+  const cfg = await config();
+  if (cfg.mode === 'fake') return null;
+  if (!cfg.public_key) throw new Error('Pagamento com cartão indisponível no momento.');
+  return cfg.public_key;
 }
 
 function loadSdk(publicKey) {
@@ -39,7 +55,11 @@ function loadSdk(publicKey) {
 
 /** O app está em modo de teste (sem cobrança real)? */
 export async function paymentsInTestMode() {
-  return (await config()).public_key === null;
+  try {
+    return (await config()).mode === 'fake';
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -47,7 +67,7 @@ export async function paymentsInTestMode() {
  * @param {{number:string, name:string, month:string, year:string, cvv:string, cpf:string}} card
  */
 export async function tokenizeNewCard(card) {
-  const { public_key: key } = await config();
+  const key = await liveKeyOrTest();
   if (key === null) {
     // Teste: o próprio número vira o "token", como o backend fake espera.
     return card.number;
@@ -70,7 +90,7 @@ export async function tokenizeNewCard(card) {
  * agora (o CVV nunca é guardado, nem aqui nem no nosso servidor).
  */
 export async function tokenizeSavedCard(mpCardId, cvv) {
-  const { public_key: key } = await config();
+  const key = await liveKeyOrTest();
   if (key === null) {
     return `SAVED-${mpCardId}`;
   }

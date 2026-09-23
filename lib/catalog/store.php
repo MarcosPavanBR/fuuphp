@@ -36,7 +36,8 @@ function effective_prep_minutes(PDO $pdo, string $restaurantId, ?array $store = 
     $queue = (int) $queueStmt->fetchColumn();
 
     $base = (int) $store['prep_minutes'];
-    $bumped = $store['prep_auto_bump'] === true && $queue > PREP_QUEUE_THRESHOLD;
+    // Quem chama pode passar uma linha sem prep_auto_bump (ex.: vitrine): sem a coluna, não acelera.
+    $bumped = ($store['prep_auto_bump'] ?? false) === true &&$queue > PREP_QUEUE_THRESHOLD;
 
     return [
         'base' => $base,

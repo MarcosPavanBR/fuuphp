@@ -91,6 +91,17 @@ jobs:
           php bin/generate_api_catalog.php --missing || { echo "rota sem comentário de cabeçalho (acima)"; exit 1; }
           php bin/generate_db_map.php --check
 
+      - name: "Primeiro deploy: admin fundador e política v1 (bin/bootstrap_admin.php) -- roda antes de tudo, no banco vazio"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+        run: bash tests/smoke_bootstrap_admin.sh
+
+      - name: "Trava de produção: produção falha fechado"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+        run: bash tests/smoke_production_guard.sh
+
       - name: Smoke test -- módulo identity
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
