@@ -40,6 +40,7 @@ próprio mock cita nos chips das telas: SweetAlert e Leaflet.
  │ ledger/     livro contábil, maquininha, netting semanal      │
  │ dispatch/   ofertas em rodadas, ocorrências                  │
  │ messaging/  push, notificações, suporte                      │
+ │ printing/   ESC/POS: comanda e recibo de baixa               │
  │ account/    LGPD (exportar, excluir)                         │
  └───────────────┬──────────────────────────────────────────────┘
  ┌───────────────▼──── PostgreSQL 16 ───────────────────────────┐

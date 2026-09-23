@@ -336,6 +336,51 @@ decide "{\"proof_id\":${PROOF_F},\"decision\":\"reject\",\"reason\":\"comprovant
 [ "$(psql "$DATABASE_URL" -tAc "SELECT state FROM cash_settlement_intents WHERE id=${FAKE_ID}")" = "disputed" ] || fail "baixa fraudada não ficou em disputa"
 psql_run -c "UPDATE couriers SET cash_blocked = false WHERE id='${COURIER_ID}'"
 
+echo "== ESC/POS: comanda com o troco em negrito; o código de entrega NÃO sai no papel =="
+TICKET=$(curl -s "$BASE/restaurants/print_queue.php?kind=order_ticket&ref_id=${ORDER_ID}&columns=48" "${SAUTH[@]}")
+TICKET_TEXT=$(echo "$TICKET" | jq -r '.job.text')
+echo "$TICKET_TEXT" | grep -q "COBRAR NA ENTREGA · DINHEIRO" || fail "comanda sem a forma de pagamento: $TICKET_TEXT"
+echo "$TICKET_TEXT" | grep -q "TROCO PARA R\$ 100,00" || fail "comanda sem o troco: $TICKET_TEXT"
+echo "$TICKET_TEXT" | grep -q "LEVAR R\$ 33,00 DE TROCO" || fail "comanda sem o troco a levar (100 − 67): $TICKET_TEXT"
+DELIVERY_CODE=$(psql "$DATABASE_URL" -tAc "SELECT delivery_code FROM orders WHERE id=${ORDER_ID}")
+echo "$TICKET_TEXT" | grep -q "$DELIVERY_CODE" && fail "o código de entrega do cliente saiu impresso"
+WIDEST=$(echo "$TICKET_TEXT" | php -r '$m = 0; foreach (file("php://stdin") as $l) { $m = max($m, mb_strlen(rtrim($l, "\n"))); } echo $m;')
+[ "$WIDEST" -le 48 ] || fail "comanda passou de 48 colunas ($WIDEST)"
+TICKET_HEX=$(echo "$TICKET" | jq -r '.job.escpos_base64' | base64 -d | od -An -tx1 | tr -d ' \n')
+[ "${TICKET_HEX:0:10}" = "1b401b7403" ] || fail "bytes não começam com ESC @ + página de código 860: ${TICKET_HEX:0:10}"
+[ "${TICKET_HEX: -8}" = "1d564200" ] || fail "bytes não terminam com o corte de papel"
+echo "$TICKET_HEX" | grep -q "1b4501" || fail "nada em negrito na comanda"
+[ "$(curl -s "$BASE/restaurants/print_queue.php?columns=50" "${SAUTH[@]}" | jq -r '.code')" = "invalid_columns" ] || fail "largura inválida aceita"
+
+echo "== ESC/POS: recibos de baixa na fila da loja, com a mesma assinatura do app do entregador (9.3/9.4) =="
+QUEUE=$(curl -s "$BASE/restaurants/print_queue.php?columns=32" "${SAUTH[@]}")
+INTENT2_ID=$(echo "$INTENT2" | jq -r '.intent.id')
+RECEIPT_TEXT=$(echo "$QUEUE" | jq -r ".jobs[] | select(.kind == \"settlement_receipt\" and .ref_id == ${INTENT2_ID}) | .text")
+echo "$RECEIPT_TEXT" | grep -q "BX-${INTENT2_ID}" || fail "recibo da baixa de balcão fora da fila: $QUEUE"
+[ "$(echo "$QUEUE" | jq -r "[.jobs[] | select(.kind == \"settlement_receipt\" and .ref_id == ${PIX_ID})] | length")" = "1" ] \
+  || fail "recibo da baixa por Pix fora da fila"
+COURIER_RECEIPT=$(curl -s "$BASE/couriers/settlements.php?intent_id=${INTENT2_ID}" "${CAUTH[@]}")
+SIG=$(echo "$COURIER_RECEIPT" | jq -er '.receipt.signature') || fail "o app do entregador não recebeu o recibo: $COURIER_RECEIPT"
+[ "${#SIG}" = "64" ] || fail "assinatura com tamanho errado"
+echo "$RECEIPT_TEXT" | tr -d '\n' | grep -q "$SIG" || fail "a assinatura do papel não é a mesma do app"
+[ "$(echo "$COURIER_RECEIPT" | jq -r '.receipt.amount')" = "67" ] || fail "recibo com valor errado"
+[ "$(echo "$COURIER_RECEIPT" | jq -r '.balances.next_payout')" != "null" ] || fail "recibo sem a data do próximo repasse"
+RECEIPT_BYTES=$(echo "$QUEUE" | jq -r ".jobs[] | select(.ref_id == ${INTENT2_ID} and .kind == \"settlement_receipt\") | .escpos_base64" | base64 -d | od -An -tx1 | tr -d ' \n')
+echo "$RECEIPT_BYTES" | grep -q "$(printf 'ESP\xc9CIE' | iconv -f latin1 -t CP860 | od -An -tx1 | tr -d ' \n')" \
+  || fail "acento não saiu em CP860 (ESPÉCIE)"
+
+echo "== impresso sai da fila; primeira via não duplica; reimpressão fica registrada =="
+curl -s -X POST "$BASE/restaurants/print_queue.php" -H "Content-Type: application/json" "${SAUTH[@]}" \
+  -d "{\"kind\":\"settlement_receipt\",\"ref_id\":${INTENT2_ID}}" >/dev/null
+curl -s -X POST "$BASE/restaurants/print_queue.php" -H "Content-Type: application/json" "${SAUTH[@]}" \
+  -d "{\"kind\":\"settlement_receipt\",\"ref_id\":${INTENT2_ID}}" >/dev/null
+curl -s -X POST "$BASE/restaurants/print_queue.php" -H "Content-Type: application/json" "${SAUTH[@]}" \
+  -d "{\"kind\":\"settlement_receipt\",\"ref_id\":${INTENT2_ID},\"reprint\":true}" >/dev/null
+[ "$(curl -s "$BASE/restaurants/print_queue.php?columns=48" "${SAUTH[@]}" | jq -r "[.jobs[] | select(.ref_id == ${INTENT2_ID} and .kind == \"settlement_receipt\")] | length")" = "0" ] \
+  || fail "recibo impresso continuou na fila"
+[ "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FILTER (WHERE NOT reprint) || '/' || count(*) FILTER (WHERE reprint) FROM print_log WHERE kind='settlement_receipt' AND ref_id=${INTENT2_ID}")" = "1/1" ] \
+  || fail "vias registradas erradas"
+
 echo "== cliente não acessa rota de entregador =="
 [ "$(curl -s "$BASE/couriers/me.php" "${AUTH[@]}" | jq -r '.code')" = "forbidden" ] \
   || fail "cliente entrou na área do entregador"

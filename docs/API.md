@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_api_catalog.php` a partir dos próprios arquivos de
 > `api/v1`. Não edite à mão: o CI confere (`--check`) e falha se estiver desatualizado.
 
-103 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
+105 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
 `{code, message, trace_id}` com o status HTTP certo (`lib/core/response.php`). As URLs são
 contrato público: mudar um caminho quebra app instalado.
 
@@ -84,6 +84,7 @@ contrato público: mudar um caminho quebra app instalado.
 | `/api/v1/couriers/position.php` | POST | entregador |  | POST /v1/couriers/position.php — onde o entregador está agora. |
 | `/api/v1/couriers/settle_intent.php` | POST | entregador |  | Telas 9.1 e 9.2 — "Intenção de baixa com validade de 10 min. Guardamos só o hash do código; o valor é imutável depois de gerado." |
 | `/api/v1/couriers/settle_proof.php` | GET, POST | entregador | sim | Tela 9.5 — o comprovante da baixa por Pix, lado do entregador. |
+| `/api/v1/couriers/settlements.php` | GET | entregador |  | Tela 9.4 — "Entregador — recibo e saldo zerado": "Baixa confirmada. Ana (caixa) recebeu R$ 262,80 às 23:14. Saldo em espécie R$ 0,00 ... Recibo #BX-4417 · hash 9f2c…4a1b · via impressa ficou na loja." |
 | `/api/v1/couriers/shift.php` | POST | entregador |  | Tela 8.1 — abrir e fechar turno. O índice `one_open_shift` (migração 007) garante um turno aberto por entregador: abrir duas vezes não cria dois registros, e é o banco que diz isso, não um `if` no PHP. |
 | `/api/v1/couriers/submit_application.php` | POST | autenticado |  | Tela 15.2, última etapa: "você lê e aceita o contrato de prestação de serviço e a política de dados". |
 
@@ -156,6 +157,7 @@ contrato público: mudar um caminho quebra app instalado.
 | `/api/v1/restaurants/pending_proofs.php` | GET | autenticado |  | Tela 7.3 — fila de validação do painel da loja. Devolve, de uma vez, tudo que o modal de decisão precisa mostrar: o comprovante (referência), os dados do pedido e a "conferência automática" (hash, phash, horário, marca d'água) que o mock descreve -- "reduz… |
 | `/api/v1/restaurants/pos_devices.php` | POST | loja |  | Tela 10.4, bloco "MAQUININHAS CADASTRADAS" — e a outra ponta da 10.6. |
 | `/api/v1/restaurants/prep_time.php` | POST | loja |  | Tela 11.2 — "Tempo de preparo informado ao cliente". |
+| `/api/v1/restaurants/print_queue.php` | GET, POST | loja |  | A impressora térmica da loja (ESC/POS): o que falta imprimir, e o registro do que saiu no papel. Quem imprime é o tablet do balcão, que está ligado na impressora por USB -- o servidor não alcança a rede da loja. |
 | `/api/v1/restaurants/proof_image.php` | GET | autenticado |  | Serve a imagem do comprovante pro painel da loja (tela 7.3) -- o arquivo fica fora da raiz servida (PROOF_STORAGE_DIR), então não existe URL pública pra ele: a única porta é esta, e ela confere se o comprovante é mesmo da loja que está pedindo antes de mand… |
 | `/api/v1/restaurants/reconciliation.php` | GET, POST | loja |  | Tela 9.6 — "Painel da loja: conciliação da maquininha física". |
 | `/api/v1/restaurants/search_products.php` | GET | público |  | Tela 2.2 — busca de produto por nome nas lojas abertas da cidade (índice trigram), cada resultado com nota, frete e tempo da loja pros filtros. |

@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_db_map.php` a partir do banco com todas as migrações
 > aplicadas. Não edite à mão: o CI confere (`--check`).
 
-55 tabelas em PostgreSQL 16. Regras que o esquema garante sozinho (e que o
+56 tabelas em PostgreSQL 16. Regras que o esquema garante sozinho (e que o
 código não precisa repetir): `orders.status` só muda por `advance_order()`; `ledger_entries`
 é só de inserção (sem UPDATE/DELETE); um pagamento aprovado por pedido
 (`payments_one_approved`). Contexto de cada regra: `docs/ARCHITECTURE.md`.
@@ -15,7 +15,7 @@ código não precisa repetir): `orders.status` só muda por `advance_order()`; `
 
 ## Índice
 
-[`acquirer_statements`](#acquirer_statements) [`addresses`](#addresses) [`audit_log`](#audit_log) [`business_hours`](#business_hours) [`card_transactions`](#card_transactions) [`cash_settlement_intents`](#cash_settlement_intents) [`consents`](#consents) [`coupon_redemptions`](#coupon_redemptions) [`coupons`](#coupons) [`courier_applications`](#courier_applications) [`courier_documents`](#courier_documents) [`courier_positions`](#courier_positions) [`courier_shifts`](#courier_shifts) [`couriers`](#couriers) [`delivery_attempts`](#delivery_attempts) [`delivery_incidents`](#delivery_incidents) [`delivery_proofs`](#delivery_proofs) [`delivery_slots`](#delivery_slots) [`dispatch_attempts`](#dispatch_attempts) [`disputes`](#disputes) [`fraud_signals`](#fraud_signals) [`holiday_overrides`](#holiday_overrides) [`idempotency_keys`](#idempotency_keys) [`item_variants`](#item_variants) [`ledger_entries`](#ledger_entries) [`menu_items`](#menu_items) [`notifications`](#notifications) [`offers`](#offers) [`order_events`](#order_events) [`order_items`](#order_items) [`order_messages`](#order_messages) [`orders`](#orders) [`otp_codes`](#otp_codes) [`outbox`](#outbox) [`partner_accounts`](#partner_accounts) [`payment_proofs`](#payment_proofs) [`payments`](#payments) [`payouts`](#payouts) [`platform_policies`](#platform_policies) [`policy_overrides`](#policy_overrides) [`pos_custody`](#pos_custody) [`pos_devices`](#pos_devices) [`push_subscriptions`](#push_subscriptions) [`refunds`](#refunds) [`restaurant_credentials`](#restaurant_credentials) [`restaurant_payment_settings`](#restaurant_payment_settings) [`restaurants`](#restaurants) [`reviews`](#reviews) [`saved_cards`](#saved_cards) [`sessions`](#sessions) [`settlement_proofs`](#settlement_proofs) [`store_pauses`](#store_pauses) [`tickets`](#tickets) [`users`](#users) [`wallet_credits`](#wallet_credits) 
+[`acquirer_statements`](#acquirer_statements) [`addresses`](#addresses) [`audit_log`](#audit_log) [`business_hours`](#business_hours) [`card_transactions`](#card_transactions) [`cash_settlement_intents`](#cash_settlement_intents) [`consents`](#consents) [`coupon_redemptions`](#coupon_redemptions) [`coupons`](#coupons) [`courier_applications`](#courier_applications) [`courier_documents`](#courier_documents) [`courier_positions`](#courier_positions) [`courier_shifts`](#courier_shifts) [`couriers`](#couriers) [`delivery_attempts`](#delivery_attempts) [`delivery_incidents`](#delivery_incidents) [`delivery_proofs`](#delivery_proofs) [`delivery_slots`](#delivery_slots) [`dispatch_attempts`](#dispatch_attempts) [`disputes`](#disputes) [`fraud_signals`](#fraud_signals) [`holiday_overrides`](#holiday_overrides) [`idempotency_keys`](#idempotency_keys) [`item_variants`](#item_variants) [`ledger_entries`](#ledger_entries) [`menu_items`](#menu_items) [`notifications`](#notifications) [`offers`](#offers) [`order_events`](#order_events) [`order_items`](#order_items) [`order_messages`](#order_messages) [`orders`](#orders) [`otp_codes`](#otp_codes) [`outbox`](#outbox) [`partner_accounts`](#partner_accounts) [`payment_proofs`](#payment_proofs) [`payments`](#payments) [`payouts`](#payouts) [`platform_policies`](#platform_policies) [`policy_overrides`](#policy_overrides) [`pos_custody`](#pos_custody) [`pos_devices`](#pos_devices) [`print_log`](#print_log) [`push_subscriptions`](#push_subscriptions) [`refunds`](#refunds) [`restaurant_credentials`](#restaurant_credentials) [`restaurant_payment_settings`](#restaurant_payment_settings) [`restaurants`](#restaurants) [`reviews`](#reviews) [`saved_cards`](#saved_cards) [`sessions`](#sessions) [`settlement_proofs`](#settlement_proofs) [`store_pauses`](#store_pauses) [`tickets`](#tickets) [`users`](#users) [`wallet_credits`](#wallet_credits) 
 
 ## acquirer_statements
 
@@ -706,6 +706,20 @@ Criada em `db/migrations/006_ledger.up.sql`. Da migração: ledger_entries (appe
 | `serial` | text | sim |  |
 | `active` | boolean (padrão) |  |  |
 | `courier_id` | uuid | sim | `couriers.id` |
+
+## print_log
+
+Criada em `db/migrations/028_print_log.up.sql`. Da migração: Impressão ESC/POS na loja (telas 4.5, 7.3, 9.3, 11.1).
+
+| Coluna | Tipo | Nulo | Referência |
+|---|---|---|---|
+| `id` | bigint (padrão) |  |  |
+| `restaurant_id` | uuid |  | `restaurants.id` |
+| `kind` | text |  |  |
+| `ref_id` | bigint |  |  |
+| `reprint` | boolean (padrão) |  |  |
+| `printed_by` | uuid | sim | `users.id` |
+| `printed_at` | timestamp with time zone (padrão) |  |  |
 
 ## push_subscriptions
 

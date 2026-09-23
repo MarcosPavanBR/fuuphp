@@ -5,7 +5,12 @@
   import { parsePgTimestamp } from '../../utils/datetime.js';
 
   // Telas 9.1, 9.2, 9.4 e 9.5 — escolher a baixa, gerar o código (balcão)
-  // ou pagar por Pix e mandar o comprovante (loja fechada).
+  // ou pagar por Pix e mandar o comprovante (loja fechada), e o recibo.
+  //
+  // 9.4: enquanto espera (código na tela, ou comprovante na fila da loja), a
+  // tela consulta a baixa (couriers/settlements.php) e vira o recibo sozinha
+  // quando a loja confirma -- com a mesma assinatura que saiu no papel da
+  // loja ("Recibo com hash dos dois lados").
   //
   // Pix (9.5): "O saldo só zera quando a loja validar o comprovante." A tela
   // retoma sozinha uma baixa por Pix aberta (couriers/settle_proof.php GET):
@@ -26,6 +31,43 @@
   let method = $state('in_person');
   let pix = $state(null); // { id, amount, expires_at, restaurant_name, restaurant_cnpj, pix_copy_paste, proof_state, reject_reason }
   let proofFile = $state(null);
+  let receipt = $state(null);
+  let balances = $state(null);
+  let showFull = $state(false);
+
+  // Espera a confirmação da loja: no balcão (código) e no Pix (comprovante na fila).
+  $effect(() => {
+    const waitingId = step === 'code' ? intent?.id : step === 'pix' && pix?.proof_state === 'pending' ? pix.id : null;
+    if (!waitingId) return;
+    const t = setInterval(async () => {
+      try {
+        const data = await api.get('/couriers/settlements.php', {
+          token: courierToken(),
+          query: { intent_id: waitingId },
+        });
+        if (data.receipt) {
+          receipt = data.receipt;
+          balances = data.balances;
+          step = 'receipt';
+        } else if (data.intent.state !== 'open') {
+          toastr.warning(
+            data.intent.state === 'disputed'
+              ? 'A loja contou um valor diferente: abriu uma ocorrência e nada foi baixado.'
+              : 'Essa baixa expirou. Gere outra.'
+          );
+          onDone();
+        }
+      } catch {
+        // rede oscilando: tenta de novo na próxima volta
+      }
+    }, 4000);
+    return () => clearInterval(t);
+  });
+
+  function weekday(isoDate) {
+    const d = new Date(`${isoDate}T12:00:00`);
+    return d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
+  }
 
   async function loadPix() {
     try {
@@ -211,6 +253,32 @@
         ? 'Prazo de baixa: até amanhã, 23:59. Depois disso as corridas em dinheiro ficam bloqueadas.'
         : 'O valor fica travado no código. A loja conta o dinheiro e digita o código no painel dela — os dois lançamentos nascem juntos.'}
     </p>
+  {:else if step === 'receipt' && receipt}
+    <div class="done-mark"><i class="bi bi-check-circle-fill"></i></div>
+    <h1 class="fuu-display center">Baixa confirmada</h1>
+    <p class="sub center">
+      {receipt.confirmer_first_name ?? 'A loja'} recebeu {money(receipt.amount)} às
+      {receipt.confirmed_local?.slice(-5)}.
+    </p>
+    <div class="receipt-rows">
+      <div><span>Saldo em espécie</span><strong class="fuu-mono">{money(balances.cash)}</strong></div>
+      <div><span>Ganhos a receber (plataforma)</span><strong class="fuu-mono">{money(balances.payable)}</strong></div>
+      <div><span>Próximo repasse</span><strong>{weekday(balances.next_payout)}</strong></div>
+    </div>
+    <p class="receipt-code fuu-mono">
+      Recibo #{receipt.code} · assinatura {receipt.signature_short} · via impressa ficou na loja
+    </p>
+    {#if showFull}
+      <div class="receipt-full">
+        <p><strong>{receipt.store_name}</strong> · CNPJ {cnpj(receipt.store_cnpj)}</p>
+        <p>{receipt.method === 'pix' ? 'Pix com comprovante' : 'Dinheiro no balcão'} · {receipt.confirmed_local}</p>
+        <p class="fuu-mono sig">{receipt.signature}</p>
+        <p class="note">Confira: a mesma assinatura está no papel da loja.</p>
+      </div>
+    {/if}
+    <button type="button" class="btn-fuu-primary w-100 big" onclick={onDone}>Voltar a receber corridas</button>
+    <button type="button" class="link" onclick={() => (showFull = !showFull)}>{showFull ? 'Fechar recibo' : 'Ver recibo'}</button>
+    <p class="note center">Teto liberado · corridas em espécie voltam</p>
   {:else if step === 'pix' && pix}
     <h1 class="fuu-display">Baixa por Pix</h1>
     <p class="k">TRANSFERIR PARA</p>
@@ -388,6 +456,48 @@
     color: var(--fuu-ink-2);
     line-height: 1.6;
     margin: 0 0 8px;
+  }
+  .center {
+    text-align: center;
+  }
+  .done-mark {
+    text-align: center;
+    font-size: 54px;
+    color: var(--fuu-leaf);
+    margin-top: 10px;
+  }
+  .receipt-rows {
+    border: 1px solid var(--fuu-line-3);
+    border-radius: 12px;
+    margin: 18px 0 10px;
+  }
+  .receipt-rows div {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 14px;
+    font-size: 13.5px;
+    border-top: 1px solid var(--fuu-line-4);
+  }
+  .receipt-rows div:first-child {
+    border-top: none;
+  }
+  .receipt-code {
+    font-size: 11px;
+    color: var(--fuu-ink-4);
+    text-align: center;
+  }
+  .receipt-full {
+    border: 1px dashed var(--fuu-line-2);
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 12.5px;
+  }
+  .receipt-full p {
+    margin: 0 0 6px;
+  }
+  .sig {
+    word-break: break-all;
+    font-size: 11px;
   }
   .methods {
     display: flex;

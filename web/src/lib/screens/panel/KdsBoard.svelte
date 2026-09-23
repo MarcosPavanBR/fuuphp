@@ -3,6 +3,7 @@
   import { toastr } from '../../utils/toastr.js';
   import { staffToken } from '../../state/staffSession.svelte.js';
   import { parsePgTimestamp } from '../../utils/datetime.js';
+  import { printerConnected, printerColumns, printEscpos, printInBrowser } from '../../services/thermalPrinter.js';
 
   // Tela 11.1 — "Três colunas, cronômetro por pedido, nenhum pedido sem
   // pagamento resolvido." As três colunas são exatamente os três status que
@@ -16,6 +17,28 @@
 
   let now = $state(Date.now());
   let busyId = $state(null);
+
+  // Reimprimir a comanda (papel molhou, sumiu, a cozinha pediu outra via):
+  // mesmo documento da primeira via, registrado como reimpressão.
+  async function reprint(order) {
+    try {
+      const data = await api.get('/restaurants/print_queue.php', {
+        token: staffToken(),
+        query: { kind: 'order_ticket', ref_id: order.id, columns: printerColumns() },
+      });
+      if (printerConnected()) {
+        await printEscpos(data.job.escpos_base64);
+      } else {
+        printInBrowser(data.job.title, data.job.text);
+      }
+      await api.post('/restaurants/print_queue.php', {
+        token: staffToken(),
+        body: { kind: 'order_ticket', ref_id: order.id, reprint: true },
+      });
+    } catch (e) {
+      toastr.error(e.message ?? 'Não deu pra reimprimir.');
+    }
+  }
 
   $effect(() => {
     const t = setInterval(() => (now = Date.now()), 1000);
@@ -150,6 +173,9 @@
           <button type="button" class="chat" onclick={() => onOpenChat(order)} aria-label="Conversa do pedido">
             <i class="bi bi-chat-dots"></i>
           </button>
+          <button type="button" class="chat" onclick={() => reprint(order)} aria-label="Reimprimir comanda">
+            <i class="bi bi-printer"></i>
+          </button>
         </div>
         <ul class="lines">
           {#each lines(order.items) as line}
@@ -192,6 +218,9 @@
           <span class="timer fuu-mono" class:late={secs > TARGET_SECONDS}>{clock(secs)}</span>
           <button type="button" class="chat" onclick={() => onOpenChat(order)} aria-label="Conversa do pedido">
             <i class="bi bi-chat-dots"></i>
+          </button>
+          <button type="button" class="chat" onclick={() => reprint(order)} aria-label="Reimprimir comanda">
+            <i class="bi bi-printer"></i>
           </button>
         </div>
         <ul class="lines">

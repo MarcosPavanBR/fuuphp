@@ -38,3 +38,4 @@ pra ele (ex.: o mapa do acompanhamento em 06 → 16).
 - [28 — Painel da loja (`web/painel.html`) — Fase 7.3 e 11.1 a 11.4](28-painel-da-loja.md)
 - [29 — Baixa de espécie por Pix (tela 9.5)](29-baixa-por-pix.md)
 - [30 — Cartão salvo, tokenização no navegador e total com frete](30-cartao-salvo-e-total-com-frete.md)
+- [31 — Impressão ESC/POS e recibo de baixa (4.5, 7.3, 9.3, 9.4, 11.1)](31-impressao-escpos-e-recibo-de-baixa.md)

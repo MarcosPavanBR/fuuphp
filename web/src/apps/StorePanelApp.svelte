@@ -22,6 +22,7 @@
   import PaymentSettingsScreen from '../lib/screens/panel/PaymentSettingsScreen.svelte';
   import ReconciliationScreen from '../lib/screens/panel/ReconciliationScreen.svelte';
   import OrderChat from '../lib/components/OrderChat.svelte';
+  import PrinterPanel from '../lib/screens/panel/PrinterPanel.svelte';
 
   // Painel da loja (telas 7.3 e 11.1). Roda numa página própria
   // (painel.html), não dentro do app do cliente: são dois públicos e dois
@@ -185,6 +186,7 @@
           {online ? `atualizado ${syncLabel}` : 'sem conexão'}
         </span>
         <span class="clock fuu-mono">{hhmm}</span>
+        <PrinterPanel />
         <button type="button" class="leave" onclick={leave} aria-label="Sair">
           <i class="bi bi-box-arrow-right"></i>
         </button>

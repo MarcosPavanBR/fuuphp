@@ -30,7 +30,7 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (vinte e sete migrações SQL), a **API em PHP** sobre
+A **fundação de banco** (vinte e oito migrações SQL), a **API em PHP** sobre
 ela e os **quatro apps em Svelte** (`web/`): cliente, painel da loja, app do
 entregador e painel da plataforma. As 15 fases do mock estão construídas --
 onboarding, descoberta, cardápio e carrinho, os cinco meios de pagamento
@@ -94,8 +94,9 @@ que não existe neste ambiente, ou de decisão do dono do produto:
    por CEP (ViaCEP) foram testados só até onde o ambiente deixa: assinatura,
    pinos e caminho de falha, respectivamente
    ([19](docs/decisions/19-push.md), [16](docs/decisions/16-lacunas-do-app-do-cliente.md)).
-4. **Impressão ESC/POS** da comanda: depende de conexão com impressora
-   térmica, que não existe aqui.
+4. **Impressora física.** A comanda e o recibo ESC/POS já saem pelo tablet do
+   balcão (WebUSB/Web Serial, [31](docs/decisions/31-impressao-escpos-e-recibo-de-baixa.md));
+   falta conferir numa térmica de verdade.
 5. **Decisão de produto: fidelidade/pontos.** A tela 2.3 é só desenho. Se for
    pra valer, precisa de um livro de pontos (o mesmo padrão só-de-inserção do
    financeiro) -- decisão de escopo, não de implementação.

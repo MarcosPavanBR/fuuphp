@@ -57,6 +57,10 @@ require_once __DIR__ . '/messaging/push.php';
 require_once __DIR__ . '/messaging/notifications.php';
 require_once __DIR__ . '/messaging/support.php';
 
+// ── impressão: ESC/POS da comanda e do recibo de baixa ──────────────────
+require_once __DIR__ . '/printing/escpos.php';
+require_once __DIR__ . '/printing/documents.php';
+
 // ── conta: privacidade (LGPD) ──────────────────────────────────────────
 require_once __DIR__ . '/account/account_privacy.php';
 
