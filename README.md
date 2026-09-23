@@ -94,8 +94,8 @@ real ou de decisão do dono do produto:
 1. **Provedor de OTP (SMS/e-mail).** Sem ele a produção não sobe. Escolhido
    o provedor, ele entra como driver em `lib/messaging/otp_sender.php`, com
    `curl` nativo.
-2. **Mercado Pago: token único da plataforma ou por loja**, e uma rodada no
-   sandbox antes de produção: cartão, Pix, webhook, estorno e gorjeta
+2. **Mercado Pago: uma rodada no sandbox** com o token único da plataforma
+   antes de produção: cartão, Pix, webhook, estorno e gorjeta
    ([05](docs/decisions/05-pagamentos.md),
    [14](docs/decisions/14-pontas-de-dinheiro.md),
    [15](docs/decisions/15-troca-de-metodo-gorjeta-pix-automatico.md),
@@ -110,7 +110,9 @@ real ou de decisão do dono do produto:
 5. **Quando levar os arquivos pro Cloudflare R2.** Hoje ficam no disco da
    VPS, fora do projeto, e só saem por rota autenticada.
 
-Já decidido: a **fidelidade (2.3) entra no lançamento**
+Já decidido: o **Mercado Pago usa token único da plataforma** (a loja
+recebe pelo repasse semanal do livro-razão); a **fidelidade (2.3) entra no
+lançamento**
 ([32](docs/decisions/32-fidelidade.md)), e o **login com Google/Apple fica
 pra v2**. A tela 10.1 mostra esses botões desabilitados, com "em breve"
 ([09](docs/decisions/09-login-e-cadastro.md)).

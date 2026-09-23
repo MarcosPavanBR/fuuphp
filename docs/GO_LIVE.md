@@ -249,10 +249,14 @@ começam zerados e são ajustados no painel (10.5).
 
 ## 4. Mercado Pago: sandbox → produção
 
-Decisão pendente: **um token único da plataforma** (é o que o código faz
-hoje: a plataforma recebe e repassa pelo livro-razão) **ou um token por
-loja** (cada loja recebe direto, com split). O modelo de `.env` é o do
-token único.
+**Decidido pelo Marcos: token único da plataforma.** Cartão, Pix automático,
+gorjeta e estorno passam pela conta Mercado Pago da plataforma. O repasse
+pra loja e pro entregador sai pelo livro-razão, no netting semanal de terça.
+As credenciais ficam só no `.env` do servidor. Não há token do Mercado Pago
+por loja e não há split.
+
+O Pix manual continua fora do Mercado Pago: cai direto na chave Pix da loja
+(`restaurant_credentials.pix_key`), com comprovante e conferência humana.
 
 1. No painel do Mercado Pago (Suas integrações), crie a aplicação e os
    usuários de teste (vendedor e comprador).
@@ -346,10 +350,10 @@ baixo, estornado em seguida.
 | Decisão | Enquanto não decide |
 |---|---|
 | Provedor de OTP (SMS/e-mail) | a produção não sobe |
-| Mercado Pago: token único x por loja | código usa token único |
 | VPS (provedor, tamanho) e domínio | `deploy/` está pronto pra qualquer Ubuntu 24.04/Debian 12 |
 | Cópia do backup fora da VPS (destino) | backup só dentro da VPS (o script avisa) |
 | Quando levar os arquivos pro R2 | disco da VPS (fase 1) |
 
-Já decidido pelo Marcos: a **fidelidade (2.3) entra no lançamento** e fica
+Já decidido pelo Marcos: o **Mercado Pago usa token único da plataforma**;
+a **fidelidade (2.3) entra no lançamento** e fica
 na lista de validação abaixo; o **login com Google/Apple fica pra v2**.

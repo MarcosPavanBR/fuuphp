@@ -100,3 +100,9 @@ o pagamento — ele não existia antes deste módulo.
   chave ausente barrada), o upload de um JPEG real gerado via GD, e o
   ciclo completo de aprovação/recusa humana do Pix — contra o mesmo banco
   migrado que os outros módulos, em sequência, sem colisão.
+
+**Decidido pelo Marcos (go-live): token único da plataforma.** Cartão, Pix
+automático, gorjeta e estorno usam as credenciais da plataforma, que ficam no
+`.env` do servidor. A loja recebe pelo repasse semanal do livro-razão, sem
+split. As colunas de Mercado Pago por loja em `restaurant_credentials` ficam
+sem uso. Veja a [33](33-go-live.md).

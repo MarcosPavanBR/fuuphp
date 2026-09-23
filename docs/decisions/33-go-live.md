@@ -83,12 +83,15 @@ stack sem autorização. As escolhas de provedor são do Marcos.
 **Decisões pendentes do Marcos:**
 
 - o provedor de OTP;
-- Mercado Pago: token único ou por loja;
 - a VPS e o domínio;
 - o destino da cópia externa do backup;
 - quando migrar pro R2.
 
 **Já decidido pelo Marcos:**
 
+- Mercado Pago com token único da plataforma: o dinheiro entra na conta da
+  plataforma e o repasse sai pelo livro-razão. As colunas `mp_public_key`,
+  `mp_access_token` e `mp_user_id` de `restaurant_credentials` (migração 002)
+  ficam sem uso e vazias;
 - a fidelidade (2.3) entra no lançamento;
 - o login com Google/Apple fica pra v2.
