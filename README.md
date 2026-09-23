@@ -20,7 +20,7 @@ como stack, dependência ou fallback deste projeto.
 
 Svelte · Bootstrap · Bootstrap Icons · SweetAlert · toastr · PHP (PDO,
 prepared statements) · **PostgreSQL 16, banco único do sistema** · Cloudflare
-· Mercado Pago (gateway único, token do próprio lojista) · core-js · jQuery
+· Mercado Pago (gateway único, token único da plataforma — decisão do Marcos) · core-js · jQuery
 (congelado, só onde já existe) · ESC/POS.
 
 Nada entra, sai ou é "melhorado" sem autorização do dono do produto — nem
