@@ -15,6 +15,12 @@ declare(strict_types=1);
 // automaticamente para somente online", tela 10.5).
 const ONLINE_PAYMENT_METHODS = ['mp_card', 'pix_auto', 'pix_manual'];
 
+/**
+ * A política que vale pra esta loja agora: a versão mais nova da plataforma,
+ * com os meios de pagamento cortados pelos que a loja aceita e, se ela
+ * estiver em trava de atraso ou em período só-online, só os online. Todo
+ * checkout, troca de método e tela 4.1 passam por aqui.
+ */
 function resolve_policy(PDO $pdo, string $restaurantId): array
 {
     $policyStmt = $pdo->query(
@@ -85,6 +91,9 @@ function resolve_policy(PDO $pdo, string $restaurantId): array
     return $snapshot;
 }
 
+/**
+ * Array de texto do PostgreSQL ("{cash,mp_card}") como lista PHP.
+ */
 function pg_text_array_to_php(string $pgArray): array
 {
     $trimmed = trim($pgArray, '{}');
@@ -97,6 +106,10 @@ function pg_text_array_to_php(string $pgArray): array
     );
 }
 
+/**
+ * Interval do PostgreSQL ("00:15:00" ou "15 minutes") em segundos; formato
+ * desconhecido vale 15 min, o prazo mais seguro.
+ */
 function pg_interval_to_seconds(string $interval): int
 {
     // formatos comuns do PostgreSQL para interval: "00:15:00" ou "15 minutes"

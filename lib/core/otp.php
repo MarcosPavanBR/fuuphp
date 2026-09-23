@@ -11,16 +11,26 @@ const OTP_MAX_ATTEMPTS = 5;
 const OTP_MAX_REQUESTS_PER_WINDOW = 3;
 const OTP_REQUEST_WINDOW_MINUTES = 10;
 
+/**
+ * Código de 6 dígitos com gerador criptográfico (zeros à esquerda contam).
+ */
 function generate_otp_code(): string
 {
     return str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 }
 
+/**
+ * Hash do código pro banco: o código em claro nunca é guardado.
+ */
 function hash_otp(string $code): string
 {
     return hash('sha256', $code);
 }
 
+/**
+ * Quantos códigos esta pessoa pediu pra esta finalidade na janela atual
+ * (limite de envio: protege o número e a conta de SMS).
+ */
 function otp_requests_in_window(PDO $pdo, string $userId, string $purpose): int
 {
     $stmt = $pdo->prepare(

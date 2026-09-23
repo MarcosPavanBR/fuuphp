@@ -37,11 +37,17 @@ const PRODUCTION_SETTINGS = [
     'PROOF_STORAGE_DIR', 'MENU_PHOTO_DIR', 'COURIER_DOC_DIR',
 ];
 
+/**
+ * O ambiente (APP_ENV): development, testing, staging ou production.
+ */
 function app_env(): string
 {
     return (string) env('APP_ENV', 'development');
 }
 
+/**
+ * Production ou staging: onde a trava de produção vale.
+ */
 function is_production_like(): bool
 {
     return in_array(app_env(), PRODUCTION_LIKE_ENVS, true);

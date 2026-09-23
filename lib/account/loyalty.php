@@ -23,6 +23,9 @@ function loyalty_balance(PDO $pdo, string $userId): int
     return (int) $stmt->fetchColumn();
 }
 
+/**
+ * Pontos por real de subtotal, da política vigente (padrão 1).
+ */
 function loyalty_rate(PDO $pdo): float
 {
     $rate = $pdo->query('SELECT loyalty_points_per_brl FROM platform_policies ORDER BY version DESC LIMIT 1')->fetchColumn();

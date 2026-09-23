@@ -17,6 +17,11 @@ function issue_tokens(
     return issue_tokens_in_family($pdo, $userId, $role, uuid_v4(), null, $extraClaims, $deviceLabel, $ip);
 }
 
+/**
+ * Emite o par access + refresh dentro de uma família de sessão (rotação).
+ * Só o hash do refresh vai pro banco; o refresh em claro sai uma vez, na
+ * resposta.
+ */
 function issue_tokens_in_family(
     PDO $pdo,
     string $userId,

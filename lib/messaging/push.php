@@ -36,6 +36,10 @@ const PUSH_KIND_PREF = [
     'promotion' => 'want_promotion',
 ];
 
+/**
+ * `live` manda push de verdade; qualquer outra coisa é o modo fake (grava e
+ * conta, não sai da máquina).
+ */
 function push_mode(): string
 {
     $mode = (string) env('PUSH_MODE', '');
@@ -43,6 +47,9 @@ function push_mode(): string
     return $mode === 'live' ? 'live' : 'fake';
 }
 
+/**
+ * Caminho absoluto da chave privada VAPID (VAPID_PRIVATE_KEY_FILE).
+ */
 function push_key_path(): string
 {
     $path = (string) env('VAPID_PRIVATE_KEY_FILE', 'storage/vapid/private.pem');
@@ -62,11 +69,18 @@ function push_private_key(): ?OpenSSLAsymmetricKey
     return $key === false ? null : $key;
 }
 
+/**
+ * Base64 URL-safe sem padding (RFC 7515), o formato do JWT VAPID e das
+ * chaves de assinatura do navegador.
+ */
 function base64url_encode(string $bytes): string
 {
     return rtrim(strtr(base64_encode($bytes), '+/', '-_'), '=');
 }
 
+/**
+ * Inverso de base64url_encode(): aceita texto sem padding.
+ */
 function base64url_decode(string $text): string
 {
     return (string) base64_decode(strtr($text, '-_', '+/') . str_repeat('=', (4 - strlen($text) % 4) % 4));

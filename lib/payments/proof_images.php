@@ -16,6 +16,11 @@ declare(strict_types=1);
 const PROOF_ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
 const PROOF_MAX_BYTES = 10 * 1024 * 1024;
 
+/**
+ * Impressão digital visual do comprovante (average hash 8x8, 64 bits): a
+ * mesma imagem reenviada, mesmo recomprimida, dá o mesmo hash. É o que pega
+ * comprovante reaproveitado em outro pedido.
+ */
 function pix_proof_average_hash(string $bytes, string $mime): ?string
 {
     $image = pix_proof_load_image($bytes, $mime);
@@ -53,6 +58,10 @@ function pix_proof_average_hash(string $bytes, string $mime): ?string
     return $hex;
 }
 
+/**
+ * Carimba o comprovante com o pedido e a hora do envio, pra imagem não servir
+ * de prova em outro lugar. Devolve null se a imagem não abre.
+ */
 function pix_proof_watermark(string $bytes, string $mime, string $label): ?string
 {
     $image = pix_proof_load_image($bytes, $mime);

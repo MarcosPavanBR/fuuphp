@@ -30,7 +30,7 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (trinta e uma migrações SQL), a **API em PHP** sobre
+A **fundação de banco** (trinta e duas migrações SQL), a **API em PHP** sobre
 ela e os **quatro apps em Svelte** (`web/`): cliente, painel da loja, app do
 entregador e painel da plataforma. As 15 fases do mock estão construídas --
 onboarding, descoberta, cardápio e carrinho, os cinco meios de pagamento
@@ -56,6 +56,8 @@ docs/                      a documentação do sistema (abaixo)
 
 ## Documentação
 
+Começo rápido: [docs/README.md](docs/README.md) diz qual documento ler pra cada necessidade.
+
 | Documento | Pra quê |
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | como o sistema é montado: camadas, caminho da requisição, regras do banco, dinheiro |
@@ -64,6 +66,9 @@ docs/                      a documentação do sistema (abaixo)
 | [docs/CONVENTIONS.md](docs/CONVENTIONS.md) | nomes, comentários, erros, dinheiro, testes |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | subir, configurar, cron, migrar, testar |
 | [docs/GO_LIVE.md](docs/GO_LIVE.md) | do simulado ao real: VPS, credenciais, validação antes de abrir |
+| [docs/MANUAL.md](docs/MANUAL.md) | como cada público usa o sistema: cliente, loja, entregador, plataforma |
+| [docs/SECURITY.md](docs/SECURITY.md) | o que protege o sistema, onde, e com qual teste |
+| [docs/GLOSSARY.md](docs/GLOSSARY.md) | os termos do negócio e o nome deles no código |
 | [docs/decisions/](docs/decisions/README.md) | as decisões de cada módulo: o que o mock pedia, o que foi feito, o que foi simplificado |
 
 ## Como rodar localmente

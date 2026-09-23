@@ -5,8 +5,10 @@ caminho de uma requisição, as regras que o banco garante sozinho e como o
 dinheiro circula. Para *o que existe*, veja os catálogos gerados:
 [API.md](API.md) (todas as rotas) e [DATABASE.md](DATABASE.md) (todas as
 tabelas). Para *como se escreve código aqui*, [CONVENTIONS.md](CONVENTIONS.md).
-Para *como se opera*, [OPERATIONS.md](OPERATIONS.md). As decisões módulo a
-módulo, com o contexto de cada uma, estão em [decisions/](decisions/).
+Para *como se opera*, [OPERATIONS.md](OPERATIONS.md). Pro que protege o
+sistema, [SECURITY.md](SECURITY.md); pra como cada público o usa,
+[MANUAL.md](MANUAL.md). As decisões módulo a módulo, com o contexto de cada
+uma, estão em [decisions/](decisions/).
 
 ## A stack é fixa (cláusula zero)
 

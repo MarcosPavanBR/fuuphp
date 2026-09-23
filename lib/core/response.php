@@ -17,6 +17,9 @@ function trace_id(): string
     return $id;
 }
 
+/**
+ * Responde JSON com o status e encerra a requisição.
+ */
 function json_response(int $status, array $body): never
 {
     http_response_code($status);
@@ -41,6 +44,9 @@ function error_response(int $status, string $code, string $message, ?string $det
     json_response($status, $body);
 }
 
+/**
+ * Corpo JSON da requisição como array; corpo inválido encerra com 400.
+ */
 function read_json_body(): array
 {
     $raw = file_get_contents('php://input') ?: '';

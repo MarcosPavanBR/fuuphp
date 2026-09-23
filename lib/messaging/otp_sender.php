@@ -31,6 +31,9 @@ const TWILIO_DEFAULT_API_BASE = 'https://api.twilio.com';
 const TWILIO_CONNECT_TIMEOUT_SECONDS = 3;
 const TWILIO_TIMEOUT_SECONDS = 6;
 
+/**
+ * O provedor em uso (OTP_SENDER); vazio em development/testing vira `log`.
+ */
 function otp_sender_driver(): string
 {
     $driver = (string) env('OTP_SENDER', '');
@@ -155,6 +158,10 @@ function phone_to_e164(string $phone): ?string
     return null;
 }
 
+/**
+ * Base da API da Twilio. Só muda nos testes (Twilio falsa); a trava de
+ * produção recusa qualquer outra.
+ */
 function twilio_api_base(): string
 {
     return rtrim((string) env('TWILIO_API_BASE', TWILIO_DEFAULT_API_BASE), '/');

@@ -40,6 +40,9 @@ Em português, explicando **por quê** -- o "o quê" o código já diz.
   decisões que não são óbvias. Nas rotas, o primeiro parágrafo vira o
   resumo do [catálogo da API](API.md) -- `php bin/generate_api_catalog.php
   --missing` lista quem está sem.
+- **Toda função de `lib/` tem docblock** (`/** ... */`) logo acima: o que
+  ela faz, o que garante e, quando importa, quem chama. Função pequena
+  ganha uma linha; regra de negócio ganha o porquê.
 - Simplificação assumida, limite conhecido ou coisa não validada (ex.: API
   real do Mercado Pago) é escrita no código **e** na decisão do módulo, com
   a palavra "não" bem visível. Nada finge funcionar.

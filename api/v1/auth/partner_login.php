@@ -7,6 +7,15 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 // Tela 10.7 / 8.1 — login de parceiro: loja com CNPJ + senha, entregador com
 // CPF + código de acesso. Devolve o token com o papel e o vínculo
 // (restaurant_id / courier_id) que os guardas de cada rota conferem.
+//
+// Limite de tentativas (migração 032): 5 erros no mesmo login ou 30 no mesmo
+// IP em 15 minutos dão 429, conferidos ANTES da senha -- senão o bloqueio
+// ainda deixaria descobrir a certa. Sem isso, o código de acesso do
+// entregador (6 dígitos) cairia por força bruta.
+
+const PARTNER_LOGIN_MAX_FAILURES = 5;
+const PARTNER_LOGIN_MAX_FAILURES_PER_IP = 30;
+const PARTNER_LOGIN_WINDOW_MINUTES = 15;
 
 require_method('POST');
 $body = read_json_body();
@@ -31,6 +40,30 @@ if ($secret === '') {
 }
 
 $pdo = db();
+$ip = client_ip();
+
+$failures = $pdo->prepare(
+    "SELECT count(*) FILTER (WHERE kind = :kind AND login_code = :login_code),
+            count(*) FILTER (WHERE :ip::inet IS NOT NULL AND ip = :ip2::inet)
+       FROM partner_login_failures
+      WHERE created_at > now() - make_interval(mins => :window)"
+);
+$failures->execute([
+    'kind' => $kind, 'login_code' => $loginCode, 'ip' => $ip, 'ip2' => $ip,
+    'window' => PARTNER_LOGIN_WINDOW_MINUTES,
+]);
+[$loginFailures, $ipFailures] = array_map('intval', $failures->fetch(PDO::FETCH_NUM));
+if ($loginFailures >= PARTNER_LOGIN_MAX_FAILURES || $ipFailures >= PARTNER_LOGIN_MAX_FAILURES_PER_IP) {
+    error_response(429, 'login_locked',
+        'Muitas tentativas erradas. Espere ' . PARTNER_LOGIN_WINDOW_MINUTES . ' minutos ou fale com o suporte.');
+}
+
+/** Registra o erro e responde 401 -- conta inexistente e senha errada são a mesma resposta. */
+$refuse = static function () use ($pdo, $kind, $loginCode, $ip): never {
+    $pdo->prepare('INSERT INTO partner_login_failures (kind, login_code, ip) VALUES (:k, :l, :ip)')
+        ->execute(['k' => $kind, 'l' => $loginCode, 'ip' => $ip]);
+    error_response(401, 'invalid_credentials', 'Credenciais inválidas.');
+};
 
 $stmt = $pdo->prepare(
     'SELECT pa.*, u.role, u.blocked FROM partner_accounts pa
@@ -41,7 +74,7 @@ $stmt->execute(['kind' => $kind, 'login_code' => $loginCode]);
 $account = $stmt->fetch();
 
 if ($account === false) {
-    error_response(401, 'invalid_credentials', 'Credenciais inválidas.');
+    $refuse();
 }
 if ($account['blocked']) {
     error_response(403, 'user_blocked', 'Conta bloqueada. Fale com o suporte.');
@@ -52,12 +85,15 @@ $secretOk = $kind === 'restaurant'
     : hash_equals((string) ($account['access_code_hash'] ?? ''), hash('sha256', $secret));
 
 if (!$secretOk) {
-    error_response(401, 'invalid_credentials', 'Credenciais inválidas.');
+    $refuse();
 }
+// Acertou: os erros anteriores deste login não contam mais.
+$pdo->prepare('DELETE FROM partner_login_failures WHERE kind = :k AND login_code = :l')
+    ->execute(['k' => $kind, 'l' => $loginCode]);
 
 // 2FA por aparelho, na forma simples que o esquema suporta: confiança no
-// primeiro uso. Troca de aparelho exige reset manual (suporte/admin) --
-// um fluxo de re-verificação automática não está especificado.
+// primeiro uso. A troca de aparelho é liberada pelo suporte, na aba
+// Aparelhos do painel da plataforma (admin/partner_devices.php).
 if ($deviceId !== null) {
     if ($account['device_id'] === null) {
         $pdo->prepare('UPDATE partner_accounts SET device_id = :d WHERE id = :id')
@@ -80,7 +116,7 @@ $tokens = issue_tokens(
     (string) $account['role'],
     extraClaims: $extraClaims,
     deviceLabel: $deviceId,
-    ip: client_ip()
+    ip: $ip
 );
 
 json_response(200, [

@@ -31,11 +31,18 @@ function pix_copy_paste(string $pixKey, float $amount, string $txid, string $mer
     return $payload . pix_crc16($payload);
 }
 
+/**
+ * Um campo do BR Code: id + tamanho com 2 dígitos + valor (EMV TLV).
+ */
 function pix_tlv(string $id, string $value): string
 {
     return $id . str_pad((string) strlen($value), 2, '0', STR_PAD_LEFT) . $value;
 }
 
+/**
+ * Tira acento e o que não é ASCII imprimível: o BR Code só aceita isso em
+ * nome e cidade do recebedor.
+ */
 function pix_ascii(string $value): string
 {
     $transliterated = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
@@ -45,6 +52,10 @@ function pix_ascii(string $value): string
     return trim(preg_replace('/[^\x20-\x7E]/', '', $value) ?? '');
 }
 
+/**
+ * CRC16-CCITT (0x1021, início 0xFFFF) do payload, em 4 dígitos hex: o campo
+ * 63 que fecha o copia-e-cola.
+ */
 function pix_crc16(string $payload): string
 {
     $crc = 0xFFFF;

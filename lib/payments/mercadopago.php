@@ -26,6 +26,10 @@ function mp_mode(): string
     return env('MERCADOPAGO_ACCESS_TOKEN', '') === '' ? 'fake' : 'live';
 }
 
+/**
+ * Chamada crua à API do Mercado Pago com o token da plataforma (15 s de
+ * timeout). Devolve status HTTP e corpo; rede fora do ar vira exceção.
+ */
 function mp_request(string $method, string $path, array $body, ?string $idempotencyKey = null): array
 {
     $headers = ['Content-Type: application/json', 'Authorization: Bearer ' . env('MERCADOPAGO_ACCESS_TOKEN', '')];
@@ -105,6 +109,10 @@ function mp_create_pix_payment(float $amount, string $payerEmail): array
     ];
 }
 
+/**
+ * Resposta de pagamento do Mercado Pago no formato que o módulo guarda
+ * (provider_ref, status, bandeira, últimos 4). Erro sem id vira exceção.
+ */
 function mp_parse_payment_response(array $resp): array
 {
     $body = $resp['body'];
@@ -122,6 +130,11 @@ function mp_parse_payment_response(array $resp): array
     ];
 }
 
+/**
+ * Modo fake: simula o cartão no mesmo formato da API, pra testar sem conta
+ * real. Token começando com OTHE, CONT ou FUND recusa (os nomes de titular
+ * que o sandbox do Mercado Pago usa pra recusar); o resto aprova.
+ */
 function mp_fake_card_payment(string $cardToken, float $amount, int $installments): array
 {
     $upperToken = strtoupper($cardToken);
@@ -136,6 +149,10 @@ function mp_fake_card_payment(string $cardToken, float $amount, int $installment
     ];
 }
 
+/**
+ * Modo fake: simula um Pix automático pendente, com QR e copia-e-cola no
+ * mesmo formato da API.
+ */
 function mp_fake_pix_payment(float $amount): array
 {
     $ref = 'fake_' . bin2hex(random_bytes(8));
@@ -206,6 +223,9 @@ function mp_create_card(string $mpCustomerId, string $cardToken): array
     ];
 }
 
+/**
+ * Apaga o cartão salvo do cliente no Mercado Pago (no fake, não faz nada).
+ */
 function mp_delete_card(string $mpCustomerId, string $mpCardId): void
 {
     if (mp_mode() === 'fake') {

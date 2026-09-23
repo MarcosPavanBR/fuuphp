@@ -64,13 +64,6 @@ function record_coupon_ledger(PDO $pdo, array $coupon, array $order, float $amou
 }
 
 /**
- * Quantas pessoas caem no público de uma campanha, agora.
- *
- * "4.180 pessoas no público" no mock. O número sai de `orders` -- não há
- * tabela de segmentação, e não precisa haver: "sem pedir há 15 dias" é uma
- * consulta, não um cadastro.
- */
-/**
  * A condição SQL (sobre `users u`) de quem pertence ao público de uma
  * campanha. UMA definição só, usada pra contar o público na projeção (tela
  * 15.3) e pra decidir se a pessoa pode usar o cupom (resgate e checkout):
@@ -94,6 +87,10 @@ function coupon_audience_condition(string $audience, bool $scoped): string
     };
 }
 
+/**
+ * Parâmetros da condição de público (coupon_audience_condition): a loja, só
+ * quando a condição consulta pedidos, e a janela em dias dos "sem pedir há".
+ */
 function coupon_audience_params(string $audience, ?string $restaurantId): array
 {
     // 'all' não consulta pedido nenhum (condição `true`): mandar :rid mesmo
@@ -107,7 +104,14 @@ function coupon_audience_params(string $audience, ?string $restaurantId): array
     return $params;
 }
 
-/** Tamanho do público (projeção da tela 15.3). */
+/**
+ * Quantas pessoas caem no público de uma campanha, agora (projeção da tela
+ * 15.3).
+ *
+ * "4.180 pessoas no público" no mock. O número sai de `orders` -- não há
+ * tabela de segmentação, e não precisa haver: "sem pedir há 15 dias" é uma
+ * consulta, não um cadastro.
+ */
 function coupon_audience_size(PDO $pdo, string $audience, ?string $restaurantId = null): int
 {
     $stmt = $pdo->prepare(

@@ -50,6 +50,10 @@ function escpos_wrap(string $text, int $width): array
     return $lines;
 }
 
+/**
+ * Completa o texto até a largura, alinhado à esquerda, direita ou centro,
+ * contando caracteres (não bytes: "ç" ocupa uma coluna na bobina).
+ */
 function escpos_pad(string $text, int $width, string $align): string
 {
     $gap = max(0, $width - mb_strlen($text));

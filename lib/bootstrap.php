@@ -100,6 +100,9 @@ set_exception_handler(static function (Throwable $e): void {
     error_response(500, 'internal_error', 'Erro interno. Tente novamente em instantes.');
 });
 
+/**
+ * Encerra com 405 se o método HTTP não for o esperado pela rota.
+ */
 function require_method(string $method): void
 {
     if ($_SERVER['REQUEST_METHOD'] !== $method) {
@@ -107,6 +110,9 @@ function require_method(string $method): void
     }
 }
 
+/**
+ * O segredo que assina os tokens (JWT_SECRET). Sem ele, nada autentica.
+ */
 function jwt_secret(): string
 {
     return env_required('JWT_SECRET');

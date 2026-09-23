@@ -14,6 +14,10 @@ function require_auth(): array
     return decode_access_token(substr($header, 7));
 }
 
+/**
+ * Valida o JWT de acesso (assinatura e prazo) e devolve as claims; token
+ * ruim ou vencido encerra com 401.
+ */
 function decode_access_token(string $rawToken): array
 {
     try {

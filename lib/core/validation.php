@@ -10,6 +10,9 @@ function only_digits(string $s): string
     return preg_replace('/\D+/', '', $s) ?? '';
 }
 
+/**
+ * CPF com os dois dígitos verificadores certos (e não todos iguais).
+ */
 function is_valid_cpf(string $cpf): bool
 {
     $cpf = only_digits($cpf);
@@ -29,6 +32,9 @@ function is_valid_cpf(string $cpf): bool
     return true;
 }
 
+/**
+ * CNPJ com os dois dígitos verificadores certos (e não todos iguais).
+ */
 function is_valid_cnpj(string $cnpj): bool
 {
     $cnpj = only_digits($cnpj);
@@ -51,11 +57,17 @@ function is_valid_cnpj(string $cnpj): bool
     return $cnpj === substr($cnpj, 0, 12) . $d1 . $d2;
 }
 
+/**
+ * E-mail no formato aceito pelo filtro do PHP.
+ */
 function is_valid_email(string $email): bool
 {
     return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
 }
 
+/**
+ * Telefone brasileiro: de 10 a 13 dígitos (DDD + número, com ou sem 55).
+ */
 function is_valid_phone(string $phone): bool
 {
     $digits = only_digits($phone);

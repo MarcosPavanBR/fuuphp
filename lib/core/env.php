@@ -25,12 +25,18 @@ function load_env(string $path): void
     }
 }
 
+/**
+ * Variável de ambiente (já carregada do .env), ou o padrão.
+ */
 function env(string $key, ?string $default = null): ?string
 {
     $value = getenv($key);
     return $value === false ? $default : $value;
 }
 
+/**
+ * Variável obrigatória: ausente ou vazia é exceção, não padrão silencioso.
+ */
 function env_required(string $key): string
 {
     $value = env($key);

@@ -104,6 +104,10 @@ function find_or_create_cart(PDO $pdo, string $userId, string $restaurantId): ar
     return $insert->fetch();
 }
 
+/**
+ * Recalcula o subtotal do carrinho pela soma das linhas (o total é coluna
+ * gerada no banco e acompanha sozinho).
+ */
 function recompute_cart_subtotal(PDO $pdo, int $orderId): void
 {
     $pdo->prepare(

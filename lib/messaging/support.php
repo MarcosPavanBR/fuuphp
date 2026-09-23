@@ -54,6 +54,9 @@ function support_subject_order(PDO $pdo, string $userId): ?array
     return $order === false ? null : $order;
 }
 
+/**
+ * O pedido ainda está andando (não entregue, cancelado nem recusado)?
+ */
 function support_in_progress(array $order): bool
 {
     return in_array(
@@ -109,6 +112,11 @@ function support_auto_answer(PDO $pdo, string $topic, ?array $order): array
     };
 }
 
+/**
+ * Resposta automática da ajuda (14.1) pra "meu pedido está atrasado", pelo
+ * status real: sem entregador manda pra tela 15.1, em rota manda pro chat,
+ * na cozinha mostra o tempo de preparo em vigor.
+ */
 function support_answer_late(PDO $pdo, array $order, string $status, string $code): array
 {
     if ($status === 'ready' && $order['courier_id'] === null && $order['no_courier_since'] !== null) {
@@ -163,6 +171,10 @@ function support_answer_late(PDO $pdo, array $order, string $status, string $cod
     ];
 }
 
+/**
+ * Resposta automática pra "e o meu Pix?": comprovante na fila da loja (com
+ * o prazo que falta), comprovante ainda não enviado, ou pagamento já aprovado.
+ */
 function support_answer_pix(PDO $pdo, array $order, string $status, string $code): array
 {
     $proofStmt = $pdo->prepare(
@@ -213,6 +225,11 @@ function support_answer_pix(PDO $pdo, array $order, string $status, string $code
     ];
 }
 
+/**
+ * Resposta automática pra "onde está meu estorno?": o último estorno do
+ * CLIENTE (não só do pedido em foco), com valor, caminho e prazo do meio de
+ * pagamento.
+ */
 function support_answer_refund(PDO $pdo, array $order, string $code): array
 {
     // Estorno é do CLIENTE, não do pedido em foco: quem pergunta "onde está

@@ -26,6 +26,10 @@ function call_advance_order(PDO $pdo, int $orderId, string $to, ?string $actorId
     }
 }
 
+/**
+ * O pedido pelo id, ou null. Não confere dono: quem chama usa
+ * authorize_order_access() antes de devolver qualquer coisa.
+ */
 function fetch_order(PDO $pdo, int $orderId): ?array
 {
     $stmt = $pdo->prepare('SELECT * FROM orders WHERE id = :id');
@@ -34,6 +38,9 @@ function fetch_order(PDO $pdo, int $orderId): ?array
     return $order === false ? null : $order;
 }
 
+/**
+ * As linhas do pedido, na ordem em que entraram no carrinho.
+ */
 function fetch_order_items(PDO $pdo, int $orderId): array
 {
     $stmt = $pdo->prepare('SELECT * FROM order_items WHERE order_id = :id ORDER BY id');

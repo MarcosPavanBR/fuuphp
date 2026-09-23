@@ -1,7 +1,7 @@
 name: ci
 
 # ADR-002 (Especificacao FUUDelivery, Parte I): migracoes versionadas rodam
-# no CI, nunca no cPanel. Este workflow aplica as trinta e uma migracoes do zero,
+# no CI, nunca no cPanel. Este workflow aplica as trinta e duas migracoes do zero,
 # reverte tudo e aplica de novo contra um PostgreSQL 16 real com pg_cron, e
 # depois roda o smoke test de cada modulo PHP sobre esse banco migrado.
 
@@ -57,7 +57,7 @@ jobs:
             sleep 2
           done
 
-      - name: Aplicar as 31 migracoes (up)
+      - name: Aplicar as 32 migracoes (up)
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
         run: |
@@ -68,7 +68,7 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
         run: |
-          bash db/migrate.sh down 31
+          bash db/migrate.sh down 32
           bash db/migrate.sh up
 
       - name: "Senha do role app_rw (a API das suítes conecta com ele)"

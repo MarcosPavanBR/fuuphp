@@ -6,7 +6,8 @@
 # device_mismatch ("Peça ao suporte para liberar a troca"). O admin acha a
 # conta pelo CNPJ, libera com motivo, as sessões do aparelho antigo morrem
 # (o refresh dele é recusado), o aparelho novo entra e vira o confiável, e a
-# liberação fica no audit_log. Cliente comum não libera nada.
+# liberação fica no audit_log. Cliente comum não libera nada. E o limite de
+# tentativas do login de parceiro (migração 032).
 set -euo pipefail
 
 : "${DATABASE_URL:?defina DATABASE_URL apontando para um banco já migrado}"
@@ -114,5 +115,26 @@ echo "== auditoria guarda quem, o aparelho antigo e o motivo =="
 AUDIT=$(psql "$DATABASE_URL" -tAc "SELECT actor_id || '|' || (before->>'device_id') || '|' || (after->>'reason')
   FROM audit_log WHERE action = 'partner.device_released' AND target = 'partner_accounts:${ACCOUNT}'")
 [ "$AUDIT" = "${ADMIN_ID}|tablet-A-${STAMP}|tablet A quebrou, dono confirmou por telefone" ] || fail "auditoria errada: '$AUDIT'"
+
+echo "== limite de tentativas (migração 032): acertar zera; 5 erros travam até a senha certa =="
+wrong() {
+  curl -s -X POST "$BASE/auth/partner_login.php" -H "Content-Type: application/json" \
+    -d "{\"kind\":\"restaurant\",\"login_code\":\"${CNPJ}\",\"secret\":\"errada\",\"device_id\":\"tablet-B-${STAMP}\"}" | jq -r '.code'
+}
+for i in 1 2 3; do [ "$(wrong)" = "invalid_credentials" ] || fail "erro $i não deu 401"; done
+store_login "tablet-B-${STAMP}" | jq -e '.access_token' >/dev/null || fail "senha certa recusada depois de 3 erros"
+[ "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM partner_login_failures WHERE login_code='${CNPJ}'")" = "0" ] \
+  || fail "acertar a senha não zerou os erros"
+for i in 1 2 3 4 5; do [ "$(wrong)" = "invalid_credentials" ] || fail "erro $i (de 5) não deu 401"; done
+[ "$(store_login "tablet-B-${STAMP}" | jq -r '.code')" = "login_locked" ] || fail "6ª tentativa, mesmo com a senha certa, não travou"
+# Conta que não existe também conta erro (e dá a mesma resposta que senha errada).
+GHOST="$(php "$ROOT/tests/support/random_cnpj.php")"
+R=$(curl -s -X POST "$BASE/auth/partner_login.php" -H "Content-Type: application/json" \
+  -d "{\"kind\":\"restaurant\",\"login_code\":\"${GHOST}\",\"secret\":\"x\"}")
+[ "$(echo "$R" | jq -r '.code')" = "invalid_credentials" ] || fail "conta inexistente respondeu diferente: $R"
+[ "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM partner_login_failures WHERE login_code='${GHOST}'")" = "1" ] \
+  || fail "erro em conta inexistente não foi contado"
+# Destrava pra não sobrar estado pras próximas suítes.
+psql_run -c "DELETE FROM partner_login_failures WHERE login_code IN ('${CNPJ}', '${GHOST}')"
 
 echo "smoke_partner_device OK"

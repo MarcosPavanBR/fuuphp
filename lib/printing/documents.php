@@ -21,6 +21,9 @@ const PRINT_METHOD_LABEL = [
     'pos_machine' => 'COBRAR NA ENTREGA · MAQUININHA',
 ];
 
+/**
+ * CNPJ com máscara pro papel: 12.345.678/0001-90.
+ */
 function print_cnpj(string $cnpj): string
 {
     $d = preg_replace('/\D/', '', $cnpj) ?? '';
@@ -30,6 +33,9 @@ function print_cnpj(string $cnpj): string
         : $cnpj;
 }
 
+/**
+ * Valor em reais pro papel: R$ 1.234,56.
+ */
 function print_money(float $v): string
 {
     return 'R$ ' . number_format($v, 2, ',', '.');
