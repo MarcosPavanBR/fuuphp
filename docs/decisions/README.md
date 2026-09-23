@@ -41,3 +41,4 @@ pra ele (ex.: o mapa do acompanhamento em 06 → 16).
 - [31 — Impressão ESC/POS e recibo de baixa (4.5, 7.3, 9.3, 9.4, 11.1)](31-impressao-escpos-e-recibo-de-baixa.md)
 - [32 — Fidelidade (tela 2.3)](32-fidelidade.md)
 - [33 — Go-live: do simulado ao real](33-go-live.md)
+- [34 — Código de login por SMS pela Twilio](34-otp-twilio.md)

@@ -2,6 +2,7 @@
   import { toastr } from '../../utils/toastr.js';
   import { ApiError } from '../../services/api.js';
   import { requestOtp } from '../../state/customerSession.svelte.js';
+  import { authChannels } from '../../services/authChannels.js';
 
   // Tela 10.1 — "Sem senha no primeiro acesso: código de uso único. Login
   // social é atalho, não obrigatório. A base legal aparece na própria tela."
@@ -19,6 +20,13 @@
   let fullName = $state('');
   let needsName = $state(false);
   let busy = $state(false);
+  // A aba "E-mail" só aparece se o provedor do servidor manda código por
+  // e-mail (em produção com a Twilio, não manda).
+  let emailAvailable = $state(false);
+
+  $effect(() => {
+    authChannels().then((c) => (emailAvailable = c.email === true));
+  });
 
   let digits = $derived(phone.replace(/\D/g, ''));
   // (19) 99128-4407 — máscara só na exibição; o que vai pro servidor é
@@ -68,19 +76,22 @@
     <div class="mark fuu-display">FUU</div>
     <h1 class="fuu-display">Entrar no FUUDelivery</h1>
     <p class="sub">
-      Telefone ou e-mail. Enviamos um código de 6 dígitos — você não precisa criar senha.
+      {emailAvailable ? 'Telefone ou e-mail.' : 'Seu celular.'} Enviamos um código de 6 dígitos — você não precisa
+      criar senha.
     </p>
   </header>
 
   <div class="form">
-    <div class="switch" role="tablist">
-      <button type="button" role="tab" class:on={mode === 'phone'} onclick={() => switchMode('phone')}>
-        <i class="bi bi-phone"></i> Telefone
-      </button>
-      <button type="button" role="tab" class:on={mode === 'email'} onclick={() => switchMode('email')}>
-        <i class="bi bi-envelope"></i> E-mail
-      </button>
-    </div>
+    {#if emailAvailable}
+      <div class="switch" role="tablist">
+        <button type="button" role="tab" class:on={mode === 'phone'} onclick={() => switchMode('phone')}>
+          <i class="bi bi-phone"></i> Telefone
+        </button>
+        <button type="button" role="tab" class:on={mode === 'email'} onclick={() => switchMode('email')}>
+          <i class="bi bi-envelope"></i> E-mail
+        </button>
+      </div>
+    {/if}
 
     {#if mode === 'phone'}
       <p class="label">Número de celular</p>

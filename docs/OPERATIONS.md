@@ -31,7 +31,10 @@ requisição por vez: com o acompanhamento aberto (SSE), use
 | `MERCADOPAGO_MODE` | `fake` força simulação | — |
 | `MERCADOPAGO_WEBHOOK_SECRET` | confere a assinatura do webhook (sem ele, recusado em staging/produção) | — |
 | `MERCADOPAGO_PUBLIC_KEY` | tokenização do cartão no navegador | — |
-| `OTP_SENDER` | provedor do código de login | `log` em development/testing; em produção, provedor pendente |
+| `OTP_SENDER` | provedor do código de login: `twilio` em produção | `log` em development/testing |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | credenciais da Twilio (SMS do código de login) | — |
+| `TWILIO_FROM` ou `TWILIO_MESSAGING_SERVICE_SID` | remetente do SMS (`+55...` ou `MG...`) | — |
+| `TWILIO_WHATSAPP_FROM` | liga "Receber por WhatsApp" na tela do código | desligado |
 | `PROOF_STORAGE_DIR` | comprovantes de Pix e fotos de ocorrência (privado) | `storage/proofs` |
 | `MENU_PHOTO_DIR` | fotos do cardápio (público) | `storage/menu` |
 | `COURIER_DOC_DIR` | documentos da candidatura (privado) | `storage/courier_docs` |

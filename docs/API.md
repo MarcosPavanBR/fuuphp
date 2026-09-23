@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_api_catalog.php` a partir dos próprios arquivos de
 > `api/v1`. Não edite à mão: o CI confere (`--check`) e falha se estiver desatualizado.
 
-109 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
+110 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
 `{code, message, trace_id}` com o status HTTP certo (`lib/core/response.php`). As URLs são
 contrato público: mudar um caminho quebra app instalado.
 
@@ -42,6 +42,7 @@ contrato público: mudar um caminho quebra app instalado.
 
 | Rota | Métodos | Quem | Idem. | O que faz |
 |---|---|---|---|---|
+| `/api/v1/auth/channels.php` | GET | público |  | Tela 10.1 — por quais canais o código de login pode chegar agora. |
 | `/api/v1/auth/consent.php` | POST | autenticado |  | Tela 10.3 — registra o aceite de um termo (termos, privacidade, marketing, localização) com versão e IP. Termos + privacidade marcam a conta como `lgpd_accepted_at`; marketing e localização ficam como consentimentos separados e revogáveis. |
 | `/api/v1/auth/otp_request.php` | POST | público |  | Tela 10.1/10.2 — pede o código de 6 dígitos (OTP) por telefone ou e-mail, pra entrar (`login`), criar conta (`signup`) ou confirmar um telefone (`phone_verify`). Em desenvolvimento o código volta em `dev_code`; em produção só vai pelo canal. |
 | `/api/v1/auth/otp_verify.php` | POST | público |  | Tela 10.2 — confere o código OTP e devolve access token (15 min) e refresh token (30 dias, com rotação). Código tem prazo e limite de tentativas; conta bloqueada ou excluída (LGPD, migração 026) não entra. |

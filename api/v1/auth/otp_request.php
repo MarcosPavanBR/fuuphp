@@ -30,6 +30,29 @@ if ($email !== null && !is_valid_email($email)) {
     error_response(422, 'invalid_email', 'E-mail inválido.', fields: ['email' => 'inválido']);
 }
 
+// A tela 10.2 oferece "receber por WhatsApp" quando o SMS não chega. Quem
+// entrou por telefone escolhe entre os dois; quem entrou por e-mail não
+// escolhe nada -- só existe um canal possível. A "ligação automática" que o
+// mock também cita ficou de fora: o enum de otp_codes.channel não prevê esse
+// canal, e inventar valor de enum pra caber numa tela é a ordem errada.
+$channel = $phone !== null ? 'sms' : 'email';
+if ($phone !== null && isset($body['channel'])) {
+    $channel = (string) $body['channel'];
+    if (!in_array($channel, ['sms', 'whatsapp'], true)) {
+        error_response(422, 'invalid_channel', 'Canal precisa ser sms ou whatsapp.', fields: ['channel' => 'inválido']);
+    }
+}
+// Antes de criar conta ou código: o provedor configurado entrega por esse
+// canal? (Twilio manda SMS; e-mail não.) Sem isso, um cadastro por e-mail
+// criaria o usuário e só então falharia no envio.
+if (!in_array($channel, otp_sender_channels(), true)) {
+    error_response(422, 'channel_unavailable', match ($channel) {
+        'email' => 'Entrar por e-mail não está disponível. Use o seu celular.',
+        'whatsapp' => 'O código por WhatsApp não está disponível. Receba por SMS.',
+        default => 'Envio de código indisponível agora. Tente de novo em instantes.',
+    }, fields: ['channel' => 'indisponível']);
+}
+
 $pdo = db();
 
 if ($phone !== null) {
@@ -75,18 +98,6 @@ if (otp_requests_in_window($pdo, $userId, $purpose) >= OTP_MAX_REQUESTS_PER_WIND
 }
 
 $code = generate_otp_code();
-// A tela 10.2 oferece "receber por WhatsApp" quando o SMS não chega. Quem
-// entrou por telefone escolhe entre os dois; quem entrou por e-mail não
-// escolhe nada -- só existe um canal possível. A "ligação automática" que o
-// mock também cita ficou de fora: o enum de otp_codes.channel não prevê esse
-// canal, e inventar valor de enum pra caber numa tela é a ordem errada.
-$channel = $phone !== null ? 'sms' : 'email';
-if ($phone !== null && isset($body['channel'])) {
-    $channel = (string) $body['channel'];
-    if (!in_array($channel, ['sms', 'whatsapp'], true)) {
-        error_response(422, 'invalid_channel', 'Canal precisa ser sms ou whatsapp.', fields: ['channel' => 'inválido']);
-    }
-}
 
 $insertOtp = $pdo->prepare(
     'INSERT INTO otp_codes (user_id, channel, code_hash, purpose, expires_at)

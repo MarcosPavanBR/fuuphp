@@ -91,9 +91,10 @@ O passo a passo está em [docs/GO_LIVE.md](docs/GO_LIVE.md)
 ([decisão 33](docs/decisions/33-go-live.md)). O que falta depende de conta
 real ou de decisão do dono do produto:
 
-1. **Provedor de OTP (SMS/e-mail).** Sem ele a produção não sobe. Escolhido
-   o provedor, ele entra como driver em `lib/messaging/otp_sender.php`, com
-   `curl` nativo.
+1. **Conta da Twilio** pro código de login por SMS (decisão do Marcos, já
+   implementada com `curl` nativo, [34](docs/decisions/34-otp-twilio.md)):
+   Account SID, Auth Token e um número com SMS pro Brasil no `.env`. A
+   conta trial só manda pra números verificados.
 2. **Mercado Pago: uma rodada no sandbox** com o token único da plataforma
    antes de produção: cartão, Pix, webhook, estorno e gorjeta
    ([05](docs/decisions/05-pagamentos.md),
@@ -110,7 +111,7 @@ real ou de decisão do dono do produto:
 5. **Quando levar os arquivos pro Cloudflare R2.** Hoje ficam no disco da
    VPS, fora do projeto, e só saem por rota autenticada.
 
-Já decidido: o **Mercado Pago usa token único da plataforma** (a loja
+Já decidido: o **código de login vai por SMS pela Twilio**; o **Mercado Pago usa token único da plataforma** (a loja
 recebe pelo repasse semanal do livro-razão); a **fidelidade (2.3) entra no
 lançamento**
 ([32](docs/decisions/32-fidelidade.md)), e o **login com Google/Apple fica

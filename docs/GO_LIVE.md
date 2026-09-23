@@ -22,7 +22,7 @@ Regras que valem pra tudo aqui:
 |---|---|---|
 | 1. Trava de produção | pronto | `lib/core/production_guard.php`, `bin/check_production.php`, `tests/smoke_production_guard.sh` |
 | 2. Mercado Pago sandbox → produção | pronto no código; falta a conta | "Mercado Pago" abaixo |
-| 3. OTP real | envio plugável pronto; **provedor pendente** | `lib/messaging/otp_sender.php` |
+| 3. OTP real | pronto: SMS pela Twilio; falta a conta | `lib/messaging/otp_sender.php`, `tests/smoke_otp_twilio.sh` |
 | 4. Push real | pronto; falta gerar a chave na VPS | "Push" abaixo |
 | 5. Storage | fase 1 (disco da VPS, fora do projeto) pronta; fase 2 (R2) **pendente** | "Arquivos enviados" abaixo |
 | 6. Admin fundador | pronto | `bin/bootstrap_admin.php`, `tests/smoke_bootstrap_admin.sh` |
@@ -244,7 +244,7 @@ sudo -u fuuphp FUU_ENV_FILE=/etc/fuuphp/fuuphp.env \
 O script cria o admin e a política da plataforma v1 (comissão 8%, teto de
 espécie R$ 300, os cinco meios de pagamento). Ele recusa se já existir admin.
 Não há senha: o admin entra pelo mesmo código por SMS/e-mail. Por isso, **o
-provedor de OTP precisa estar no ar antes do primeiro login**. Frete e taxas
+SMS da Twilio precisa estar funcionando antes do primeiro login**. Frete e taxas
 começam zerados e são ajustados no painel (10.5).
 
 ## 4. Mercado Pago: sandbox → produção
@@ -277,21 +277,44 @@ O Pix manual continua fora do Mercado Pago: cai direto na chave Pix da loja
 5. Produção: troque para as credenciais de **produção** (`APP_USR-...`) e
    `APP_ENV=production`. A trava recusa `TEST-` em produção.
 
-## 5. OTP (login)
+## 5. OTP (login) — SMS pela Twilio
 
-`send_otp($canal, $destino, $codigo)` em `lib/messaging/otp_sender.php`:
+Decisão do Marcos: o código de login vai **por SMS, pela Twilio**
+(`OTP_SENDER=twilio`). O envio usa a API REST da Twilio com `curl` nativo,
+sem SDK e sem Composer (`lib/messaging/otp_sender.php`).
 
-- quando o envio falha, a rota apaga o código gerado e responde `502
-  otp_send_failed`, e a pessoa pode pedir de novo;
-- o limite de tentativas (429) continua valendo;
-- o código nunca vai pro log.
+Na conta da Twilio:
 
-O driver `log` só existe em `development`/`testing`.
+1. **Console > Account Info:** copie o Account SID (`AC...`) e o Auth
+   Token pro `.env` (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`).
+2. **Remetente:** compre ou habilite um número com SMS pro Brasil e
+   ponha em `TWILIO_FROM` (`+55...`). A outra opção é criar um Messaging
+   Service e usar `TWILIO_MESSAGING_SERVICE_SID` (`MG...`) no lugar.
+3. **Conta trial só manda SMS pra números verificados.** Pra homologação
+   serve; antes de abrir, faça o upgrade da conta.
+4. **Opcional, WhatsApp:** com um remetente de WhatsApp aprovado na Twilio,
+   `TWILIO_WHATSAPP_FROM=+55...` liga o "Receber por WhatsApp" na tela do
+   código. Sem ele, a opção não aparece.
 
-**Pendente: qual provedor de SMS/e-mail.** Escolhido o provedor, ele entra
-como um driver novo em `otp_sender.php`: `curl` nativo, timeout curto,
-credenciais no `.env`. Sem SDK e sem Composer. Até lá, a trava não deixa
-subir em produção.
+Como funciona:
+
+- a tela de login só oferece os canais que o provedor entrega
+  (`auth/channels.php`). Com a Twilio, isso é telefone; **login por e-mail
+  fica indisponível**, porque a Twilio não manda e-mail por esta API. Pedir por
+  um canal indisponível dá `422 channel_unavailable` antes de criar conta;
+- a mensagem é curta e sem link: "FUU: seu código é 123456. Vale por 5
+  minutos. Não passe pra ninguém.";
+- quando a Twilio recusa ou não responde em 6 s, o código gerado é apagado
+  e a rota responde `502 otp_send_failed`, e a pessoa pode pedir de novo;
+- o limite de pedidos (429) continua valendo, o que também protege a conta
+  da Twilio contra quem tentar disparar SMS em massa;
+- o log registra só o status e o código de erro da Twilio (ex.: 21211,
+  número inválido; 21608, conta trial), com o telefone mascarado. Nunca o
+  código, nunca o token.
+
+A trava de produção recusa subir com `OTP_SENDER=twilio` sem Account SID
+válido, sem Auth Token ou sem remetente. Também recusa `TWILIO_API_BASE`
+trocada: essa base só muda nos testes, que usam uma Twilio falsa local.
 
 ## 6. Push
 
@@ -328,7 +351,7 @@ verdade:
 - [ ] `php bin/check_production.php` diz "ok" com o `.env` real.
 - [ ] Sem o `.env` (ou com um segredo apagado), a API responde 503 e o log diz o que falta.
 - [ ] `https://<dominio>/.env`, `/lib/core/db.php` e `/storage/...` não entregam nada do projeto.
-- [ ] Login por SMS/e-mail chega de verdade; errar 5 vezes dá 429.
+- [ ] O SMS de login chega de verdade (Twilio fora do trial) e a tela não oferece e-mail; errar o código 5 vezes bloqueia o código (429) e pedir código demais também dá 429.
 - [ ] O admin fundador entra e ajusta frete e taxas (10.5).
 - [ ] Uma loja de teste recebe pedido, aceita, imprime (ESC/POS) e marca pronto.
 - [ ] Cartão de teste aprovado e recusado; o webhook chega; o estorno sai.
@@ -349,11 +372,10 @@ baixo, estornado em seguida.
 
 | Decisão | Enquanto não decide |
 |---|---|
-| Provedor de OTP (SMS/e-mail) | a produção não sobe |
 | VPS (provedor, tamanho) e domínio | `deploy/` está pronto pra qualquer Ubuntu 24.04/Debian 12 |
 | Cópia do backup fora da VPS (destino) | backup só dentro da VPS (o script avisa) |
 | Quando levar os arquivos pro R2 | disco da VPS (fase 1) |
 
-Já decidido pelo Marcos: o **Mercado Pago usa token único da plataforma**;
+Já decidido pelo Marcos: o **código de login vai por SMS pela Twilio**; o **Mercado Pago usa token único da plataforma**;
 a **fidelidade (2.3) entra no lançamento** e fica
 na lista de validação abaixo; o **login com Google/Apple fica pra v2**.

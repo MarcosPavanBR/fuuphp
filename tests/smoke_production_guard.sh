@@ -4,8 +4,8 @@
 #
 #  - APP_ENV=production com .env incompleto: CLI sai com 1 listando os
 #    motivos; HTTP responde 503 sem detalhe nenhum pro cliente;
-#  - com tudo configurado, só sobra o que ainda depende de decisão (provedor
-#    de OTP) -- e isso também derruba;
+#  - com tudo configurado menos o OTP, só o OTP segura; com a Twilio
+#    configurada, a produção sobe;
 #  - staging aceita token de sandbox (TEST-), produção não;
 #  - webhook sem segredo: aceito só fora de produção/homologação;
 #  - dev_code do OTP só em development/testing.
@@ -51,7 +51,7 @@ RESP=$(curl -s -w '|%{http_code}' "http://127.0.0.1:${PORT}/api/v1/push/config.p
 echo "${RESP%|*}" | grep -q -i "jwt\|mercado\|vapid\|otp" && fail "o 503 vazou detalhe da configuração: $RESP"
 grep -q "production_guard: JWT_SECRET" /tmp/smoke-guard-server.log || fail "motivo não foi pro log do servidor"
 
-echo "== tudo configurado: só o provedor de OTP (decisão pendente) ainda segura =="
+echo "== tudo configurado menos o OTP: só o provedor de OTP segura =="
 "${full_env[@]}" FUU_SKIP_PRODUCTION_GUARD=1 APP_ENV=production VAPID_PRIVATE_KEY_FILE="$SAFE/vapid/private.pem" \
   php "$ROOT/bin/generate_vapid_keys.php" >/dev/null 2>&1 || fail "gerar a chave VAPID em produção falhou"
 set +e
@@ -64,6 +64,12 @@ set +e
 OUT=$("${full_env[@]}" APP_ENV=production OTP_SENDER=log php -r "$boot" "$ROOT/lib/bootstrap.php" 2>&1)
 set -e
 echo "$OUT" | grep -q "OTP_SENDER=log só vale em development" || fail "OTP 'log' aceito em produção: $OUT"
+
+echo "== tudo configurado, com a Twilio: produção SOBE =="
+OUT=$("${full_env[@]}" APP_ENV=production OTP_SENDER=twilio TWILIO_ACCOUNT_SID="AC$(php -r 'echo bin2hex(random_bytes(16));')" \
+      TWILIO_AUTH_TOKEN=token-de-teste TWILIO_FROM=+5511955554444 php -r "$boot" "$ROOT/lib/bootstrap.php" 2>&1) \
+  || fail "produção completa não subiu: $OUT"
+[ "$OUT" = "SUBIU" ] || fail "produção completa não subiu: $OUT"
 
 echo "== sandbox: TEST- recusado em produção, aceito em staging =="
 set +e
@@ -97,7 +103,7 @@ set +e
 OUT=$(env -i PATH="$PATH" HOME="$HOME" FUU_ENV_FILE="$ROOT/deploy/env/fuuphp.env.example" php -r "$boot" "$ROOT/lib/bootstrap.php" 2>&1); CODE=$?
 set -e
 [ "$CODE" = "1" ] || fail "modelo de produção sem preencher subiu: $OUT"
-for key in DATABASE_URL JWT_SECRET MERCADOPAGO_ACCESS_TOKEN MERCADOPAGO_PUBLIC_KEY MERCADOPAGO_WEBHOOK_SECRET OTP_SENDER VAPID_SUBJECT; do
+for key in DATABASE_URL JWT_SECRET MERCADOPAGO_ACCESS_TOKEN MERCADOPAGO_PUBLIC_KEY MERCADOPAGO_WEBHOOK_SECRET TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM VAPID_SUBJECT; do
   echo "$OUT" | grep -q "$key ainda com o marcador" || fail "marcador de $key não foi recusado: $OUT"
 done
 

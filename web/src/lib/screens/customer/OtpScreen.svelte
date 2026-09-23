@@ -2,6 +2,7 @@
   import { toastr } from '../../utils/toastr.js';
   import { ApiError } from '../../services/api.js';
   import { requestOtp, verifyOtp } from '../../state/customerSession.svelte.js';
+  import { authChannels } from '../../services/authChannels.js';
 
   // Tela 10.2 — "Só o hash do código fica no banco. Bloqueio por tentativas
   // no servidor, não no app."
@@ -12,6 +13,11 @@
   // -- o navegador continua tratando como um campo de 6 dígitos, que é o
   // que o `autocomplete="one-time-code"` precisa pra funcionar.
   let { contact, purpose, onVerified, onChangeContact } = $props();
+  // "Receber por WhatsApp" só quando o provedor tem remetente de WhatsApp.
+  let whatsappAvailable = $state(false);
+  $effect(() => {
+    authChannels().then((c) => (whatsappAvailable = c.whatsapp === true));
+  });
 
   const RESEND_SECONDS = 60;
 
@@ -127,7 +133,7 @@
     </p>
   </div>
 
-  {#if contact.phone}
+  {#if contact.phone && whatsappAvailable}
     <p class="alt">
       Não recebeu?
       <button type="button" class="link" disabled={busy} onclick={() => resend('whatsapp')}>
