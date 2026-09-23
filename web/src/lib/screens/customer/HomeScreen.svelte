@@ -27,8 +27,8 @@
         query: {
           city_ibge_code: location.city.ibge,
           category,
-          lat: location.lat,
-          lng: location.lng,
+          lat: location.near?.lat ?? location.lat,
+          lng: location.near?.lng ?? location.lng,
         },
       });
       restaurants = data.restaurants;

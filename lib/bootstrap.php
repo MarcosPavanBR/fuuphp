@@ -10,6 +10,14 @@ declare(strict_types=1);
 // pastas de domínio usam `core` e umas às outras só por função (sem estado
 // global). A ordem abaixo só importa pro `core`, que vem primeiro.
 
+// O relógio do negócio é o de Brasília: faixa de agendamento, "hoje", a
+// hora carimbada no comprovante, a semana do acerto. Sem isto o PHP usa o
+// fuso do servidor (UTC na VPS) e uma loja aberta das 11h às 23h ofereceria
+// faixas das 8h às 20h. Comparar instantes (expiração, prazos) não muda:
+// timestamp é o mesmo em qualquer fuso. O banco já faz o mesmo nas tarefas
+// dele (cron.timezone e as funções da migração 018).
+date_default_timezone_set('America/Sao_Paulo');
+
 // ── core: ambiente, banco, HTTP, segurança ─────────────────────────────
 require_once __DIR__ . '/core/env.php';
 // FUU_ENV_FILE aponta outro arquivo (ex.: /etc/fuuphp/staging.env, ou

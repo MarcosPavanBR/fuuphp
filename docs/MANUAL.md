@@ -33,8 +33,8 @@ regras de negócio por trás de cada uma estão em [decisions/](decisions/README
    tempo e frete reais, e a busca por prato ou loja.
 2. **Loja** (3.1–3.3): o cardápio, as variações (tamanho, borda...) e o
    carrinho. Só dá pra ter carrinho em uma loja por vez.
-3. **Cupom**: é digitado no carrinho. Vale um uso por CPF, então o cadastro
-   precisa ter CPF. Cupom de frete grátis é descontado no fechamento, quando
+3. **Cupom**: é digitado no carrinho. Vale um uso por CPF e por conta, então o
+   cadastro precisa ter CPF. Cupom de frete grátis é descontado no fechamento, quando
    o endereço já definiu o frete.
 4. **Endereço e pagamento** (4.1): o frete é calculado pelo endereço. Os
    meios de pagamento são os que a loja aceita:

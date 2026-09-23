@@ -105,9 +105,14 @@ SLOTS=$(curl -s "$BASE/orders/slots.php?restaurant_id=${RESTAURANT_ID}" "${AUTH[
 TODAY=$(echo "$SLOTS" | jq -r '.days[0].day')
 COUNT=$(echo "$SLOTS" | jq -r ".slots[\"${TODAY}\"] | length")
 [ "$COUNT" -gt 0 ] || fail "nenhuma faixa hoje, com a loja aberta o dia todo: $SLOTS"
-# Toda faixa oferecida começa no futuro.
-[ "$(echo "$SLOTS" | jq -r "[.slots[\"${TODAY}\"][] | .start] | map(. > (now | todate)) | all")" = "true" ] \
-  || fail "ofereceu faixa que já começou: $SLOTS"
+# Toda faixa oferecida começa no futuro. Compara instante, não texto: a
+# faixa vem no fuso de Brasília (-03:00) e o relógio do teste, em UTC.
+NOW_EPOCH=$(date +%s)
+for START in $(echo "$SLOTS" | jq -r ".slots[\"${TODAY}\"][] | .start"); do
+  [ "$(date -d "$START" +%s)" -gt "$NOW_EPOCH" ] || fail "ofereceu faixa que já começou ($START): $SLOTS"
+done
+# O dia é o de Brasília: "hoje" do app é o dia do relógio da loja.
+[ "$TODAY" = "$(TZ=America/Sao_Paulo date +%F)" ] || fail "\"hoje\" fora do fuso de Brasília: $TODAY"
 [ "$(echo "$SLOTS" | jq -r ".slots[\"${TODAY}\"][0].free")" = "2" ] || fail "vaga inicial deveria ser a capacidade: $SLOTS"
 
 SLOT_START=$(echo "$SLOTS" | jq -r ".slots[\"${TODAY}\"][0].start")

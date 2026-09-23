@@ -90,8 +90,8 @@ if (!$quote['in_area']) {
 }
 $deliveryFee = (float) $quote['fee'];
 $tip = isset($body['tip']) ? round((float) $body['tip'], 2) : 0.0;
-if ($tip < 0) {
-    error_response(422, 'invalid_tip', 'Gorjeta inválida.');
+if (!is_valid_tip($tip)) {
+    error_response(422, 'invalid_tip', 'Gorjeta inválida (de R$ 0 a R$ 200).', fields: ['tip' => 'de 0 a 200']);
 }
 
 $pdo->beginTransaction();

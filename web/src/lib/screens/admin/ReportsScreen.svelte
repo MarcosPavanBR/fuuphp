@@ -39,7 +39,7 @@
   function changeLabel(v) {
     if (v === null) return 'sem período anterior pra comparar';
     const sign = v > 0 ? '+' : '';
-    return `${sign}${v.toFixed(1).replace('.', ',')}% contra os ${days} dias anteriores`;
+    return `${sign}${v.toFixed(1).replace('.', ',')}% contra os ${data?.period_days ?? days} dias anteriores`;
   }
 
   const WEEKDAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];

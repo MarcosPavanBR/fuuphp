@@ -23,14 +23,14 @@
   import { startPwa, isOnline, canInstall, promptInstall, dismissInstall } from '../lib/state/pwa.svelte.js';
   import { startUploadQueue, queuedCount } from '../lib/services/uploadQueue.svelte.js';
   import { toastr } from '../lib/utils/toastr.js';
+  import { loadServiceStates } from '../lib/services/cities.js';
 
   // Fase 1 (onboarding) -> Fase 2 (navegação principal, abas) -> Fase 3
   // (loja/item/carrinho, tela cheia por cima das abas -- o mock não mostra
   // a barra inferior em 3.1/3.3, é uma pilha própria com botão de voltar).
   // A praça escolhida na Fase 1 fica salva: sem isso, todo reload manda o
-  // cliente refazer o onboarding -- e offline (7.1) isso seria fatal, porque
-  // a lista de cidades é local mas a tela de "onde você está" não é o que
-  // ele quer ver ao reabrir o app no metrô.
+  // cliente refazer o onboarding -- e offline (7.1) isso seria fatal: a tela
+  // de "onde você está" não é o que ele quer ver ao reabrir o app no metrô.
   const LOCATION_KEY = 'fuu_location';
   function storedLocation() {
     try {
@@ -55,6 +55,36 @@
     loadProfile().catch(() => {});
   }
 
+  // A cidade salva pode ter sido desligada na aba Cidades do admin (ou ser
+  // da lista antiga, fixa no app). Com a lista em mãos, cidade que saiu
+  // manda o cliente escolher de novo; cidade que continua tem nome, centro e
+  // bairros atualizados. Sem rede, fica o que está salvo.
+  if (location) {
+    loadServiceStates()
+      .then((states) => {
+        const city = states.flatMap((st) => st.cities.map((c) => ({ ...c, uf: st.uf })))
+          .find((c) => c.ibge === location?.city?.ibge);
+        if (!city) {
+          location = null;
+          try {
+            localStorage.removeItem(LOCATION_KEY);
+          } catch {
+            // storage bloqueado: some só nesta sessão
+          }
+          step = 'state';
+          toastr.info('Escolha de novo onde você está: a lista de cidades mudou.');
+          return;
+        }
+        location = { ...location, uf: city.uf, city, lat: city.lat, lng: city.lng };
+        try {
+          localStorage.setItem(LOCATION_KEY, JSON.stringify(location));
+        } catch {
+          // idem
+        }
+      })
+      .catch(() => {});
+  }
+
   startPwa();
   // 7.1: a fila de comprovantes esvazia sozinha quando a rede volta.
   startUploadQueue((n) =>
@@ -73,9 +103,12 @@
       uf: result.uf,
       city: result.city,
       neighborhood: result.neighborhood,
-      // A posição do aparelho (se o cliente deixou) ganha do centro da cidade.
-      lat: result.coords?.lat ?? result.city.lat ?? null,
-      lng: result.coords?.lng ?? result.city.lng ?? null,
+      // lat/lng é o centro da cidade: é a referência de endereço novo.
+      // `near` é a posição do aparelho, se o cliente deixou: só ordena as
+      // lojas por distância -- nunca vira coordenada de endereço.
+      lat: result.city.lat ?? null,
+      lng: result.city.lng ?? null,
+      near: result.coords ?? null,
     };
     try {
       localStorage.setItem(LOCATION_KEY, JSON.stringify(location));

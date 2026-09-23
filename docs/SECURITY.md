@@ -107,6 +107,8 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
 - **Webhook do Mercado Pago:** a assinatura HMAC é conferida com
   `hash_equals`. Sem o segredo configurado, o webhook é recusado em
   staging/produção.
+- **Gorjeta** tem teto de R$ 200 no pedido e na avaliação (`TIP_MAX`): um zero
+  a mais digitado não vira cobrança.
 - **Status de pedido só muda por `advance_order()`** (banco), que recusa
   transição ilegal. A API decide só **quem** pode pedir cada transição.
 - **Um pagamento aprovado por pedido** (índice único), e as escritas que um
@@ -123,7 +125,8 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
     nada é cobrado.
 - **Cupom:**
   - teto de gasto obrigatório, com `CHECK (spent <= budget_cap)` no banco;
-  - um uso por CPF, não por conta;
+  - um uso por CPF **e** por conta (trocar o CPF no perfil não libera o
+    cupom de novo: `coupon_used_by`, decisão 38);
   - cupom criado pela loja é sempre pago por ela (CHECK da migração 031) e
     fica dentro do teto que a plataforma libera.
 - Testes: `smoke_payments.sh`, `smoke_money.sh`, `smoke_support.sh`,

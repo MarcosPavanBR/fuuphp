@@ -29,7 +29,8 @@ backend. Os dois fecham aqui, sobre tabelas que existem desde a migração
   dinheiro: prazo, loja, pedido mínimo (sobre o SUBTOTAL -- senão o frete
   ajudaria a atingir o mínimo, o oposto do que o cupom quer), orçamento da
   campanha e um uso por CPF.
-- **Um uso por CPF, não por conta** -- é a `UNIQUE (coupon_id, cpf)` da
+- **Um uso por CPF** (e, desde a [38](38-revisao-do-codigo.md), também por
+  conta: o CPF se troca no perfil) -- é a `UNIQUE (coupon_id, cpf)` da
   migração `008`, e é por isso que quem não preencheu CPF no cadastro recebe
   409 `cpf_required` com a saída na mensagem, em vez de um "cupom inválido"
   que esconde o que dava pra corrigir.

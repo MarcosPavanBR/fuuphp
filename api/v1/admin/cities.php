@@ -10,8 +10,10 @@ require_once __DIR__ . '/guard.php';
 // (1.2/1.3) e no cadastro de loja.
 //
 // GET   todas as cidades (ligadas e desligadas), com as lojas aprovadas.
-// POST  {ibge_code, name, uf, lat, lng, neighborhoods[], active}
+// POST  {ibge_code, name, uf, lat, lng, neighborhoods[], active?}
 //       cria ou atualiza pela chave ibge_code (o código IBGE do município).
+//       Sem `active`: cidade nova nasce ligada e a existente fica como está
+//       (editar bairros não religa uma cidade desligada).
 //
 // Desligar não apaga nada: some do app, lojas e pedidos continuam. Toda
 // mudança vai pro audit_log com o valor anterior.
@@ -32,6 +34,7 @@ $name = trim((string) ($body['name'] ?? ''));
 $uf = strtoupper(trim((string) ($body['uf'] ?? '')));
 $lat = $body['lat'] ?? null;
 $lng = $body['lng'] ?? null;
+$activeGiven = array_key_exists('active', $body);
 $active = ($body['active'] ?? true) !== false;
 $neighborhoods = $body['neighborhoods'] ?? [];
 if (is_string($neighborhoods)) {
@@ -53,6 +56,8 @@ if (mb_strlen($name) < 2 || mb_strlen($name) > 80) {
 }
 if (!array_key_exists($uf, UF_NAMES)) {
     $fields['uf'] = 'UF inválida';
+} elseif (strlen($ibge) === 7 && !str_starts_with($ibge, UF_IBGE_PREFIX[$uf])) {
+    $fields['uf'] = "o código IBGE {$ibge} não é de {$uf}";
 }
 // Faixas do território brasileiro: pega lat/lng trocados ou sem o sinal.
 if (!is_numeric($lat) || (float) $lat < -34 || (float) $lat > 6) {
@@ -74,6 +79,9 @@ try {
                              FROM service_cities WHERE ibge_code = :c FOR UPDATE');
     $prev->execute(['c' => $ibge]);
     $before = $prev->fetch() ?: null;
+    if (!$activeGiven && $before !== null) {
+        $active = (bool) $before['active'];
+    }
 
     $pdo->prepare(
         'INSERT INTO service_cities (ibge_code, name, uf, lat, lng, neighborhoods, active)

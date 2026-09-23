@@ -86,9 +86,7 @@ if ($subtotal < (float) $coupon['min_order']) {
     ));
 }
 
-$usedStmt = $pdo->prepare('SELECT count(*) FROM coupon_redemptions WHERE coupon_id = :id AND cpf = :cpf');
-$usedStmt->execute(['id' => $coupon['id'], 'cpf' => $cpf]);
-if ((int) $usedStmt->fetchColumn() > 0) {
+if (coupon_used_by($pdo, (int) $coupon['id'], (string) $cpf, (string) $claims['sub'])) {
     error_response(409, 'coupon_already_used', 'Você já usou esse cupom.');
 }
 

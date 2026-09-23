@@ -120,6 +120,9 @@ curl -s -X POST "$BASE/cart/apply_coupon.php" -H "Content-Type: application/json
   -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"code\":\"${CUPOM}\"}" >/dev/null
 
 echo "== checkout grava o resgate e consome o orçamento da campanha =="
+[ "$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: application/json" "${AUTH[@]}" \
+   -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR_ID},\"payment_method\":\"cash\",\"change_for\":100.00,\"tip\":5000}" \
+   | jq -r '.code')" = "invalid_tip" ] || fail "gorjeta de R\$ 5.000 aceita no fechamento"
 ORDER_ID=$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: application/json" "${AUTH[@]}" \
   -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR_ID},\"payment_method\":\"cash\",\"change_for\":100.00,\"coupon_code\":\"${CUPOM}\"}" \
   | jq -er '.order.id') || fail "checkout com cupom falhou"
@@ -134,6 +137,13 @@ curl -s -X POST "$BASE/cart/add_item.php" -H "Content-Type: application/json" "$
 [ "$(curl -s -X POST "$BASE/cart/apply_coupon.php" -H "Content-Type: application/json" "${AUTH[@]}" \
    -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"code\":\"${CUPOM}\"}" | jq -r '.code')" = "coupon_already_used" ] \
   || fail "cupom foi usado duas vezes pelo mesmo CPF"
+
+echo "== trocar o CPF no perfil não libera o cupom de novo (um uso por CPF E por conta) =="
+curl -s -X POST "$BASE/profile/update.php" -H "Content-Type: application/json" "${AUTH[@]}" \
+  -d "{\"cpf\":\"$(gen_cpf)\"}" | jq -e '.' >/dev/null || fail "troca de CPF falhou"
+[ "$(curl -s -X POST "$BASE/cart/apply_coupon.php" -H "Content-Type: application/json" "${AUTH[@]}" \
+   -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"code\":\"${CUPOM}\"}" | jq -r '.code')" = "coupon_already_used" ] \
+  || fail "trocando o CPF, a mesma conta usou o cupom de novo"
 
 echo "== público da campanha vale no resgate: 'primeiro pedido' barra quem já pediu =="
 CUPOM_NOVO="NOVO$(( RANDOM % 900000 + 100000 ))"

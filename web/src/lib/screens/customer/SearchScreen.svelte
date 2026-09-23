@@ -37,7 +37,7 @@
     loading = true;
     try {
       const data = await api.get('/restaurants/search_products.php', {
-        query: { city_ibge_code: location.city.ibge, q: query.trim(), lat: location.lat, lng: location.lng },
+        query: { city_ibge_code: location.city.ibge, q: query.trim(), lat: location.near?.lat ?? location.lat, lng: location.near?.lng ?? location.lng },
       });
       products = data.products;
       searched = true;

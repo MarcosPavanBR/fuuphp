@@ -91,8 +91,8 @@ if (!$quote['in_area']) {
 }
 $deliveryFee = (float) $quote['fee'];
 $tip = isset($body['tip']) ? round((float) $body['tip'], 2) : 0.0;
-if ($tip < 0) {
-    error_response(422, 'invalid_tip', 'Gorjeta inválida.');
+if (!is_valid_tip($tip)) {
+    error_response(422, 'invalid_tip', 'Gorjeta inválida (de R$ 0 a R$ 200).', fields: ['tip' => 'de 0 a 200']);
 }
 
 // Tela 14.4 — agendamento. A faixa é validada contra o horário declarado da
@@ -199,6 +199,12 @@ try {
         // O público da campanha é conferido de novo no fechamento: entre
         // aplicar e fechar, a pessoa pode ter feito outro pedido e deixado de
         // ser "primeiro pedido".
+        // Uso conferido de novo aqui, por CPF E por conta: o índice único só
+        // pega o CPF, e o CPF se troca no perfil entre aplicar e fechar.
+        if (coupon_used_by($pdo, (int) $coupon['id'], (string) $customerCpf, (string) $claims['sub'])) {
+            $pdo->rollBack();
+            error_response(409, 'coupon_already_used', 'Você já usou esse cupom.');
+        }
         if (!coupon_audience_includes($pdo, $coupon, (string) $claims['sub'])) {
             $pdo->rollBack();
             error_response(409, 'coupon_audience', coupon_audience_message((string) $coupon['audience'], ($coupon['owner_user_id'] ?? null) !== null));

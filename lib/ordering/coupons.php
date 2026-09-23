@@ -141,6 +141,24 @@ function coupon_audience_includes(PDO $pdo, array $coupon, string $userId): bool
 }
 
 /** A frase de recusa, no idioma da campanha. */
+/**
+ * O cupom já foi usado por este CPF OU por esta conta?
+ *
+ * O índice único de coupon_redemptions é por CPF ("um uso por CPF, não por
+ * conta"). Mas o CPF se troca no perfil: sem olhar a conta também, usar o
+ * cupom, trocar o CPF e usar de novo passava. Um uso por CPF E por conta.
+ */
+function coupon_used_by(PDO $pdo, int $couponId, string $cpf, string $userId): bool
+{
+    $stmt = $pdo->prepare(
+        'SELECT EXISTS (
+           SELECT 1 FROM coupon_redemptions cr JOIN orders o ON o.id = cr.order_id
+            WHERE cr.coupon_id = :id AND (cr.cpf = :cpf OR o.user_id = :uid))'
+    );
+    $stmt->execute(['id' => $couponId, 'cpf' => $cpf, 'uid' => $userId]);
+    return $stmt->fetchColumn() === true;
+}
+
 function coupon_audience_message(string $audience, bool $personal = false): string
 {
     if ($personal) {

@@ -72,8 +72,8 @@
   // praça escolhida na Fase 1. Não há provedor de mapa na cláusula zero, então
   // não há pino pra arrastar -- o que existe é isto, e a tela diz qual das
   // duas está valendo em vez de fingir precisão de rua.
-  let effectiveLat = $derived(form.lat ?? location?.lat ?? location?.city?.lat ?? -22.9056);
-  let effectiveLng = $derived(form.lng ?? location?.lng ?? location?.city?.lng ?? -47.0608);
+  let effectiveLat = $derived(form.lat ?? location?.city?.lat ?? location?.lat ?? null);
+  let effectiveLng = $derived(form.lng ?? location?.city?.lng ?? location?.lng ?? null);
 
   async function refreshQuote() {
     quoteBusy = true;
@@ -189,9 +189,9 @@
           complement: form.complement.trim() || undefined,
           reference: form.reference.trim() || undefined,
           neighborhood: form.neighborhood.trim() || undefined,
-          city: location?.city?.name ?? 'Campinas',
+          city: location?.city?.name ?? '',
           city_ibge_code: location?.city?.ibge ?? '',
-          state: location?.uf ?? 'SP',
+          state: location?.uf ?? '',
           postal_code: form.postalCode,
           lat: effectiveLat,
           lng: effectiveLng,

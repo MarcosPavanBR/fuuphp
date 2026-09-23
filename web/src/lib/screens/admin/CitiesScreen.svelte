@@ -12,7 +12,9 @@
   // de o cliente ter endereço.
   const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR',
     'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
-  const EMPTY = { ibge_code: '', name: '', uf: 'SP', lat: '', lng: '', neighborhoods: '', active: true };
+  // O formulário não carrega `active`: ligar/desligar é só pelo botão da
+  // lista, pra salvar uma edição nunca desfazer um liga/desliga.
+  const EMPTY = { ibge_code: '', name: '', uf: 'SP', lat: '', lng: '', neighborhoods: '' };
 
   let cities = $state(null);
   let form = $state({ ...EMPTY });
@@ -40,7 +42,6 @@
       lat: String(city.lat),
       lng: String(city.lng),
       neighborhoods: city.neighborhoods.join(', '),
-      active: city.active,
     };
     editing = true;
     errors = {};
@@ -50,6 +51,13 @@
     form = { ...EMPTY };
     editing = false;
     errors = {};
+  }
+
+  // Campo vazio vira null (a API recusa), nunca 0: Number('') é 0, e 0 cai
+  // dentro da faixa do Brasil pra latitude -- a cidade iria pro Equador.
+  function coord(v) {
+    const t = String(v ?? '').trim().replace(',', '.');
+    return t === '' ? null : Number(t);
   }
 
   async function save(event, overrides = null) {
@@ -62,13 +70,17 @@
         token: adminToken(),
         body: {
           ...data,
-          lat: Number(String(data.lat).replace(',', '.')),
-          lng: Number(String(data.lng).replace(',', '.')),
+          lat: coord(data.lat),
+          lng: coord(data.lng),
           neighborhoods: String(data.neighborhoods).split(','),
         },
       });
       toastr.success(
-        data.active ? `${data.name} está no app.` : `${data.name} saiu do app (nada foi apagado).`
+        !overrides
+          ? `${data.name} salva.`
+          : data.active
+            ? `${data.name} está no app.`
+            : `${data.name} saiu do app (nada foi apagado).`
       );
       if (!overrides) reset();
       await load();

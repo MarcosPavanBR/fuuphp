@@ -40,15 +40,9 @@ if ($rating < 1 || $rating > 5) {
 $tags = is_array($body['tags'] ?? null) ? array_values(array_map('strval', $body['tags'])) : [];
 $comment = isset($body['comment']) ? trim((string) $body['comment']) : null;
 $courierTip = isset($body['courier_tip']) ? (float) $body['courier_tip'] : 0.0;
-if ($courierTip < 0) {
-    error_response(422, 'invalid_courier_tip', 'Gorjeta inválida.', fields: ['courier_tip' => 'inválida']);
-}
-
-// Teto de sanidade: gorjeta de R$ 5.000 por engano de digitação é estorno
-// e suporte; a tela oferece R$ 2, 5 e 10.
-const REVIEW_TIP_MAX = 200.0;
-if ($courierTip > REVIEW_TIP_MAX) {
-    error_response(422, 'invalid_courier_tip', 'Gorjeta acima do limite de R$ 200.', fields: ['courier_tip' => 'acima do limite']);
+// Mesmo teto da gorjeta no pedido (TIP_MAX, lib/ordering/orders.php).
+if (!is_valid_tip($courierTip)) {
+    error_response(422, 'invalid_courier_tip', 'Gorjeta inválida (de R$ 0 a R$ 200).', fields: ['courier_tip' => 'de 0 a 200']);
 }
 
 $pdo = db();

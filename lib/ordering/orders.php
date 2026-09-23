@@ -4,6 +4,18 @@ declare(strict_types=1);
 // Volta única para mudar status (Especificação, Parte II §9): nenhum
 // "UPDATE orders SET status" fora daqui, nem no PHP. Toda transição passa
 // pela função do banco, que é quem decide o que é legal.
+/**
+ * Teto de sanidade da gorjeta, no pedido e na avaliação: R$ 5.000 por engano
+ * de digitação é estorno e suporte. As telas oferecem R$ 2, 5 e 10.
+ */
+const TIP_MAX = 200.0;
+
+/** Gorjeta válida: número finito entre zero e TIP_MAX. */
+function is_valid_tip(float $tip): bool
+{
+    return is_finite($tip) && $tip >= 0 && $tip <= TIP_MAX;
+}
+
 function call_advance_order(PDO $pdo, int $orderId, string $to, ?string $actorId, string $actorKind, array $meta = []): void
 {
     try {

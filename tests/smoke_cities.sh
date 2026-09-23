@@ -3,11 +3,12 @@
 # telas 1.2 e 1.3) e admin/cities.php (aba Cidades).
 #
 #  - só admin mexe; dado ruim volta 422 com o campo (IBGE, UF, lat/lng
-#    trocados, sem bairro);
+#    trocados ou em branco, sem bairro, UF que não bate com o código IBGE);
 #  - criar dá 201, salvar de novo dá 200, e as duas vão pro audit_log;
 #  - a lista pública mostra só cidade ligada, agrupada por UF, e conta só
 #    loja aprovada -- nenhum número de vitrine;
-#  - desligar some com a cidade do app sem apagar nada.
+#  - desligar some com a cidade do app sem apagar nada, e salvar a edição
+#    sem `active` não religa.
 set -euo pipefail
 
 : "${DATABASE_URL:?defina DATABASE_URL apontando para um banco já migrado}"
@@ -30,10 +31,10 @@ ADMIN_ID="$(gen_uuid)"
 ADMIN_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
 CUSTOMER_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
 STAMP="$(date +%s%N)"
-# Códigos de 7 dígitos que nenhum município usa (começam com 99), pra não
-# esbarrar nas cidades das outras suítes.
-CITY="99$(( RANDOM % 90000 + 10000 ))"
-OTHER="98$(( RANDOM % 90000 + 10000 ))"
+# Códigos de 7 dígitos com o prefixo certo da UF (35 = SP, 31 = MG) mas que
+# nenhum município usa (x99xxx), pra não esbarrar nas cidades das outras suítes.
+CITY="3599$(( RANDOM % 900 + 100 ))"
+OTHER="3199$(( RANDOM % 900 + 100 ))"
 
 psql_run <<SQL
 INSERT INTO users (id, role, full_name, phone, email)
@@ -76,6 +77,11 @@ for f in ibge_code uf lat lng neighborhoods; do
   [ "$(echo "${R% *}" | jq -r ".fields.${f}")" != "null" ] || fail "sem erro no campo ${f}: $R"
 done
 
+R=$(save "{\"ibge_code\":\"${CITY}\",\"name\":\"X\",\"uf\":\"RJ\",\"lat\":-22.9,\"lng\":-47.06,\"neighborhoods\":[\"Centro\"]}")
+[ "$(echo "${R% *}" | jq -r '.fields.uf')" = "o código IBGE ${CITY} não é de RJ" ] || fail "UF errada pro código IBGE aceita: $R"
+R=$(save "{\"ibge_code\":\"${CITY}\",\"name\":\"X\",\"uf\":\"SP\",\"lat\":null,\"lng\":-47.06,\"neighborhoods\":[\"Centro\"]}")
+[ "$(echo "${R% *}" | jq -r '.fields.lat')" != "null" ] || fail "latitude em branco aceita: $R"
+
 echo "== criar 201, salvar de novo 200, as duas auditadas =="
 R=$(save "$(city_json "$CITY" "Cidade Teste ${STAMP}" SP -22.9056 -47.0608 true)")
 [ "${R##* }" = "201" ] || fail "criar cidade: $R"
@@ -111,5 +117,8 @@ curl -s "$BASE/cities/list.php" | jq -e ".states[].cities[] | select(.ibge == \"
   && fail "cidade desligada continua no app"
 curl -s "$BASE/admin/cities.php" "${ADMIN[@]}" | jq -e ".cities[] | select(.ibge == \"${OTHER}\" and .active == false)" >/dev/null \
   || fail "cidade desligada sumiu do admin"
+R=$(save "{\"ibge_code\":\"${OTHER}\",\"name\":\"Outra Editada ${STAMP}\",\"uf\":\"MG\",\"lat\":-19.9167,\"lng\":-43.9345,\"neighborhoods\":[\"Savassi\"]}")
+[ "${R##* }" = "200" ] || fail "editar cidade desligada: $R"
+[ "$(q "SELECT active FROM service_cities WHERE ibge_code='${OTHER}'")" = "f" ] || fail "editar sem 'active' religou a cidade"
 
 echo "OK: cidades atendidas"

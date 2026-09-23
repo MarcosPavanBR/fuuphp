@@ -78,6 +78,16 @@ Em português, explicando **por quê** -- o "o quê" o código já diz.
   pra `order_events` com `from_status = to_status` e o fato em `meta`.
 - `docs/DATABASE.md` é gerado: `php bin/generate_db_map.php` depois de migrar.
 
+## Fuso horário
+
+- O relógio do negócio é **America/Sao_Paulo**, no PHP
+  (`lib/bootstrap.php`) e na sessão do banco (`lib/core/db.php`). "Hoje",
+  faixa de agendamento, a hora do comprovante e a semana do acerto são de
+  Brasília. O servidor continua em UTC; instantes (`timestamptz`) são os
+  mesmos em qualquer fuso.
+- Em teste, compare horários como instante (`date -d ... +%s`), nunca como
+  texto: `20:30-03:00` e `23:30Z` são o mesmo momento.
+
 ## Testes
 
 - Cada funcionalidade entra com o teste dela no `smoke_<área>.sh` certo (ou

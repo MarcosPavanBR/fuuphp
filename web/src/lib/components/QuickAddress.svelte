@@ -47,12 +47,13 @@
           street: street.trim(),
           number: number.trim() || undefined,
           neighborhood: neighborhood.trim() || undefined,
-          city: location?.city?.name ?? 'Campinas',
+          city: location?.city?.name ?? '',
           city_ibge_code: location?.city?.ibge ?? '',
-          state: location?.uf ?? 'SP',
+          state: location?.uf ?? '',
           postal_code: postalCode,
-          lat: location?.lat ?? location?.city?.lat ?? -22.9056,
-          lng: location?.lng ?? location?.city?.lng ?? -47.0608,
+          // O centro da cidade escolhida; a API recusa se faltar.
+          lat: location?.city?.lat ?? location?.lat ?? null,
+          lng: location?.city?.lng ?? location?.lng ?? null,
           is_default: true,
         },
       });

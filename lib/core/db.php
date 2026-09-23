@@ -35,7 +35,11 @@ function db(): PDO
     // ver o quê é decidido no PHP (authorize_order_access, require_*) -- e a
     // equipe de loja é estreitada pra própria loja em db_scope_to_restaurant().
     // Conexão não persistente: a configuração morre com a requisição.
-    $pdo->exec("SELECT set_config('app.role', 'platform', false)");
+    // Mesmo relógio do PHP (lib/bootstrap.php): `now()::date` e
+    // `created_at::date` falam do dia de Brasília, não do dia UTC -- que vira
+    // às 21h daqui. Instantes (timestamptz) não mudam; muda só como a data
+    // é lida e o texto com que o horário volta (com -03:00).
+    $pdo->exec("SELECT set_config('app.role', 'platform', false), set_config('TimeZone', 'America/Sao_Paulo', false)");
 
     return $pdo;
 }

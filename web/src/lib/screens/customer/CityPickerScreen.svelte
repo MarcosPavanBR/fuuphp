@@ -27,8 +27,12 @@
   // Posição do aparelho, se o cliente deixar: ordena as lojas pela
   // distância real em vez do centro da cidade.
   let coords = $state(null);
+  // Cada escolha de cidade tem um número: resposta de GPS atrasada, de uma
+  // escolha anterior, não grava posição na escolha de agora.
+  let pick = 0;
 
   async function pickCity(city) {
+    const current = ++pick;
     selectedCity = city;
     selectedNeighborhood = null;
     coords = null;
@@ -46,18 +50,19 @@
       },
     });
 
-    if (useLocation) {
-      requestGeolocation();
+    if (useLocation && current === pick) {
+      requestGeolocation(current);
     }
   }
 
-  function requestGeolocation() {
+  function requestGeolocation(current) {
     if (!navigator.geolocation) {
       toastr.warning('Esse aparelho não suporta localização automática.');
       return;
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        if (current !== pick) return;
         // Descobrir o NOME do bairro a partir de lat/lng pediria um serviço
         // de geocodificação (fora da stack); o bairro o cliente escolhe. A
         // posição fica e vale pra distância das lojas.
@@ -65,6 +70,7 @@
         toastr.success('Localização marcada. Agora escolha o seu bairro.');
       },
       () => {
+        if (current !== pick) return;
         toastr.warning('Não deu pra usar a localização. Sem problema: escolha o bairro na lista.');
       }
     );
