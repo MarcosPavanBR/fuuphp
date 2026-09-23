@@ -30,7 +30,7 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (trinta e duas migrações SQL), a **API em PHP** sobre
+A **fundação de banco** (trinta e cinco migrações SQL), a **API em PHP** sobre
 ela e os **quatro apps em Svelte** (`web/`): cliente, painel da loja, app do
 entregador e painel da plataforma. As 15 fases do mock estão construídas --
 onboarding, descoberta, cardápio e carrinho, os cinco meios de pagamento
@@ -90,7 +90,11 @@ As 15 fases do mock estão construídas, e o caminho pra produção também:
 - o envio de OTP plugável;
 - o admin fundador;
 - os arquivos da VPS em `deploy/`;
-- a API conectando como `app_rw`, com RLS por loja.
+- a API conectando como `app_rw`, com RLS por loja;
+- o cadastro de loja pelo próprio painel, com análise da plataforma antes de
+  vender, e os termos de uso e o aviso de privacidade (`web/public/`);
+- a rota de saúde pro monitor externo, com o pg_cron conferido
+  ([36](docs/decisions/36-cadastro-de-loja-e-saude.md)).
 
 O passo a passo está em [docs/GO_LIVE.md](docs/GO_LIVE.md)
 ([decisão 33](docs/decisions/33-go-live.md)). O que falta depende de conta
@@ -115,6 +119,11 @@ real ou de decisão do dono do produto:
    ([31](docs/decisions/31-impressao-escpos-e-recibo-de-baixa.md)).
 5. **Quando levar os arquivos pro Cloudflare R2.** Hoje ficam no disco da
    VPS, fora do projeto, e só saem por rota autenticada.
+6. **Dados da empresa nos termos e no aviso de privacidade** (os trechos entre
+   colchetes em `web/public/termos.html` e `privacidade.html`) e a revisão de
+   um advogado.
+7. **Um monitor externo** apontado pra `api/v1/health.php` (UptimeRobot,
+   Better Stack ou outro, à escolha).
 
 Já decidido: o **código de login vai por SMS pela Twilio**; o **Mercado Pago usa token único da plataforma** (a loja
 recebe pelo repasse semanal do livro-razão); a **fidelidade (2.3) entra no

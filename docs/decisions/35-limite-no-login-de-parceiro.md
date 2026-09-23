@@ -28,7 +28,6 @@ tinha limite (OTP), o de parceiro não.
 - O limite por IP (30) é mais largo que o por login, porque várias lojas
   podem sair pelo mesmo IP (rede de shopping, operadora com CGNAT). Ele pega o
   ataque que varre muitos logins, não o que insiste em um.
-- O código do entregador continua com hash SHA-256 sem sal. Com o limite, a
-  força bruta pela API acabou. Pelo banco (se vazar), os 10⁶ códigos ainda
-  seriam recuperáveis; a resposta a um vazamento é gerar códigos novos. Está
-  em "Limites conhecidos" no [SECURITY.md](../SECURITY.md).
+- O código do entregador ficou aqui com hash SHA-256 sem sal. **Atualizado
+  na [36](36-cadastro-de-loja-e-saude.md):** a migração 034 passou o código
+  pra bcrypt, e o código antigo é regravado no primeiro login.

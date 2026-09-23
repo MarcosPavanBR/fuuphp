@@ -24,12 +24,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
     $stmt = $pdo->query(
         "SELECT r.id, r.name, r.cnpj, r.city_ibge_code, r.category, r.created_at,
                 r.approved_at, r.rejected_at, r.rejection_reason, r.online_only_until,
+                r.contact_name, r.contact_phone, r.address_text,
+                (r.lat IS NOT NULL AND r.lng IS NOT NULL) AS has_location,
+                rc.pix_key,
+                -- Chave CNPJ igual ao da loja foi conferida no cadastro; e-mail,
+                -- telefone e aleatória não dá pra conferir sem o banco: é o admin.
+                (rc.pix_key = r.cnpj) AS pix_key_checked,
                 (SELECT count(*) FROM orders o WHERE o.restaurant_id = r.id
                   AND o.status NOT IN ('cart','pending_payment')) AS orders_count,
                 (SELECT count(*) FROM restaurants other
                   WHERE substr(other.cnpj, 1, 8) = substr(r.cnpj, 1, 8)
                     AND other.id <> r.id) AS same_root_cnpj
          FROM restaurants r
+         LEFT JOIN restaurant_credentials rc ON rc.restaurant_id = r.id
          WHERE r.approved_at IS NULL AND r.rejected_at IS NULL
          ORDER BY r.created_at"
     );
@@ -82,7 +89,8 @@ try {
     $pdo->prepare(
         "UPDATE restaurants
             SET approved_at = now(),
-                online_only_until = now() + (:days || ' days')::interval
+                online_only_until = now() + (:days || ' days')::interval,
+                signup_ip = NULL  -- só servia pro limite de cadastro e pra fraude
           WHERE id = :id"
     )->execute(['days' => $days, 'id' => $restaurantId]);
 

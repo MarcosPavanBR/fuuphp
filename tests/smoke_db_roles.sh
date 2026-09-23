@@ -8,7 +8,8 @@
 #     como "platform" vê todos; como "store" vê só a própria loja -- e não
 #     consegue gravar pedido de outra;
 #   - livro-razão e pontos são só de inserção (UPDATE/DELETE negados);
-#   - app_rw não cria tabela (DDL é do migrator).
+#   - app_rw não cria tabela (DDL é do migrator);
+#   - a rota de saúde responde ok com a API como app_rw (banco + pg_cron).
 # Roda depois das outras suítes: precisa de pedidos de mais de uma loja.
 set -euo pipefail
 
@@ -49,5 +50,15 @@ denied "UPDATE ledger_entries SET amount = amount WHERE false" || fail "app_rw p
 denied "DELETE FROM ledger_entries WHERE false" || fail "app_rw pode apagar do livro-razão"
 denied "DELETE FROM loyalty_entries WHERE false" || fail "app_rw pode apagar pontos"
 denied "CREATE TABLE smoke_should_not_exist (id int)" || fail "app_rw pode criar tabela"
+
+echo "== rota de saúde, com a API como app_rw: banco e pg_cron respondendo =="
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DATABASE_URL="$API_DATABASE_URL" JWT_SECRET=ci-test-secret APP_ENV=development \
+  php -S 127.0.0.1:8141 -t "$ROOT" >/tmp/smoke-db-roles-server.log 2>&1 &
+SERVER_PID=$!
+trap '[ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2>/dev/null || true' EXIT
+for i in $(seq 1 20); do curl -s -o /dev/null http://127.0.0.1:8141/api/v1/health.php && break; sleep 0.2; done
+HEALTH=$(curl -s -w ' %{http_code}' http://127.0.0.1:8141/api/v1/health.php)
+[ "${HEALTH##* }" = "200" ] && [ "$(echo "${HEALTH% *}" | jq -r '.status')" = "ok" ] || fail "health não respondeu ok: $HEALTH"
 
 echo "OK: papéis do banco e RLS como a API supõe"

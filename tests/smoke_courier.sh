@@ -85,6 +85,13 @@ CAUTH=(-H "Authorization: Bearer $COURIER_TOKEN")
 RIVAL_TOKEN=$(curl -s -X POST "$BASE/auth/partner_login.php" -H "Content-Type: application/json" \
   -d "{\"kind\":\"courier\",\"login_code\":\"${RIVAL_CPF}\",\"secret\":\"${ACCESS_CODE}\"}" | jq -er '.access_token') || fail "login do rival falhou"
 RAUTH=(-H "Authorization: Bearer $RIVAL_TOKEN")
+# O código foi semeado no formato antigo (SHA-256): o primeiro acerto troca
+# por bcrypt (migração 034), e o mesmo código continua entrando.
+[ "$(psql "$DATABASE_URL" -tAc "SELECT left(access_code_hash, 4) FROM partner_accounts WHERE kind='courier' AND login_code='${CPF}'")" = '$2y$' ] \
+  || fail "código antigo não foi convertido pra bcrypt no login"
+curl -s -X POST "$BASE/auth/partner_login.php" -H "Content-Type: application/json" \
+  -d "{\"kind\":\"courier\",\"login_code\":\"${CPF}\",\"secret\":\"${ACCESS_CODE}\"}" | jq -e '.access_token' >/dev/null \
+  || fail "depois de virar bcrypt o código não entra mais"
 STAFF_TOKEN=$(curl -s -X POST "$BASE/auth/partner_login.php" -H "Content-Type: application/json" \
   -d "{\"kind\":\"restaurant\",\"login_code\":\"${CNPJ}\",\"secret\":\"senha123\"}" | jq -er '.access_token') || fail "login da loja falhou"
 SAUTH=(-H "Authorization: Bearer $STAFF_TOKEN")

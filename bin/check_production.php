@@ -15,7 +15,7 @@ declare(strict_types=1);
 //   - o banco responde com o DATABASE_URL do .env;
 //   - a API NÃO conecta como superusuário nem como papel que ignora RLS
 //     (senão a RLS por loja da migração 009 é só enfeite);
-//   - pg_cron está instalado (as tarefas do banco dependem dele).
+//   - pg_cron está instalado E rodando (as tarefas do banco dependem dele).
 
 require_once __DIR__ . '/../lib/bootstrap.php';
 
@@ -40,6 +40,10 @@ try {
     $cron = db()->query("SELECT 1 FROM pg_extension WHERE extname = 'pg_cron'")->fetchColumn();
     if ($cron === false) {
         $problems[] = 'extensão pg_cron ausente: as tarefas do banco não vão rodar';
+    } elseif (db()->query('SELECT cron_healthy()')->fetchColumn() !== true) {
+        // Instalado não é rodando: com a configuração padrão, toda tarefa
+        // falha com "connection failed" e ninguém vê.
+        $problems[] = 'pg_cron instalado mas nenhuma tarefa terminou nos últimos 5 min: ligue cron.use_background_workers = on (docs/GO_LIVE.md) e veja cron.job_run_details';
     }
 } catch (Throwable $e) {
     $problems[] = 'banco inacessível com o DATABASE_URL do .env: ' . $e->getMessage();

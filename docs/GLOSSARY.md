@@ -8,8 +8,10 @@ Os termos do FUUdelivery, na língua do negócio e no nome que têm no código.
 | **Aparelho confiável** | o primeiro tablet/celular em que a loja ou o entregador entra; outro aparelho só com liberação do suporte | `partner_accounts.device_id`, `admin/partner_devices.php` |
 | **Baixa (de espécie)** | o entregador acerta com a loja o dinheiro que recebeu em mãos: presencial ou por Pix com comprovante | `cash_settlement_intents`, `settlement_proofs`, `ledger_cash_settled()` |
 | **Caixa do entregador** | quanto dinheiro em espécie o entregador tem em mãos (a devolver) | `courier_cash_balance()` |
+| **Cadastro de loja / loja em análise** | a loja se cadastra sozinha pelo painel; até a plataforma aprovar, monta o cardápio mas não vende | `restaurants/signup.php`, `restaurants.approved_at`, `require_store_accepting_orders()` |
 | **Canal (de OTP)** | por onde o código de login chega: SMS, WhatsApp ou e-mail, conforme o provedor | `otp_sender_channels()`, `auth/channels.php` |
-| **Código de acesso** | os 6 dígitos que o entregador usa com o CPF pra entrar; gerado na aprovação | `partner_accounts.access_code_hash` |
+| **Chave Pix da loja** | onde cai o Pix direto do cliente: aleatória, e-mail, telefone ou o CNPJ da loja, nunca CPF | `restaurant_credentials.pix_key`, `store_pix_key_check()` |
+| **Código de acesso** | os 6 dígitos que o entregador usa com o CPF pra entrar; gerado na aprovação, guardado em bcrypt | `partner_accounts.access_code_hash` |
 | **Código de entrega** | os 4 dígitos que o cliente dá ao entregador na porta pra fechar o pedido | `orders.delivery_code` |
 | **Comanda** | o papel que sai na impressora da cozinha quando o pedido entra | `print_order_ticket()` |
 | **Comissão** | o percentual da plataforma sobre o pedido (8% na política inicial) | `platform_policies.commission_bps`, `orders.commission` |
@@ -35,6 +37,7 @@ Os termos do FUUdelivery, na língua do negócio e no nome que têm no código.
 | **Recibo de baixa** | o papel assinado (HMAC) que comprova a baixa de espécie | `print_settlement_receipt()` |
 | **Repasse** | o pagamento semanal da plataforma à loja ou ao entregador | `payouts` |
 | **RLS** | a regra do banco que esconde de uma loja os pedidos das outras | migração 009, `db_scope_to_restaurant()` |
+| **Saúde (health)** | a rota que o monitor externo consulta: banco e pg_cron respondendo | `api/v1/health.php`, `cron_healthy()` |
 | **Surge** | o valor a mais na corrida quando falta entregador | rodadas de despacho |
 | **Teto de cupom (da loja)** | quanto a loja pode ter comprometido em cupons criados por ela | `restaurants.coupon_budget_limit` |
 | **Teto de espécie** | quanto dinheiro vivo o entregador pode ter em mãos (R$ 300) | `platform_policies.cash_ceiling` |

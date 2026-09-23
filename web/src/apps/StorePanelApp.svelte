@@ -24,11 +24,15 @@
   import OrderChat from '../lib/components/OrderChat.svelte';
   import PrinterPanel from '../lib/screens/panel/PrinterPanel.svelte';
   import StoreCouponsScreen from '../lib/screens/panel/StoreCouponsScreen.svelte';
+  import StoreSignupScreen from '../lib/screens/panel/StoreSignupScreen.svelte';
 
   // Painel da loja (telas 7.3 e 11.1). Roda numa página própria
   // (painel.html), não dentro do app do cliente: são dois públicos e dois
   // bundles, e ninguém quer baixar o KDS pra pedir uma pizza.
   let logged = $state(isStaffAuthenticated());
+  // Fora do painel: login, ou o cadastro de loja nova (restaurants/signup.php).
+  let signingUp = $state(false);
+  let signedUpCnpj = $state('');
   let tab = $state('kds');
   let proofs = $state([]);
   let kds = $state([]);
@@ -131,8 +135,16 @@
   );
 </script>
 
-{#if !logged}
-  <StaffLoginScreen onLoggedIn={() => (logged = true)} />
+{#if !logged && signingUp}
+  <StoreSignupScreen
+    onBack={() => (signingUp = false)}
+    onDone={(cnpj) => {
+      signedUpCnpj = cnpj;
+      signingUp = false;
+    }}
+  />
+{:else if !logged}
+  <StaffLoginScreen onLoggedIn={() => (logged = true)} onSignup={() => (signingUp = true)} initialCnpj={signedUpCnpj} />
 {:else}
   <div class="panel">
     <header class="top">
@@ -195,6 +207,29 @@
         </button>
       </div>
     </header>
+
+    <!-- Loja cadastrada pelo próprio painel (restaurants/signup.php): até a
+         plataforma aprovar, ela não aparece pros clientes. O painel já
+         funciona pra montar cardápio, horário e pagamentos. -->
+    {#if storeState?.approval === 'review'}
+      <div class="approval review">
+        <i class="bi bi-hourglass-split"></i>
+        <span>
+          <strong>Cadastro em análise.</strong> A loja ainda não aparece pros clientes. Enquanto isso, monte o
+          <button type="button" onclick={() => (tab = 'menu')}>cardápio</button>, o
+          <button type="button" onclick={() => (tab = 'hours')}>horário</button> e a
+          <button type="button" onclick={() => (tab = 'payments')}>chave Pix</button>.
+        </span>
+      </div>
+    {:else if storeState?.approval === 'rejected'}
+      <div class="approval rejected">
+        <i class="bi bi-x-circle"></i>
+        <span>
+          <strong>Cadastro não aprovado.</strong>
+          {storeState.rejection_reason ?? ''} Corrija e fale com o suporte do FUU pra reanalisar.
+        </span>
+      </div>
+    {/if}
 
     {#if tab === 'kds'}
       <KdsBoard
@@ -434,5 +469,30 @@
       border-right: none;
       border-bottom: 1px solid var(--fuu-line-3);
     }
+  }
+  .approval {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 12px 22px;
+    font-size: 13.5px;
+    border-bottom: 1px solid var(--fuu-line-3);
+  }
+  .approval.review {
+    background: var(--fuu-wait-bg);
+    color: var(--fuu-wait-text);
+  }
+  .approval.rejected {
+    background: var(--fuu-red-tint);
+    color: var(--fuu-alert);
+  }
+  .approval button {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    font-weight: 700;
+    color: inherit;
+    text-decoration: underline;
   }
 </style>

@@ -29,15 +29,8 @@ if (!in_array($paymentMethod, ['mp_card', 'pix_auto', 'pix_manual', 'cash', 'pos
 
 $pdo = db();
 
-$restaurantStmt = $pdo->prepare('SELECT * FROM restaurants WHERE id = :id');
-$restaurantStmt->execute(['id' => $restaurantId]);
-$restaurant = $restaurantStmt->fetch();
-if ($restaurant === false) {
-    error_response(404, 'restaurant_not_found', 'Loja não encontrada.');
-}
-if (!$restaurant['is_open']) {
-    error_response(409, 'store_closed', 'Essa loja está fechada agora.');
-}
+// Existe, foi aprovada pela plataforma e está aberta (lib/catalog/store.php).
+$restaurant = require_store_accepting_orders($pdo, $restaurantId);
 if ($restaurant['pause_until'] !== null && strtotime((string) $restaurant['pause_until']) > time()) {
     error_response(409, 'store_paused', 'Essa loja está pausada no momento.', detail: 'volta às ' . $restaurant['pause_until']);
 }

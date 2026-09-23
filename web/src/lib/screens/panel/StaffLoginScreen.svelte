@@ -8,9 +8,10 @@
   // confiança-no-primeiro-uso (2FA por aparelho, módulo identity): o
   // primeiro aparelho a logar fica gravado, os outros levam
   // device_mismatch até o suporte liberar.
-  let { onLoggedIn } = $props();
+  let { onLoggedIn, onSignup, initialCnpj = '' } = $props();
 
-  let cnpj = $state('');
+  // Vindo do cadastro ("Quero vender no FUU"), o CNPJ já chega preenchido.
+  let cnpj = $state(initialCnpj);
   let secret = $state('');
   let busy = $state(false);
 
@@ -80,6 +81,12 @@
     <p class="note">
       Cada aparelho fica vinculado ao primeiro login (2FA por aparelho). Trocar de tablet exige liberação do suporte.
     </p>
+
+    {#if onSignup}
+      <button type="button" class="signup" onclick={onSignup}>
+        Ainda não vende no FUU? <strong>Cadastre sua loja</strong>
+      </button>
+    {/if}
   </div>
 </div>
 
@@ -147,6 +154,17 @@
     padding: 11px 14px;
     font-family: var(--fuu-font-body);
     font-size: 14.5px;
+  }
+  .signup {
+    background: none;
+    border: none;
+    border-top: 1px solid var(--fuu-line-4);
+    padding: 14px 0 0;
+    font-size: 13.5px;
+    color: var(--fuu-ink-3);
+  }
+  .signup strong {
+    color: var(--fuu-red);
   }
   .note {
     font-size: 11px;

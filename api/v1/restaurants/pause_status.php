@@ -19,7 +19,8 @@ $restaurantId = require_store_staff($claims);
 $pdo = db();
 
 $storeStmt = $pdo->prepare(
-    'SELECT name, is_open, pause_until, prep_minutes, prep_auto_bump FROM restaurants WHERE id = :id'
+    'SELECT name, is_open, pause_until, prep_minutes, prep_auto_bump, approved_at, rejected_at, rejection_reason
+       FROM restaurants WHERE id = :id'
 );
 $storeStmt->execute(['id' => $restaurantId]);
 $store = $storeStmt->fetch();
@@ -103,6 +104,11 @@ json_response(200, [
         'pause_until' => $store['pause_until'],
         'prep_minutes' => (int) $store['prep_minutes'],
         'prep_auto_bump' => $store['prep_auto_bump'],
+        // Cadastro feito pela própria loja (restaurants/signup.php): até a
+        // plataforma aprovar, o painel avisa que a loja não aparece pros
+        // clientes -- e, se recusou, mostra o motivo pra corrigir.
+        'approval' => $store['approved_at'] !== null ? 'approved' : ($store['rejected_at'] !== null ? 'rejected' : 'review'),
+        'rejection_reason' => $store['rejection_reason'],
     ],
     'prep' => $prep,
     'effect' => [

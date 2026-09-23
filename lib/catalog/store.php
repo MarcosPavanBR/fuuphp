@@ -46,3 +46,37 @@ function effective_prep_minutes(PDO $pdo, string $restaurantId, ?array $store = 
         'queue' => $queue,
     ];
 }
+
+/**
+ * Categorias de loja, as mesmas dos atalhos da Home (tela 2.1) mais
+ * "Restaurante" pra quem não cabe neles. O cadastro só aceita estas: a
+ * categoria vira filtro, e texto livre quebraria o filtro.
+ */
+const STORE_CATEGORIES = ['Lanches', 'Pizza', 'Restaurante', 'Mercado', 'Farmácia', 'Doces'];
+
+/**
+ * A loja pode receber pedido agora? Encerra com 404 se não existe e 409 se
+ * ainda não foi aprovada pela plataforma ou está fechada. Devolve a linha.
+ *
+ * A lista da Home já esconde loja não aprovada, mas link direto chegaria no
+ * carrinho e no checkout: com o cadastro aberto (restaurants/signup.php),
+ * loja ainda não conferida não pode vender. Usada em carrinho, pedido,
+ * checkout e "pedir de novo".
+ */
+function require_store_accepting_orders(PDO $pdo, string $restaurantId): array
+{
+    $stmt = $pdo->prepare('SELECT * FROM restaurants WHERE id = :id');
+    $stmt->execute(['id' => $restaurantId]);
+    $restaurant = $stmt->fetch();
+    if ($restaurant === false) {
+        error_response(404, 'restaurant_not_found', 'Loja não encontrada.');
+    }
+    if ($restaurant['approved_at'] === null) {
+        error_response(409, 'store_not_available', 'Essa loja ainda não está recebendo pedidos.');
+    }
+    if (!$restaurant['is_open']) {
+        error_response(409, 'store_closed', 'Essa loja está fechada agora.');
+    }
+
+    return $restaurant;
+}

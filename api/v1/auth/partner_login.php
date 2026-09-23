@@ -80,9 +80,16 @@ if ($account['blocked']) {
     error_response(403, 'user_blocked', 'Conta bloqueada. Fale com o suporte.');
 }
 
-$secretOk = $kind === 'restaurant'
-    ? password_verify($secret, (string) ($account['password_hash'] ?? ''))
-    : hash_equals((string) ($account['access_code_hash'] ?? ''), hash('sha256', $secret));
+// Loja: senha em bcrypt. Entregador: código de acesso em bcrypt desde a
+// migração 034; o formato antigo (SHA-256 em hex, 64 caracteres) ainda é
+// aceito e trocado por bcrypt no primeiro acerto, logo abaixo.
+$storedCode = (string) ($account['access_code_hash'] ?? '');
+$legacyCode = $kind === 'courier' && preg_match('/^[0-9a-f]{64}$/', $storedCode) === 1;
+$secretOk = match (true) {
+    $kind === 'restaurant' => password_verify($secret, (string) ($account['password_hash'] ?? '')),
+    $legacyCode => hash_equals($storedCode, hash('sha256', $secret)),
+    default => password_verify($secret, $storedCode),
+};
 
 if (!$secretOk) {
     $refuse();
@@ -90,6 +97,10 @@ if (!$secretOk) {
 // Acertou: os erros anteriores deste login não contam mais.
 $pdo->prepare('DELETE FROM partner_login_failures WHERE kind = :k AND login_code = :l')
     ->execute(['k' => $kind, 'l' => $loginCode]);
+if ($legacyCode) {
+    $pdo->prepare('UPDATE partner_accounts SET access_code_hash = :h WHERE id = :id')
+        ->execute(['h' => password_hash($secret, PASSWORD_DEFAULT), 'id' => $account['id']]);
+}
 
 // 2FA por aparelho, na forma simples que o esquema suporta: confiança no
 // primeiro uso. A troca de aparelho é liberada pelo suporte, na aba

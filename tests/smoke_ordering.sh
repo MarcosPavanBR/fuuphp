@@ -34,8 +34,8 @@ INSERT INTO platform_policies (version, enabled_methods, delivery_base_fee, crea
          ARRAY['mp_card','pix_auto','pix_manual','cash','pos_machine']::payment_method[], 8.00, id
   FROM users ORDER BY created_at LIMIT 1;
 
-INSERT INTO restaurants (id, name, cnpj, city_ibge_code, is_open, commission_bps)
-VALUES ('${RESTAURANT_ID}', 'Smoke Test Restaurant', '${CNPJ}', '3550308', true, 800);
+INSERT INTO restaurants (id, name, cnpj, city_ibge_code, is_open, commission_bps, approved_at)
+VALUES ('${RESTAURANT_ID}', 'Smoke Test Restaurant', '${CNPJ}', '3550308', true, 800, now());
 
 INSERT INTO restaurant_payment_settings (restaurant_id, methods, max_change, min_order)
 VALUES ('${RESTAURANT_ID}', ARRAY['cash','mp_card']::payment_method[], 100.00, 20.00);

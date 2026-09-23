@@ -27,15 +27,8 @@ if ($menuItemId <= 0) {
 
 $pdo = db();
 
-$restaurantStmt = $pdo->prepare('SELECT is_open, pause_until FROM restaurants WHERE id = :id');
-$restaurantStmt->execute(['id' => $restaurantId]);
-$restaurant = $restaurantStmt->fetch();
-if ($restaurant === false) {
-    error_response(404, 'restaurant_not_found', 'Loja não encontrada.');
-}
-if (!$restaurant['is_open']) {
-    error_response(409, 'store_closed', 'Essa loja está fechada agora.');
-}
+// Existe, foi aprovada pela plataforma e está aberta (lib/catalog/store.php).
+$restaurant = require_store_accepting_orders($pdo, $restaurantId);
 
 $priced = price_line($pdo, $restaurantId, $menuItemId, $variantIds, $quantity);
 

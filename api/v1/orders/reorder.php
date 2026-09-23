@@ -36,11 +36,8 @@ if ($source === null || $source['status'] === 'cart' || $source['user_id'] !== $
 }
 $restaurantId = (string) $source['restaurant_id'];
 
-$store = $pdo->prepare('SELECT is_open FROM restaurants WHERE id = :id');
-$store->execute(['id' => $restaurantId]);
-if ($store->fetchColumn() !== true) {
-    error_response(409, 'store_closed', 'Essa loja está fechada agora.');
-}
+// Existe, foi aprovada pela plataforma e está aberta (lib/catalog/store.php).
+require_store_accepting_orders($pdo, $restaurantId);
 
 $availableStmt = $pdo->prepare('SELECT 1 FROM menu_items WHERE id = :id AND restaurant_id = :r AND available = true');
 $variantStmt = $pdo->prepare('SELECT 1 FROM item_variants WHERE id = :id AND menu_item_id = :item');

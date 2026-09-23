@@ -22,6 +22,11 @@
     return d ? `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}` : '';
   }
 
+  function phoneMask(v) {
+    const d = (v ?? '').replace(/\D/g, '');
+    return d.length === 11 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}` : d.length === 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}` : d;
+  }
+
   function cnpjMask(v) {
     const d = (v ?? '').replace(/\D/g, '');
     return d.length === 14
@@ -88,8 +93,35 @@
 
         <div class="checks">
           <span class="ok"><i class="bi bi-check-circle"></i> CNPJ com dígito válido</span>
-          <span class="pending"><i class="bi bi-hourglass"></i> Documentos: não há upload neste backend</span>
+          {#if store.category}<span class="pending"><i class="bi bi-tag"></i> {store.category}</span>{/if}
+          <span class={store.has_location ? 'ok' : 'pending'}>
+            <i class={`bi ${store.has_location ? 'bi-geo-alt-fill' : 'bi-geo-alt'}`}></i>
+            {store.has_location ? 'Localização marcada' : 'Sem localização: frete usa o centro da cidade'}
+          </span>
         </div>
+
+        {#if store.contact_name || store.address_text}
+          <dl class="facts">
+            {#if store.contact_name}
+              <dt>Responsável</dt>
+              <dd>{store.contact_name} · <span class="fuu-mono">{phoneMask(store.contact_phone)}</span></dd>
+            {/if}
+            {#if store.address_text}<dt>Endereço</dt><dd>{store.address_text}</dd>{/if}
+            <dt>Chave Pix</dt>
+            <dd>
+              {#if store.pix_key}
+                <span class="fuu-mono">{store.pix_key}</span>
+                {#if store.pix_key_checked}
+                  <span class="ok-tag">CNPJ da loja</span>
+                {:else}
+                  <span class="check-tag">confira a titularidade antes de aprovar</span>
+                {/if}
+              {:else}
+                <span class="muted">não informada (Pix direto fica indisponível)</span>
+              {/if}
+            </dd>
+          </dl>
+        {/if}
 
         {#if rejecting === store.id}
           <label class="reason">
@@ -265,5 +297,40 @@
   .why {
     font-size: 12px;
     color: var(--fuu-ink-4);
+  }
+  .facts {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 14px;
+    font-size: 13px;
+    margin: 0 0 14px;
+  }
+  .facts dt {
+    color: var(--fuu-ink-5);
+    font-weight: 600;
+  }
+  .facts dd {
+    margin: 0;
+    color: var(--fuu-ink-1);
+    word-break: break-word;
+  }
+  .ok-tag,
+  .check-tag {
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 2px 8px;
+    margin-left: 6px;
+  }
+  .ok-tag {
+    background: var(--fuu-leaf-tint);
+    color: var(--fuu-leaf-dark);
+  }
+  .check-tag {
+    background: var(--fuu-wait-tint);
+    color: var(--fuu-wait-text);
+  }
+  .muted {
+    color: var(--fuu-ink-5);
   }
 </style>

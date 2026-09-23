@@ -82,6 +82,17 @@ regras de negócio por trás de cada uma estão em [decisions/](decisions/README
 
 ## Loja (painel)
 
+### Cadastrar a loja
+Em **painel.html**, no login, **Cadastre sua loja**: dados da loja (nome,
+CNPJ, categoria, endereço), quem responde por ela, a chave Pix da loja, a
+senha e o aceite dos termos. A loja entra no painel na hora, com o aviso
+**Em análise**: dá pra montar o cardápio e o horário, mas ela ainda não
+aparece pros clientes. Aprovada pela plataforma, começa a vender (só online
+nos primeiros 30 dias). Recusada, o painel mostra o motivo.
+
+A chave Pix precisa ser da própria loja: chave aleatória, e-mail, telefone ou
+o CNPJ dela. CPF não é aceito.
+
 ### Entrar
 - **CNPJ + senha** no tablet do balcão. O painel fica preso a esse
   aparelho. Tablet novo ou quebrado: o suporte do FUU libera a troca.
@@ -96,7 +107,7 @@ regras de negócio por trás de cada uma estão em [decisions/](decisions/README
 | **Loja** (11.2) | pausar e retomar a loja (ex.: cozinha lotada) |
 | **Cardápio** (11.3) | itens, preços, variações, foto e disponibilidade |
 | **Horário** (11.4) | dois turnos por dia, feriados e quantos pedidos agendados cabem por meia hora. Abrir e fechar é automático |
-| **Pagamentos** (10.4) | quais meios a loja aceita e o troco máximo |
+| **Pagamentos** (10.4) | a chave Pix da loja (onde cai o Pix direto do cliente; a troca fica registrada), quais meios a loja aceita e o troco máximo |
 | **Conciliação** (9.6) | importar o extrato da maquininha (CSV) e casar com as vendas |
 | **Cupons** (15.3) | criar e desligar cupons da própria loja, pagos pelo repasse dela, dentro do teto que a plataforma liberou |
 
@@ -170,7 +181,7 @@ admin é criado no servidor com `bin/bootstrap_admin.php`
 ### Abas
 | Aba | Pra quê |
 |---|---|
-| **Lojas** (12.1) | aprovar ou recusar cadastro, com motivo. Aprovada nasce só online por 30 dias. Alerta CNPJ de mesma raiz já cadastrado |
+| **Lojas** (12.1) | aprovar ou recusar cadastro, com motivo. Mostra responsável, telefone, endereço e a chave Pix; chave que não é o CNPJ vem marcada **confira a titularidade**. Aprovada nasce só online por 30 dias. Alerta CNPJ de mesma raiz já cadastrado |
 | **Ocorrências** | divergências de caixa e disputas: decidir quem arca, com lançamento no livro |
 | **Reembolsos** (13.3, 13.4) | liberar pedidos parados por ocorrência e decidir devoluções. Depois de decidido, cartão volta pelo estorno do Mercado Pago e Pix volta por Pix pra chave de quem pagou, os dois executados sozinhos (`bin/execute_refunds.php`); maquininha é cancelada na adquirente da loja; dinheiro não tem o que estornar |
 | **Financeiro** (9.7) | o acerto semanal de lojas e entregadores, repasses e bloqueios por atraso |
@@ -185,6 +196,8 @@ admin é criado no servidor com `bin/bootstrap_admin.php`
   pagar os repasses).
 - **Toda semana:** conferir o backup (servidor) e os logs
   ([OPERATIONS](OPERATIONS.md)).
+- **Sempre:** o monitor externo avisa se `api/v1/health.php` parar de
+  responder `ok` ([GO_LIVE](GO_LIVE.md#monitoramento-saber-que-caiu-antes-do-cliente)).
 
 Tudo que o admin muda (políticas, tetos, liberações de aparelho, decisões de
 dinheiro) fica no registro de auditoria (`audit_log`), com quem, quando e o

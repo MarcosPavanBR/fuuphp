@@ -3,6 +3,7 @@
   import { toastr } from '../../utils/toastr.js';
   import { staffToken } from '../../state/staffSession.svelte.js';
   import { parsePgTimestamp } from '../../utils/datetime.js';
+  import PixKeyPanel from './PixKeyPanel.svelte';
 
   // Tela 10.4 — "Painel da loja: configurar formas de pagamento".
   //
@@ -95,6 +96,8 @@
 
 <div class="payset">
   <section class="main">
+    <PixKeyPanel />
+
     <p class="k">FORMAS DE PAGAMENTO ACEITAS</p>
 
     {#if data === null}

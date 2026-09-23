@@ -174,6 +174,8 @@ ACCESS_CODE=$(echo "$APPROVE" | jq -er '.access_code') || fail "aprovação sem 
 [ "$(echo "$APPROVE" | jq -r '.application.state')" = "approved" ] || fail "não aprovou: $APPROVE"
 [ "$(query "SELECT count(*) FROM couriers WHERE id='${APP_ID}'")" = "1" ] || fail "entregador não foi criado"
 [ "$(query "SELECT role FROM users WHERE cpf='${CPF}'")" = "courier" ] || fail "papel do usuário não virou courier"
+[ "$(query "SELECT left(access_code_hash, 4) FROM partner_accounts WHERE kind='courier' AND login_code='${CPF}'")" = '$2y$' ] \
+  || fail "código de acesso novo não foi guardado em bcrypt"
 
 # E o login do app do entregador (Fase 8) funciona com o que a aprovação criou.
 COURIER_TOKEN=$(curl -s -X POST "$BASE/auth/partner_login.php" -H "Content-Type: application/json" \

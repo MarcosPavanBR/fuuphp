@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_api_catalog.php` a partir dos próprios arquivos de
 > `api/v1`. Não edite à mão: o CI confere (`--check`) e falha se estiver desatualizado.
 
-110 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
+113 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
 `{code, message, trace_id}` com o status HTTP certo (`lib/core/response.php`). As URLs são
 contrato público: mudar um caminho quebra app instalado.
 
@@ -91,6 +91,12 @@ contrato público: mudar um caminho quebra app instalado.
 | `/api/v1/couriers/shift.php` | POST | entregador |  | Tela 8.1 — abrir e fechar turno. O índice `one_open_shift` (migração 007) garante um turno aberto por entregador: abrir duas vezes não cria dois registros, e é o banco que diz isso, não um `if` no PHP. |
 | `/api/v1/couriers/submit_application.php` | POST | autenticado |  | Tela 15.2, última etapa: "você lê e aceita o contrato de prestação de serviço e a política de dados". |
 
+## health.php
+
+| Rota | Métodos | Quem | Idem. | O que faz |
+|---|---|---|---|---|
+| `/api/v1/health.php` | GET | público |  | Saúde do sistema, pro monitoramento externo (UptimeRobot, Better Stack...) e pro deploy conferir que a versão nova respondeu. |
+
 ## Pedido: checkout, acompanhamento, recibo (Fases 4, 5, 13, 14, 15.1)
 
 | Rota | Métodos | Quem | Idem. | O que faz |
@@ -160,6 +166,7 @@ contrato público: mudar um caminho quebra app instalado.
 | `/api/v1/restaurants/pause_status.php` | GET | loja |  | Tela 11.2 — "Pausa com volta automática e o custo estimado ao lado: decisão com número, não no escuro." |
 | `/api/v1/restaurants/payment_settings.php` | GET, POST | loja |  | Tela 10.4 — "Painel da loja: configurar formas de pagamento". |
 | `/api/v1/restaurants/pending_proofs.php` | GET | autenticado |  | Tela 7.3 — fila de validação do painel da loja. Devolve, de uma vez, tudo que o modal de decisão precisa mostrar: o comprovante (referência), os dados do pedido e a "conferência automática" (hash, phash, horário, marca d'água) que o mock descreve -- "reduz… |
+| `/api/v1/restaurants/pix_key.php` | POST | loja |  | Chave Pix da loja (tela 10.4, aba Pagamentos): onde cai o "Pix direto pra loja" do cliente (4.3) e a baixa de espécie por Pix do entregador (9.5). |
 | `/api/v1/restaurants/pos_devices.php` | POST | loja |  | Tela 10.4, bloco "MAQUININHAS CADASTRADAS" — e a outra ponta da 10.6. |
 | `/api/v1/restaurants/prep_time.php` | POST | loja |  | Tela 11.2 — "Tempo de preparo informado ao cliente". |
 | `/api/v1/restaurants/print_queue.php` | GET, POST | loja |  | A impressora térmica da loja (ESC/POS): o que falta imprimir, e o registro do que saiu no papel. Quem imprime é o tablet do balcão, que está ligado na impressora por USB -- o servidor não alcança a rede da loja. |
@@ -169,6 +176,7 @@ contrato público: mudar um caminho quebra app instalado.
 | `/api/v1/restaurants/settlement_proofs.php` | GET, POST | loja |  | Tela 9.5, lado da loja — conferir a baixa de espécie que o entregador fez por Pix: "Reaproveita a validação humana já existente." |
 | `/api/v1/restaurants/settlements.php` | GET | autenticado |  | Tela 9.3, lado da loja — o que está esperando conferência no caixa e o que já foi baixado hoje. |
 | `/api/v1/restaurants/show.php` | GET | público |  | Tela 3.1 — os dados públicos de uma loja: horário, tempo de preparo em vigor e as formas de pagamento que ela aceita agora. |
+| `/api/v1/restaurants/signup.php` | POST | público |  | Cadastro de loja pela própria loja ("Quero vender no FUU", migração 033). |
 | `/api/v1/restaurants/stats.php` | GET | autenticado |  | Tela 7.3 — "VISÃO GERAL DE HOJE": faturado, pedidos, Pix validados, recusados. "Hoje" é o dia corrente no fuso do banco (now()::date), não as últimas 24h -- é o que um dono de loja entende por "hoje". |
 
 ## Avaliação (5.5)

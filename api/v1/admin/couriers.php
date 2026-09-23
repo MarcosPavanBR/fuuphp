@@ -117,13 +117,13 @@ try {
     )->execute(['id' => $applicationId, 'user_id' => $user['id'], 'city' => $city]);
 
     // O código de acesso do app do entregador (Fase 8): seis dígitos,
-    // guardado só como hash. O texto aparece UMA vez, pra quem aprovou
+    // guardado só como hash bcrypt. O texto aparece UMA vez, pra quem aprovou
     // passar adiante -- não há integração de WhatsApp pra mandar sozinho, e
     // fingir que mandamos seria pior que dizer isso.
     $accessCode = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
     $pdo->prepare(
         'INSERT INTO partner_accounts (user_id, kind, courier_id, login_code, access_code_hash)
-         VALUES (:user_id, :kind, :courier_id, :login_code, encode(sha256(:code::bytea), :enc))
+         VALUES (:user_id, :kind, :courier_id, :login_code, :hash)
          ON CONFLICT (kind, login_code) DO UPDATE
            SET access_code_hash = EXCLUDED.access_code_hash, courier_id = EXCLUDED.courier_id'
     )->execute([
@@ -131,8 +131,9 @@ try {
         'kind' => 'courier',
         'courier_id' => $applicationId,
         'login_code' => $application['cpf'],
-        'code' => $accessCode,
-        'enc' => 'hex',
+        // bcrypt, como a senha da loja (migração 034): 6 dígitos em SHA-256
+        // puro cairiam em segundos se o banco vazasse.
+        'hash' => password_hash($accessCode, PASSWORD_DEFAULT),
     ]);
 
     $stmt = $pdo->prepare(

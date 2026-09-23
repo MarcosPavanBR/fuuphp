@@ -101,7 +101,19 @@ listen_addresses = 'localhost'
 shared_preload_libraries = 'pg_cron'
 cron.database_name = 'fuudelivery'
 cron.timezone = 'America/Sao_Paulo'
+cron.use_background_workers = on
+max_worker_processes = 20
 ```
+
+**`cron.use_background_workers = on` é obrigatório.** Sem ele, o pg_cron
+executa cada tarefa abrindo uma conexão TCP em `localhost` como `postgres`, e
+a autenticação padrão do Ubuntu barra. Toda tarefa falha com `connection
+failed`, em silêncio: Pix vencido não é recusado, loja não abre nem fecha
+sozinha, o repasse de terça não sai. Com os background workers, as tarefas
+rodam dentro do próprio servidor, sem conexão nem senha. `max_worker_processes`
+precisa de folga pra eles. Conferido neste projeto: sem a linha, 100% de falha;
+com ela, sucesso. A rota `api/v1/health.php` e o `bin/check_production.php`
+acusam se o cron parar.
 
 O relógio da VPS fica em UTC (padrão). `cron.timezone` faz as tarefas do
 banco seguirem o horário de Brasília: o repasse sai "terça, 3h" daqui, não
@@ -186,12 +198,37 @@ No Cloudflare:
 - DNS do domínio com proxy (nuvem laranja);
 - SSL/TLS em **Full (strict)**, com um certificado de origem
   (SSL/TLS > Origin Server) salvo em `/etc/ssl/cloudflare/`;
-- "Always Use HTTPS" ligado;
-- regra de cache: `/api/*` com bypass.
+- "Always Use HTTPS" ligado, e **Minimum TLS Version 1.2**;
+- regra de cache: `/api/*` com bypass;
+- **Security > Bots: Bot Fight Mode** ligado;
+- **Security > WAF > Rate limiting rules** (o plano grátis permite uma regra;
+  use esta):
+  - regra: caminho começa com `/api/v1/auth/` **ou** é
+    `/api/v1/restaurants/signup.php`;
+  - limite: 20 requisições por 10 segundos, por IP;
+  - ação: bloquear por 1 minuto.
+
+  O código já limita tentativas por conta e por IP. A regra do Cloudflare
+  segura o volume antes de chegar na VPS, e é ela que protege a conta de SMS
+  da Twilio contra quem tentar disparar códigos em massa.
 
 O Nginx só aceita o IP do cliente vindo do Cloudflare (`real_ip`), e o PHP
 usa só esse IP (`client_ip()`). Assim, a prova de consentimento não grava IP
 forjado. No firewall da VPS, deixe aberto só SSH e 80/443.
+
+### Monitoramento: saber que caiu antes do cliente
+
+`GET https://<dominio>/api/v1/health.php` responde `200 {"status":"ok"}` com
+a API, o banco e o pg_cron funcionando. Quando algo para, responde `503` com o
+que parou (`db` ou `cron`). Com a trava de produção reprovada, também dá 503.
+
+- Aponte um monitor externo pra essa URL, a cada 1 a 5 minutos, com alerta no
+  seu celular. Há opções gratuitas (UptimeRobot, Better Stack, entre outras);
+  escolher e criar a conta é decisão sua, porque é serviço externo.
+- O mesmo monitor deve olhar a página inicial (`https://<dominio>/`), que é o
+  PWA servido pelo Nginx.
+- Erros do PHP ficam em `/var/log/fuuphp/php-error.log`, cada um com o
+  `trace_id` que aparece pro usuário na tela de erro.
 
 ### Deploy e rollback
 
@@ -360,7 +397,10 @@ verdade:
 - [ ] O push chega no Android e no iPhone (PWA instalado).
 - [ ] Fidelidade: um pedido entregue dá pontos; o resgate vira um cupom pessoal que só o dono usa; o estorno tira os pontos.
 - [ ] O acompanhamento ao vivo atualiza sem recarregar (SSE pelo Cloudflare).
-- [ ] O cron roda (`/var/log/fuuphp/*.log` mexendo) e o pg_cron também (`SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 5`).
+- [ ] O cron roda (`/var/log/fuuphp/*.log` mexendo) e o pg_cron também: `/api/v1/health.php` dá `200 ok`, e `SELECT status, return_message FROM cron.job_run_details ORDER BY start_time DESC LIMIT 5` mostra `succeeded`, não `connection failed`.
+- [ ] O monitor externo está apontado pra `/api/v1/health.php` e o alerta chega no celular (teste parando o PHP-FPM por 1 minuto).
+- [ ] Cadastro de loja: uma loja de teste se cadastra por `/painel.html`, aparece "em análise", o admin aprova, e ela passa a aparecer pros clientes.
+- [ ] `/termos.html` e `/privacidade.html` estão com os dados da empresa preenchidos e revisados por advogado.
 - [ ] O backup da noite existe, a restauração num banco de teste funciona e a cópia externa chegou.
 - [ ] O `.env` está com 600, dono `fuuphp`, e fora do git (`git status` limpo na VPS).
 

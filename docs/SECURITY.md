@@ -49,7 +49,9 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
 `api/v1/auth/partner_login.php`, migração 032
 
 - Loja: senha com `password_hash` (bcrypt). Entregador: código de acesso de
-  6 dígitos (hash SHA-256), gerado pela plataforma na aprovação.
+  6 dígitos, também em bcrypt (migração 034), gerado pela plataforma na
+  aprovação. Código antigo, gravado em SHA-256, ainda entra uma vez e é
+  regravado em bcrypt no mesmo login.
 - **Limite de tentativas:** 5 erros no mesmo login ou 30 no mesmo IP em
   15 minutos dão 429, conferidos **antes** da senha. Sem isso, os 6 dígitos
   do entregador cairiam por força bruta. Conta inexistente e senha errada dão
@@ -59,6 +61,25 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
   Aparelhos (`admin/partner_devices.php`), com motivo obrigatório. A troca
   encerra as sessões do aparelho antigo e grava no `audit_log`.
 - Testes: `smoke_partner_device.sh`, `smoke_panel.sh`, `smoke_courier.sh`.
+
+## Cadastro de loja
+
+`api/v1/restaurants/signup.php`, `api/v1/restaurants/pix_key.php`, migração 033
+
+- **Público, mas com freio:** no máximo 3 cadastros por IP em 24 horas (429).
+  O IP fica gravado só até a análise; aprovar a loja apaga o IP.
+- **Loja nova não vende.** Até a plataforma aprovar, a loja não aparece na
+  busca e o carrinho, o checkout e o "pedir de novo" respondem
+  `store_not_available` (`require_store_accepting_orders`). O painel abre,
+  pra loja montar o cardápio, com o aviso de que está em análise.
+- **Chave Pix da loja:** aceita chave aleatória, e-mail, telefone ou o
+  **próprio** CNPJ da loja. CPF é recusado (o dinheiro da loja não cai na conta
+  de uma pessoa). Chave que não é o CNPJ chega à análise marcada pra conferir
+  a titularidade. Toda troca de chave grava a anterior e a nova no
+  `audit_log`.
+- CNPJ e e-mail repetidos são recusados antes de gravar; senha em bcrypt;
+  aceite dos termos e do aviso de privacidade gravado com versão e IP.
+- Teste: `smoke_store_signup.sh`.
 
 ## Banco de dados
 
@@ -139,6 +160,12 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
 - **IP do cliente:** o PHP usa só `REMOTE_ADDR`, que o Nginx acerta a partir
   de `CF-Connecting-IP` **só** pras faixas do Cloudflare. Ninguém forja o IP
   gravado na prova de consentimento.
+- **Cloudflare** na frente (docs/GO_LIVE.md): TLS 1.2 no mínimo, Bot Fight
+  Mode e uma regra de rate limit por IP nas rotas de login e de cadastro de
+  loja. É a proteção de volume que o PHP, sozinho, não dá.
+- **Saúde** (`api/v1/health.php`): responde 503 se o banco ou o pg_cron
+  pararem, pro monitor externo avisar antes do cliente. A resposta diz só
+  `db` ou `cron`, sem detalhe interno.
 - **Erros** viram `{code, message, trace_id}` sem stack trace. O detalhe fica
   no log do servidor, achado pelo `trace_id`.
 
@@ -159,10 +186,12 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
 
 - **A sessão do painel da plataforma** tem a força do celular do admin (login
   por SMS, sem segundo fator).
-- **O hash do código de acesso do entregador** é SHA-256 sem sal. O limite de
-  tentativas fecha o ataque pela API, mas um vazamento do banco revelaria os
-  códigos (são só 10⁶). A mitigação é trocar o código do entregador se o banco
-  vazar.
+- **O código de acesso do entregador** tem só 6 dígitos. O limite de tentativas
+  fecha o ataque pela API e o bcrypt encarece quebrar um vazamento do banco,
+  mas 10⁶ combinações seguem poucas: se o banco vazar, troque os códigos.
+- **A titularidade da chave Pix** que não é o CNPJ da loja é conferida por uma
+  pessoa, na análise do cadastro. O sistema não consulta o DICT do Banco
+  Central.
 - **O rate limit do cliente** é por pessoa (OTP), não por IP. Um ataque
   distribuído que crie muitos cadastros gasta SMS; o Cloudflare na frente é
   a proteção de volume.

@@ -1,7 +1,7 @@
 name: ci
 
 # ADR-002 (Especificacao FUUDelivery, Parte I): migracoes versionadas rodam
-# no CI, nunca no cPanel. Este workflow aplica as trinta e duas migracoes do zero,
+# no CI, nunca no cPanel. Este workflow aplica as trinta e cinco migracoes do zero,
 # reverte tudo e aplica de novo contra um PostgreSQL 16 real com pg_cron, e
 # depois roda o smoke test de cada modulo PHP sobre esse banco migrado.
 
@@ -48,7 +48,7 @@ jobs:
             -e POSTGRES_PASSWORD=postgres \
             -p 5432:5432 \
             fuudelivery-db \
-            postgres -c shared_preload_libraries=pg_cron -c cron.database_name=fuudelivery
+            postgres -c shared_preload_libraries=pg_cron -c cron.database_name=fuudelivery -c cron.use_background_workers=on -c max_worker_processes=20
 
       - name: Esperar o banco aceitar conexao
         run: |
@@ -57,7 +57,7 @@ jobs:
             sleep 2
           done
 
-      - name: Aplicar as 32 migracoes (up)
+      - name: Aplicar as 35 migracoes (up)
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
         run: |
@@ -68,7 +68,7 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
         run: |
-          bash db/migrate.sh down 32
+          bash db/migrate.sh down 35
           bash db/migrate.sh up
 
       - name: "Senha do role app_rw (a API das suítes conecta com ele)"
@@ -310,6 +310,13 @@ jobs:
           JWT_SECRET: ci-test-secret
           MERCADOPAGO_MODE: fake
         run: bash tests/smoke_store_coupons.sh
+
+      - name: "Smoke test -- cadastro de loja pela própria loja e chave Pix no painel (migração 033)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_store_signup.sh
 
       - name: "Papéis do banco: RLS por loja, livro só de inserção, app_rw sem DDL (go-live)"
         env:

@@ -609,7 +609,7 @@ Criada em `db/migrations/001_identity.up.sql`. Login de parceiros: loja com CNPJ
 | `courier_id` | uuid | sim | `couriers.id` |
 | `login_code` | text |  |  |
 | `password_hash` | text | sim |  |
-| `access_code_hash` | character | sim |  |
+| `access_code_hash` | text | sim |  |
 | `device_id` | text | sim |  |
 | `created_at` | timestamp with time zone (padrão) |  |  |
 
@@ -860,6 +860,10 @@ Criada em `db/migrations/002_catalog.up.sql`. Da migração: restaurants, restau
 | `prep_auto_bump` | boolean (padrão) |  |  |
 | `slot_capacity` | integer (padrão) |  |  |
 | `coupon_budget_limit` | numeric (padrão) |  |  |
+| `contact_name` | text | sim |  |
+| `contact_phone` | text | sim |  |
+| `address_text` | text | sim |  |
+| `signup_ip` | inet | sim |  |
 
 ## reviews
 

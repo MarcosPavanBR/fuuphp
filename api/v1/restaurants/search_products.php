@@ -30,6 +30,7 @@ $stmt = $pdo->prepare(
      FROM menu_items mi
      JOIN restaurants r ON r.id = mi.restaurant_id
      WHERE r.city_ibge_code = :city_ibge_code
+       AND r.approved_at IS NOT NULL
        AND r.is_open = true
        AND (r.pause_until IS NULL OR r.pause_until <= now())
        AND mi.available = true

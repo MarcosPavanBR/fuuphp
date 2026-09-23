@@ -118,6 +118,14 @@ set -e
 if [ "$(psql "$DATABASE_URL" -tAc "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user")" = "t" ]; then
   [ "$CODE" = "1" ] && echo "$OUT" | grep -q "ignora RLS" || fail "check_production aceitou superusuário: $OUT"
 fi
+# check_production também exige o pg_cron RODANDO (cron_healthy, migração
+# 035). Logo depois das migrações a primeira execução pode levar até 1 min.
+for i in $(seq 1 45); do
+  [ "$(psql "$DATABASE_URL" -tAc "SELECT cron_healthy()")" = "t" ] && break
+  sleep 2
+done
+[ "$(psql "$DATABASE_URL" -tAc "SELECT cron_healthy()")" = "t" ] \
+  || fail "pg_cron não executou nenhuma tarefa em 90 s: $(psql "$DATABASE_URL" -tAc "SELECT status || ' ' || return_message FROM cron.job_run_details ORDER BY runid DESC LIMIT 1")"
 if [ -n "${API_DATABASE_URL:-}" ]; then
   OUT=$(env -i PATH="$PATH" HOME="$HOME" FUU_ENV_FILE=/dev/null DATABASE_URL="$API_DATABASE_URL" APP_ENV=staging \
         php -d auto_prepend_file="$SKIP" "$ROOT/bin/check_production.php" 2>&1) || fail "check_production recusou app_rw: $OUT"

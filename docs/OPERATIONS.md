@@ -57,6 +57,13 @@ recusa de Pix não validado no prazo (a cada minuto), expiração de intenção
 de baixa de espécie (5 min), abre/fecha loja pelo horário (a cada minuto),
 repasses da semana (terça, 3h), purga por retenção (todo dia, 4h).
 
+O pg_cron precisa de `cron.use_background_workers = on` no
+`postgresql.conf`: sem isso, **toda** tarefa falha com "connection failed" e
+nada avisa. `cron_healthy()` (migração 035) diz se alguma terminou nos
+últimos 5 minutos; a rota de saúde e o `bin/check_production.php` usam ela.
+Pra ver o histórico: `SELECT jobid, status, return_message, start_time FROM
+cron.job_run_details ORDER BY start_time DESC LIMIT 20;`
+
 **No servidor, uma linha por script** (na VPS: `deploy/cron/fuuphp`, com `flock`):
 
 ```cron
@@ -68,6 +75,13 @@ repasses da semana (terça, 3h), purga por retenção (todo dia, 4h).
 ```
 
 Todos são idempotentes: rodar duas vezes, ou atrasar, não duplica nada.
+
+## Saúde
+
+`GET /api/v1/health.php` responde `200 {"status":"ok"}` com o banco e o
+pg_cron rodando, e `503 {"status":"degraded","failing":["db"|"cron"]}` se
+não. É o endereço do monitor externo e o que o deploy consulta depois de
+trocar a versão.
 
 ## Tarefas de uma vez
 

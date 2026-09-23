@@ -7,6 +7,10 @@ services:
       - shared_preload_libraries=pg_cron
       - -c
       - cron.database_name=fuudelivery
+      - -c
+      - cron.use_background_workers=on
+      - -c
+      - max_worker_processes=20
     environment:
       POSTGRES_DB: fuudelivery
       POSTGRES_USER: postgres

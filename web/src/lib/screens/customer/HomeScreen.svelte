@@ -1,4 +1,5 @@
 <script>
+  import { HOME_CATEGORIES } from '../../data/categories.js';
   import { api } from '../../services/api.js';
   import { toastr } from '../../utils/toastr.js';
 
@@ -13,7 +14,7 @@
   // dá pra calcular (sem coordenada, sem avaliações) simplesmente não aparece.
   let { location, onOpenRestaurant, onSearch } = $props();
 
-  const CATEGORIES = ['Lanches', 'Pizza', 'Mercado', 'Farmácia', 'Doces'];
+  const CATEGORIES = HOME_CATEGORIES;
 
   let category = $state(null);
   let restaurants = $state([]);

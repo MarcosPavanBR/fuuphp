@@ -148,8 +148,8 @@
     </button>
 
     <p class="legal">
-      Ao continuar você aceita os <a href="#termos">Termos de uso</a> e o
-      <a href="#privacidade">Aviso de privacidade</a>. Tratamos seus dados para executar o contrato de
+      Ao continuar você aceita os <a href="/termos.html" target="_blank" rel="noopener">Termos de uso</a> e o
+      <a href="/privacidade.html" target="_blank" rel="noopener">Aviso de privacidade</a>. Tratamos seus dados para executar o contrato de
       entrega (art. 7º, V, LGPD).
     </p>
 
