@@ -74,7 +74,7 @@
 
 <div class="login">
   <header class="hero">
-    <div class="mark"><BrandMark size={58} /></div>
+    <div class="brand-slot"><BrandMark size={58} /></div>
     <h1 class="fuu-display">Entrar no FUUDelivery</h1>
     <p class="sub">
       {emailAvailable ? 'Telefone ou e-mail.' : 'Seu celular.'} Enviamos um código de 6 dígitos — você não precisa
@@ -168,7 +168,7 @@
   .hero {
     padding: 44px 22px 28px;
   }
-  .mark {
+  .brand-slot {
     width: 58px;
   }
   h1 {

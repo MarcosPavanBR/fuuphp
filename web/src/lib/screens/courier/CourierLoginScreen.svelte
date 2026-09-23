@@ -54,7 +54,7 @@
 </script>
 
 <div class="login">
-  <div class="mark"><BrandMark size={58} /></div>
+  <div class="brand-slot"><BrandMark size={58} /></div>
   <h1 class="fuu-display">App do entregador</h1>
   <p class="sub">Entre com o CPF e o código que o suporte te passou.</p>
 
@@ -120,7 +120,7 @@
     max-width: 430px;
     margin: 0 auto;
   }
-  .mark {
+  .brand-slot {
     width: 58px;
   }
   h1 {

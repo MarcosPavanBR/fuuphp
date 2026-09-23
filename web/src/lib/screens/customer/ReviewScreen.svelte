@@ -74,7 +74,7 @@
 
 <div class="review-screen">
   <div class="header">
-    <div class="mark"><BrandMark size={44} /></div>
+    <div class="brand-slot"><BrandMark size={44} /></div>
     <h1 class="fuu-display">Como foi o pedido?</h1>
     <p class="subtitle">{restaurantName} · #{orderCode}</p>
   </div>
@@ -138,7 +138,7 @@
     text-align: center;
     margin-bottom: 20px;
   }
-  .mark {
+  .brand-slot {
     width: 44px;
     margin: 0 auto 12px;
   }
