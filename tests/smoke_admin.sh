@@ -140,6 +140,24 @@ REP=$(curl -s "$BASE/admin/reports.php?days=30" "${AAUTH[@]}")
 echo "$REP" | jq -e '.payment_mix' >/dev/null || fail "sem mix de pagamento: $REP"
 echo "$REP" | jq -e '.balances.store_receivable' >/dev/null || fail "sem saldo a cobrar: $REP"
 
+echo "== números do dia a dia: ticket médio, horas, dias, lojas, clientes -- conferidos contra o banco =="
+PAID="status IN ('paid','preparing','ready','delivering','delivered') AND created_at >= now() - interval '30 days'"
+read -r DB_ORDERS DB_TICKET DB_BUYERS < <(psql "$DATABASE_URL" -tA -F' ' -c \
+  "SELECT count(*), COALESCE(round(SUM(total) / NULLIF(count(*), 0), 2)::text, 'null'), count(DISTINCT user_id) FROM orders WHERE ${PAID}")
+[ "$(echo "$REP" | jq -r '.totals.orders')" = "$DB_ORDERS" ] || fail "pedidos do período não batem com o banco"
+[ "$(echo "$REP" | jq -r 'if .totals.average_ticket == null then "null" else (.totals.average_ticket * 100 | round | tostring) end')" \
+  = "$( [ "$DB_TICKET" = "null" ] && echo null || echo "$DB_TICKET" | awk '{printf "%d", $1 * 100 + 0.5}')" ] \
+  || fail "ticket médio não bate com o banco ($DB_TICKET): $(echo "$REP" | jq -c '.totals')"
+[ "$(echo "$REP" | jq -r '[.by_hour | length, (map(.orders) | add)] | join("|")')" = "24|${DB_ORDERS}" ] \
+  || fail "pedidos por hora não somam o total: $(echo "$REP" | jq -c '.by_hour')"
+[ "$(echo "$REP" | jq -r '[.by_weekday | length, (map(.orders) | add)] | join("|")')" = "7|${DB_ORDERS}" ] \
+  || fail "pedidos por dia da semana não somam o total"
+[ "$(echo "$REP" | jq -r '.customers.buyers')" = "$DB_BUYERS" ] || fail "clientes do período não batem com o banco"
+echo "$REP" | jq -e '(.top_stores | length) <= 5 and ([.top_stores[].gmv] == ([.top_stores[].gmv] | sort | reverse))' >/dev/null \
+  || fail "top lojas fora de ordem ou com mais de 5: $(echo "$REP" | jq -c '.top_stores')"
+echo "$REP" | jq -e '.customers.returning <= .customers.buyers and .customers.first_time <= .customers.buyers and (.previous | has("average_ticket"))' >/dev/null \
+  || fail "clientes que voltaram/novos inconsistentes: $(echo "$REP" | jq -c '.customers, .previous')"
+
 echo "== política é VERSIONADA, nunca editada =="
 BEFORE_V=$(psql "$DATABASE_URL" -tAc "SELECT MAX(version) FROM platform_policies")
 NEW=$(curl -s -X POST "$BASE/admin/policy.php" -H "Content-Type: application/json" "${AAUTH[@]}" \

@@ -1,7 +1,7 @@
 <script>
   import { api, ApiError } from '../../services/api.js';
   import { toastr } from '../../utils/toastr.js';
-  import { ALL_STATES, CITIES_BY_STATE } from '../../data/states.js';
+  import { loadServiceStates } from '../../services/cities.js';
   import { STORE_CATEGORIES } from '../../data/categories.js';
 
   // "Quero vender no FUU" — cadastro da loja pela própria loja
@@ -14,13 +14,20 @@
   // manda falar com a gente em vez de aceitar um cadastro que não vai vender.
   let { onDone, onBack } = $props();
 
-  const STATES_WITH_CITIES = ALL_STATES.filter((s) => (CITIES_BY_STATE[s.uf] ?? []).length > 0);
+  // As cidades atendidas (aba Cidades do admin, cities/list.php).
+  let states = $state([]);
+  loadServiceStates()
+    .then((list) => {
+      states = list;
+      if (!form.uf) form.uf = list[0]?.uf ?? '';
+    })
+    .catch(() => toastr.error('Não deu pra carregar as cidades. Recarregue a página.'));
 
   let form = $state({
     name: '',
     cnpj: '',
     category: '',
-    uf: STATES_WITH_CITIES[0]?.uf ?? '',
+    uf: '',
     city: '',
     address: '',
     contact_name: '',
@@ -35,7 +42,7 @@
   let busy = $state(false);
   let errors = $state({});
 
-  let cities = $derived(CITIES_BY_STATE[form.uf] ?? []);
+  let cities = $derived(states.find((s) => s.uf === form.uf)?.cities ?? []);
 
   function cnpjMask(v) {
     const d = v.replace(/\D/g, '').slice(0, 14);
@@ -137,7 +144,7 @@
       <label class="field">
         <span>Estado</span>
         <select bind:value={form.uf} onchange={() => (form.city = '')}>
-          {#each STATES_WITH_CITIES as s (s.uf)}
+          {#each states as s (s.uf)}
             <option value={s.uf}>{s.name}</option>
           {/each}
         </select>

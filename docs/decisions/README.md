@@ -44,3 +44,4 @@ pra ele (ex.: o mapa do acompanhamento em 06 → 16).
 - [34 — Código de login por SMS pela Twilio](34-otp-twilio.md)
 - [35 — Limite de tentativas no login de parceiro](35-limite-no-login-de-parceiro.md)
 - [36 — Cadastro de loja, chave Pix, saúde e pg_cron](36-cadastro-de-loja-e-saude.md)
+- [37 — Cidades atendidas e os números do dia a dia](37-cidades-e-numeros.md)

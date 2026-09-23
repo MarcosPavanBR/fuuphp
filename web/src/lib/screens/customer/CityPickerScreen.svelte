@@ -1,7 +1,7 @@
 <script>
   import swal from 'sweetalert';
   import PhoneStatusBar from '../../components/PhoneStatusBar.svelte';
-  import { CITIES_BY_STATE } from '../../data/states.js';
+  import { loadServiceStates } from '../../services/cities.js';
   import { toastr } from '../../utils/toastr.js';
 
   // Tela 1.3 — Cidade + bairro. "O modal é SweetAlert — pergunta antes do
@@ -9,7 +9,11 @@
   // (CityPickerScreen.svelte, SweetAlert, Geolocation API)
   let { uf, onDone } = $props();
 
-  let cities = $derived(CITIES_BY_STATE[uf] ?? []);
+  // As cidades atendidas do estado escolhido (a mesma busca da tela 1.2).
+  let cities = $state([]);
+  loadServiceStates()
+    .then((states) => (cities = states.find((s) => s.uf === uf)?.cities ?? []))
+    .catch(() => toastr.error('Não deu pra carregar as cidades. Volte e tente de novo.'));
   let query = $state('');
   let selectedCity = $state(null);
   let selectedNeighborhood = $state(null);
@@ -20,44 +24,48 @@
       : cities
   );
 
+  // Posição do aparelho, se o cliente deixar: ordena as lojas pela
+  // distância real em vez do centro da cidade.
+  let coords = $state(null);
+
   async function pickCity(city) {
     selectedCity = city;
     selectedNeighborhood = null;
+    coords = null;
 
     // "pergunta antes do prompt nativo do navegador": o SweetAlert decide
     // se vale a pena nem chamar a Geolocation API, pra não queimar o
     // consentimento do navegador com uma recusa.
     const useLocation = await swal({
       title: 'Usar sua localização?',
-      text: 'Achamos o bairro e a taxa de entrega certa sem você digitar nada.',
+      text: 'Mostramos primeiro as lojas mais perto de você.',
       icon: undefined,
       buttons: {
-        manual: { text: 'Digitar manualmente', value: false, className: 'swal-btn-manual' },
+        manual: { text: 'Agora não', value: false, className: 'swal-btn-manual' },
         locate: { text: 'Ativar localização', value: true, className: 'swal-btn-locate' },
       },
     });
 
     if (useLocation) {
-      requestGeolocation(city);
+      requestGeolocation();
     }
   }
 
-  function requestGeolocation(city) {
+  function requestGeolocation() {
     if (!navigator.geolocation) {
       toastr.warning('Esse aparelho não suporta localização automática.');
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      () => {
-        // Achar o bairro real a partir de lat/lng é geocodificação reversa,
-        // que pede um provedor (fora do escopo desta tela). Aqui, o sinal
-        // de "achou" já basta pra completar o fluxo com o primeiro bairro
-        // conhecido da cidade.
-        selectedNeighborhood = city.neighborhoods[0];
-        toastr.success(`Bairro identificado: ${selectedNeighborhood}.`);
+      (pos) => {
+        // Descobrir o NOME do bairro a partir de lat/lng pediria um serviço
+        // de geocodificação (fora da stack); o bairro o cliente escolhe. A
+        // posição fica e vale pra distância das lojas.
+        coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        toastr.success('Localização marcada. Agora escolha o seu bairro.');
       },
       () => {
-        toastr.warning('Não deu pra usar a localização. Escolha o bairro na lista.');
+        toastr.warning('Não deu pra usar a localização. Sem problema: escolha o bairro na lista.');
       }
     );
   }
@@ -116,7 +124,7 @@
       type="button"
       class="btn-fuu-primary w-100"
       disabled={!selectedCity || !selectedNeighborhood}
-      onclick={() => onDone({ uf, city: selectedCity, neighborhood: selectedNeighborhood })}
+      onclick={() => onDone({ uf, city: selectedCity, neighborhood: selectedNeighborhood, coords })}
     >
       Confirmar
     </button>

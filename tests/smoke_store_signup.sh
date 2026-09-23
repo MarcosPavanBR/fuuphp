@@ -2,7 +2,8 @@
 # Smoke test do cadastro de loja pela própria loja (restaurants/signup.php,
 # migração 033) e da chave Pix no painel (restaurants/pix_key.php).
 #
-#  - dado ruim volta 422 com o campo: CNPJ inválido, chave CPF, sem aceite;
+#  - dado ruim volta 422 com o campo: CNPJ inválido, chave CPF, sem aceite,
+#    cidade que a plataforma não atende (migração 036);
 #  - a loja nasce em análise: fora da lista e do carrinho (409
 #    store_not_available) mesmo aberta; o balcão já entra no painel;
 #  - CNPJ e e-mail repetidos: 409; 3 cadastros por IP em 24 h;
@@ -40,6 +41,10 @@ VALUES ('${ADMIN_ID}', 'admin', 'Admin Cadastro', '${ADMIN_PHONE}', 'admin-signu
 INSERT INTO platform_policies (version, enabled_methods, created_by)
   SELECT (SELECT COALESCE(MAX(version), 0) + 1 FROM platform_policies),
          ARRAY['mp_card','pix_auto','pix_manual','cash','pos_machine']::payment_method[], '${ADMIN_ID}';
+-- A cidade do teste é atendida (aba Cidades); a de 9999999 não existe.
+INSERT INTO service_cities (ibge_code, name, uf, lat, lng, neighborhoods)
+VALUES ('${CITY}', 'São Paulo', 'SP', -23.5505, -46.6333, ARRAY['Pinheiros'])
+ON CONFLICT (ibge_code) DO UPDATE SET active = true;
 -- Os limites de cadastro por IP contam só as últimas 24 h; o teste começa do zero.
 UPDATE restaurants SET signup_ip = NULL WHERE signup_ip IS NOT NULL;
 SQL
@@ -54,7 +59,7 @@ done
 
 signup() {  # signup CNPJ EMAIL [PIX] [ACCEPT]
   curl -s -X POST "$BASE/restaurants/signup.php" -H "Content-Type: application/json" -d "{
-    \"name\":\"Cantina Cadastro ${STAMP}\",\"cnpj\":\"$1\",\"category\":\"Pizza\",\"city_ibge_code\":\"${CITY}\",
+    \"name\":\"Cantina Cadastro ${STAMP}\",\"cnpj\":\"$1\",\"category\":\"Pizza\",\"city_ibge_code\":\"${SIGNUP_CITY:-$CITY}\",
     \"address\":\"Rua das Flores, 100, Centro\",\"contact_name\":\"Dona Nonna\",\"contact_phone\":\"11987654321\",
     \"email\":\"$2\",\"password\":\"senha-forte-123\",\"pix_key\":\"${3:-}\",\"lat\":-23.55,\"lng\":-46.63,
     \"accept_terms\":${4:-true}}"
@@ -64,6 +69,8 @@ echo "== dado ruim: 422 com o campo certo =="
 [ "$(signup 11111111111111 "$EMAIL" | jq -r '.fields.cnpj')" != "null" ] || fail "CNPJ inválido aceito"
 [ "$(signup "$CNPJ" "$EMAIL" "529.982.247-25" | jq -r '.fields.pix_key')" != "null" ] || fail "chave CPF aceita"
 [ "$(signup "$CNPJ" "$EMAIL" "" false | jq -r '.fields.accept_terms')" != "null" ] || fail "cadastro sem aceite dos termos"
+[ "$(SIGNUP_CITY=9999999 signup "$CNPJ" "$EMAIL" | jq -r '.fields.city_ibge_code')" = "cidade ainda não atendida" ] \
+  || fail "cadastro aceito em cidade que a plataforma não atende"
 [ "$(q "SELECT count(*) FROM restaurants WHERE cnpj='${CNPJ}'")" = "0" ] || fail "cadastro recusado deixou loja no banco"
 
 echo "== cadastro válido: loja em análise, conta do balcão, chave e aceite gravados =="

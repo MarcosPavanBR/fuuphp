@@ -285,6 +285,11 @@ Não há senha: o admin entra pelo mesmo código por SMS/e-mail. Por isso, **o
 SMS da Twilio precisa estar funcionando antes do primeiro login**. Frete e taxas
 começam zerados e são ajustados no painel (10.5).
 
+**Depois, ligue a sua cidade** na aba **Cidades** do painel: código IBGE,
+nome, UF, o centro (latitude e longitude) e os bairros. Sem nenhuma cidade
+ligada, o app abre sem cidade pra escolher e nenhuma loja consegue se
+cadastrar (a lista vem do banco, migração 036).
+
 ## 4. Mercado Pago: sandbox → produção
 
 **Decidido pelo Marcos: token único da plataforma.** Cartão, Pix automático,
@@ -391,6 +396,7 @@ verdade:
 - [ ] `https://<dominio>/.env`, `/lib/core/db.php` e `/storage/...` não entregam nada do projeto.
 - [ ] O SMS de login chega de verdade (Twilio fora do trial) e a tela não oferece e-mail; errar o código 5 vezes bloqueia o código (429) e pedir código demais também dá 429.
 - [ ] O admin fundador entra e ajusta frete e taxas (10.5).
+- [ ] A cidade de lançamento está ligada na aba Cidades, e o onboarding do app mostra só ela, com a contagem real de lojas.
 - [ ] Uma loja de teste recebe pedido, aceita, imprime (ESC/POS) e marca pronto.
 - [ ] Cartão de teste aprovado e recusado; o webhook chega; o estorno sai.
 - [ ] Pix manual: comprovante enviado, a loja valida; o comprovante não abre sem login.

@@ -48,7 +48,7 @@
           number: number.trim() || undefined,
           neighborhood: neighborhood.trim() || undefined,
           city: location?.city?.name ?? 'Campinas',
-          city_ibge_code: location?.city?.ibge ?? '3509502',
+          city_ibge_code: location?.city?.ibge ?? '',
           state: location?.uf ?? 'SP',
           postal_code: postalCode,
           lat: location?.lat ?? location?.city?.lat ?? -22.9056,

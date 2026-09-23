@@ -73,8 +73,9 @@
       uf: result.uf,
       city: result.city,
       neighborhood: result.neighborhood,
-      lat: result.city.lat ?? null,
-      lng: result.city.lng ?? null,
+      // A posição do aparelho (se o cliente deixou) ganha do centro da cidade.
+      lat: result.coords?.lat ?? result.city.lat ?? null,
+      lng: result.coords?.lng ?? result.city.lng ?? null,
     };
     try {
       localStorage.setItem(LOCATION_KEY, JSON.stringify(location));

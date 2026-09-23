@@ -18,8 +18,10 @@ regras de negócio por trás de cada uma estão em [decisions/](decisions/README
 ## Cliente
 
 ### Entrar
-- Na primeira vez, o cliente escolhe o estado e a cidade (1.x). O app lembra
-  a escolha.
+- Na primeira vez, o cliente escolhe o estado e a cidade (1.x), entre as
+  cidades que a plataforma liga na aba Cidades, cada uma com o número real de
+  lojas. Pode deixar o app usar a localização do aparelho (as lojas mais perto
+  aparecem primeiro) e escolhe o bairro. O app lembra a escolha.
 - Pra pedir, entra com o **celular**: chega um SMS com um código de 6
   dígitos, válido por 5 minutos (10.1, 10.2). Não existe senha. Quem ainda não
   tem conta informa o nome e a conta é criada na hora.
@@ -185,13 +187,17 @@ admin é criado no servidor com `bin/bootstrap_admin.php`
 | **Ocorrências** | divergências de caixa e disputas: decidir quem arca, com lançamento no livro |
 | **Reembolsos** (13.3, 13.4) | liberar pedidos parados por ocorrência e decidir devoluções. Depois de decidido, cartão volta pelo estorno do Mercado Pago e Pix volta por Pix pra chave de quem pagou, os dois executados sozinhos (`bin/execute_refunds.php`); maquininha é cancelada na adquirente da loja; dinheiro não tem o que estornar |
 | **Financeiro** (9.7) | o acerto semanal de lojas e entregadores, repasses e bloqueios por atraso |
-| **Relatórios** (12.3) | números do período e o CSV contábil |
+| **Relatórios** (12.3) | GMV, **ticket médio** (com o período anterior ao lado), pedidos por hora do dia e por dia da semana, as lojas que mais vendem, clientes que compraram, voltaram e compraram pela primeira vez, o mix de pagamento e o CSV contábil |
 | **Campanhas** (15.3) | cupons da plataforma (quem paga, teto, público, projeção antes de criar) e o **teto de cupom de cada loja** |
 | **Políticas** (10.5) | comissão, teto de espécie, prazos, frete e meios de pagamento. Mudar cria uma **versão nova**; pedido antigo continua com a regra do seu tempo |
+| **Cidades** | as cidades onde o FUU opera: ligar, editar bairros, desligar. Só cidade ligada aparece no app e aceita cadastro de loja |
 | **Aparelhos** | liberar troca de tablet/celular de loja e entregador, com motivo. Encerra as sessões do aparelho antigo |
 
 ### Rotina sugerida
 - **Todo dia:** Lojas (cadastros novos), Ocorrências, Reembolsos.
+- **Toda segunda:** Relatórios (7 dias): o ticket médio subiu ou caiu, em que
+  hora está o pico (é quando precisa de mais entregador) e quantos clientes
+  voltaram.
 - **Terça:** Financeiro (o acerto roda sozinho às 3h de Brasília; conferir e
   pagar os repasses).
 - **Toda semana:** conferir o backup (servidor) e os logs

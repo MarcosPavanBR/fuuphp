@@ -17,6 +17,7 @@ Os termos do FUUdelivery, na língua do negócio e no nome que têm no código.
 | **Comissão** | o percentual da plataforma sobre o pedido (8% na política inicial) | `platform_policies.commission_bps`, `orders.commission` |
 | **Comprovante (Pix)** | a foto do Pix que o cliente envia no Pix direto pra loja | `payment_proofs`, `lib/payments/proof_images.php` |
 | **Conciliação** | casar o extrato da maquininha (CSV) com as vendas informadas | `restaurants/reconciliation.php` |
+| **Cidade atendida (praça)** | cidade em que a plataforma opera; só ela aparece no onboarding e aceita cadastro de loja | `service_cities`, `cities/list.php`, `admin/cities.php` |
 | **Cupom pessoal** | cupom que só uma conta usa: a troca de pontos da fidelidade | `coupons.owner_user_id` |
 | **Despacho / rodadas** | oferecer a corrida aos entregadores em rodadas, com raio e valor crescendo | `lib/dispatch/`, `bin/dispatch_rounds.php`, `dispatch_attempts` |
 | **Espécie** | dinheiro vivo (meio de pagamento `cash`) | `payment_method = 'cash'` |
@@ -38,6 +39,7 @@ Os termos do FUUdelivery, na língua do negócio e no nome que têm no código.
 | **Repasse** | o pagamento semanal da plataforma à loja ou ao entregador | `payouts` |
 | **RLS** | a regra do banco que esconde de uma loja os pedidos das outras | migração 009, `db_scope_to_restaurant()` |
 | **Saúde (health)** | a rota que o monitor externo consulta: banco e pg_cron respondendo | `api/v1/system/health.php`, `cron_healthy()` |
+| **Ticket médio** | o que o cliente paga, em média, por pedido pago no período (itens, frete e gorjeta, já com desconto) | `admin/reports.php` (`totals.average_ticket`) |
 | **Surge** | o valor a mais na corrida quando falta entregador | rodadas de despacho |
 | **Teto de cupom (da loja)** | quanto a loja pode ter comprometido em cupons criados por ela | `restaurants.coupon_budget_limit` |
 | **Teto de espécie** | quanto dinheiro vivo o entregador pode ter em mãos (R$ 300) | `platform_policies.cash_ceiling` |

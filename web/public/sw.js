@@ -12,7 +12,7 @@
 //   - cardápio e listas públicas: rede primeiro com cópia no cache. Preço
 //     velho é pior que espera, então a rede sempre ganha quando existe --
 //     o cache é o plano B, e a tela avisa que está mostrando o que salvou.
-const VERSION = 'fuu-v4';
+const VERSION = 'fuu-v5';
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 
@@ -22,6 +22,8 @@ const SHELL_URLS = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg',
 // públicos e valem offline. Qualquer outra rota (perfil, pedidos, carrinho,
 // pagamento, painel, entregador) passa direto pra rede.
 const CACHEABLE_API = [
+  // As cidades atendidas abrem o onboarding: sem elas, nem a primeira tela.
+  '/api/v1/cities/list.php',
   '/api/v1/restaurants/list.php',
   '/api/v1/restaurants/show.php',
   '/api/v1/restaurants/menu.php',

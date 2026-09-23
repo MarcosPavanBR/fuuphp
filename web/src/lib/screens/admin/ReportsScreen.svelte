@@ -31,6 +31,28 @@
     return v === null || v === undefined ? '—' : `${Number(v).toFixed(1).replace('.', ',')}%`;
   }
 
+  // Variação contra o período anterior do mesmo tamanho (null sem base).
+  function change(now, before) {
+    if (now === null || now === undefined || !before) return null;
+    return ((now - before) * 100) / before;
+  }
+  function changeLabel(v) {
+    if (v === null) return 'sem período anterior pra comparar';
+    const sign = v > 0 ? '+' : '';
+    return `${sign}${v.toFixed(1).replace('.', ',')}% contra os ${days} dias anteriores`;
+  }
+
+  const WEEKDAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+  let hours = $derived(data?.by_hour ?? []);
+  let hourMax = $derived(Math.max(1, ...hours.map((h) => h.orders)));
+  let peakHour = $derived(
+    hours.reduce((best, h, i) => (h.orders > (hours[best]?.orders ?? 0) ? i : best), 0)
+  );
+  let weekdays = $derived(data?.by_weekday ?? []);
+  let weekdayMax = $derived(Math.max(1, ...weekdays.map((d) => d.orders)));
+  let ticketChange = $derived(change(data?.totals?.average_ticket, data?.previous?.average_ticket));
+
   const METHOD = {
     mp_card: 'Cartão',
     pix_auto: 'Pix automático',
@@ -83,6 +105,11 @@
     <p class="s">{data?.totals?.orders ?? 0} pedidos</p>
   </div>
   <div class="fuu-card kpi">
+    <p class="k">TICKET MÉDIO</p>
+    <p class="v">{money(data?.totals?.average_ticket)}</p>
+    <p class="s">{changeLabel(ticketChange)}</p>
+  </div>
+  <div class="fuu-card kpi">
     <p class="k">DEPENDE DE CONFERÊNCIA</p>
     <p class="v">{pct(data?.manual_share)}</p>
     <p class="s">do GMV em Pix manual, dinheiro e maquininha</p>
@@ -97,6 +124,96 @@
     <p class="v bad">{money(data?.fraud?.loss)}</p>
     <p class="s">{data?.fraud?.share_of_gmv === null ? '—' : `${data?.fraud?.share_of_gmv}% do GMV`}</p>
   </div>
+</div>
+
+<!-- Quando o cliente pede: onde pôr entregador e quando vale campanha. -->
+<div class="fuu-card block">
+  <p class="section">PEDIDOS POR HORA DO DIA</p>
+  {#if (data?.totals?.orders ?? 0) === 0}
+    <p class="empty">Nenhum pedido pago no período.</p>
+  {:else}
+    <p class="lead">
+      Pico às <strong>{peakHour}h</strong>: {hours[peakHour].orders}
+      {hours[peakHour].orders === 1 ? 'pedido' : 'pedidos'} no período (horário de Brasília).
+    </p>
+    <div class="hours" role="list" aria-label="Pedidos por hora do dia">
+      {#each hours as h, i (i)}
+        <div
+          class="hour"
+          class:peak={i === peakHour}
+          role="listitem"
+          tabindex="0"
+          aria-label={`${i}h: ${h.orders} pedidos, ${money(h.gmv)}`}
+          title={`${i}h às ${i + 1}h · ${h.orders} pedidos · ${money(h.gmv)}`}
+        >
+          <span class="bar" style={`height: ${Math.max(h.orders > 0 ? 4 : 0, (h.orders * 100) / hourMax)}%`}></span>
+        </div>
+      {/each}
+    </div>
+    <div class="axis" aria-hidden="true">
+      {#each [0, 6, 12, 18, 23] as t (t)}<span style={`left: ${((t + 0.5) * 100) / 24}%`}>{t}h</span>{/each}
+    </div>
+  {/if}
+</div>
+
+<div class="split">
+  <div class="fuu-card block">
+    <p class="section">PEDIDOS POR DIA DA SEMANA</p>
+    {#if weekdays.length === 0 || (data?.totals?.orders ?? 0) === 0}
+      <p class="empty">Nenhum pedido pago no período.</p>
+    {:else}
+      {#each weekdays as d, i (i)}
+        <div class="dow">
+          <span class="name">{WEEKDAYS[i]}</span>
+          <span class="track"><span class="fill" style={`width: ${(d.orders * 100) / weekdayMax}%`}></span></span>
+          <span class="fuu-mono num">{d.orders}</span>
+        </div>
+      {/each}
+    {/if}
+  </div>
+
+  <div class="fuu-card block">
+    <p class="section">CLIENTES</p>
+    <div class="kv">
+      <span>Compraram no período</span>
+      <span class="fuu-mono">{data?.customers?.buyers ?? 0}</span>
+    </div>
+    <div class="kv">
+      <span>Voltaram (2 pedidos ou mais)</span>
+      <span class="fuu-mono">{data?.customers?.returning ?? 0} · {pct(data?.customers?.returning_share)}</span>
+    </div>
+    <div class="kv">
+      <span>Primeira compra no FUU</span>
+      <span class="fuu-mono">{data?.customers?.first_time ?? 0}</span>
+    </div>
+    <p class="note">
+      Cliente que volta é o que sustenta o delivery: se a fatia dos que voltam cai, vale cupom de segunda compra
+      (aba Campanhas) e olhar as avaliações das lojas.
+    </p>
+  </div>
+</div>
+
+<div class="fuu-card block">
+  <p class="section">LOJAS QUE MAIS VENDEM</p>
+  {#if (data?.top_stores ?? []).length === 0}
+    <p class="empty">Nenhum pedido pago no período.</p>
+  {:else}
+    <div class="table-wrap">
+      <table class="top">
+        <thead><tr><th>Loja</th><th>Pedidos</th><th>Vendas</th><th>Ticket médio</th></tr></thead>
+        <tbody>
+          {#each data.top_stores as st (st.id)}
+            <tr>
+              <td>{st.name}</td>
+              <td class="fuu-mono">{st.orders}</td>
+              <td class="fuu-mono">{money(st.gmv)}</td>
+              <td class="fuu-mono">{money(st.average_ticket)}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  {/if}
 </div>
 
 <div class="split">
@@ -287,6 +404,100 @@
   .empty {
     font-size: 13px;
     color: var(--fuu-ink-5);
+  }
+  .lead {
+    font-size: 13.5px;
+    color: var(--fuu-ink-2);
+    margin: 0 0 12px;
+  }
+  /* Barras de uma série só, em tinta: o vermelho é da ação, não de dado. */
+  .hours {
+    display: grid;
+    grid-template-columns: repeat(24, 1fr);
+    gap: 2px;
+    height: 120px;
+    align-items: end;
+    border-bottom: 1px solid var(--fuu-line-3);
+  }
+  .hour {
+    height: 100%;
+    display: flex;
+    align-items: flex-end;
+    outline-offset: 2px;
+  }
+  .hour:focus-visible {
+    outline: 2px solid var(--fuu-ink-1);
+  }
+  .bar {
+    width: 100%;
+    background: var(--fuu-ink-5);
+    border-radius: 4px 4px 0 0;
+  }
+  .hour.peak .bar {
+    background: var(--fuu-ink-1);
+  }
+  .hour:hover .bar {
+    background: var(--fuu-ink-2);
+  }
+  .axis {
+    position: relative;
+    height: 18px;
+    font-family: var(--fuu-font-mono);
+    font-size: 10.5px;
+    color: var(--fuu-ink-4);
+  }
+  .axis span {
+    position: absolute;
+    top: 4px;
+    transform: translateX(-50%);
+  }
+  .dow {
+    display: grid;
+    grid-template-columns: 70px 1fr 40px;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    padding: 5px 0;
+    color: var(--fuu-ink-2);
+  }
+  .track {
+    height: 10px;
+    background: var(--fuu-line-5);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .fill {
+    display: block;
+    height: 100%;
+    background: var(--fuu-ink-3);
+    border-radius: 0 4px 4px 0;
+  }
+  .num {
+    text-align: right;
+  }
+  .table-wrap {
+    overflow-x: auto;
+  }
+  table.top {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+  table.top th {
+    text-align: left;
+    font-family: var(--fuu-font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    color: var(--fuu-ink-4);
+    font-weight: 700;
+    padding: 6px 8px 8px 0;
+    border-bottom: 1px solid var(--fuu-line-3);
+  }
+  table.top td {
+    padding: 9px 8px 9px 0;
+    border-bottom: 1px solid var(--fuu-line-5);
+    color: var(--fuu-ink-2);
+    white-space: nowrap;
   }
   .note {
     font-size: 10px;

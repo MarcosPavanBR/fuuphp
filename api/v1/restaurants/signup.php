@@ -51,8 +51,14 @@ if (!is_valid_cnpj($cnpj)) {
 if (!in_array($category, STORE_CATEGORIES, true)) {
     $fields['category'] = 'escolha uma categoria';
 }
+// A cidade tem de ser atendida (aba Cidades do admin): loja numa cidade
+// que o app não mostra nunca receberia pedido.
+$servedCity = db()->prepare('SELECT 1 FROM service_cities WHERE ibge_code = :c AND active');
+$servedCity->execute(['c' => $city]);
 if (strlen($city) !== 7) {
     $fields['city_ibge_code'] = 'escolha a cidade';
+} elseif ($servedCity->fetchColumn() === false) {
+    $fields['city_ibge_code'] = 'cidade ainda não atendida';
 }
 if (mb_strlen($address) < 8) {
     $fields['address'] = 'rua, número e bairro';

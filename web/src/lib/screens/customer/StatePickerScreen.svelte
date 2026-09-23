@@ -1,31 +1,41 @@
 <script>
   import PhoneStatusBar from '../../components/PhoneStatusBar.svelte';
-  import { MOST_USED_STATES, ALL_STATES } from '../../data/states.js';
+  import { loadServiceStates } from '../../services/cities.js';
 
-  // Tela 1.2 — Seleção de estado. "27 UFs em list-group do Bootstrap; lista
-  // vem do edge cache, então abre offline." (StatePickerScreen.svelte, bi-geo-alt,
-  // Cloudflare cache)
+  // Tela 1.2 — Seleção de estado. Só os estados onde o FUU já opera (aba
+  // Cidades do admin, cities/list.php), com a contagem REAL de lojas
+  // aprovadas. O mock trazia os 27 estados e números fixos ("SP 1.284 lojas
+  // ativas"): no lançamento isso prometeria o que não existe.
   let { onContinue } = $props();
 
+  let states = $state(null);
+  let failed = $state(false);
   let query = $state('');
   let selected = $state(null);
 
-  let filteredMostUsed = $derived(
-    MOST_USED_STATES.filter((s) => matches(s, query))
-  );
-  let filteredAll = $derived(ALL_STATES.filter((s) => matches(s, query)));
+  function load() {
+    failed = false;
+    loadServiceStates()
+      .then((list) => (states = list))
+      .catch(() => (failed = true));
+  }
+  load();
+
+  let filtered = $derived((states ?? []).filter((s) => matches(s, query)));
 
   function matches(state, q) {
     if (!q) return true;
     const needle = q.toLocaleLowerCase('pt-BR');
     return (
       state.uf.toLocaleLowerCase('pt-BR').includes(needle) ||
-      state.name.toLocaleLowerCase('pt-BR').includes(needle)
+      state.name.toLocaleLowerCase('pt-BR').includes(needle) ||
+      state.cities.some((c) => c.name.toLocaleLowerCase('pt-BR').includes(needle))
     );
   }
 
-  function select(state) {
-    selected = state.uf;
+  function storesLabel(n) {
+    if (n === 0) return 'em breve';
+    return n === 1 ? '1 loja' : `${n.toLocaleString('pt-BR')} lojas`;
   }
 </script>
 
@@ -35,52 +45,43 @@
   <div class="header">
     <p class="step">PASSO 1 DE 2</p>
     <h1 class="fuu-display">Onde você está?</h1>
-    <div class="search">
-      <i class="bi bi-geo-alt"></i>
-      <input
-        type="search"
-        placeholder="Buscar estado"
-        bind:value={query}
-        aria-label="Buscar estado"
-      />
-    </div>
+    {#if (states?.length ?? 0) > 3}
+      <div class="search">
+        <i class="bi bi-geo-alt"></i>
+        <input type="search" placeholder="Buscar estado ou cidade" bind:value={query} aria-label="Buscar estado ou cidade" />
+      </div>
+    {/if}
   </div>
 
   <div class="lists">
-    {#if filteredMostUsed.length > 0}
-      <p class="section-label">MAIS USADOS</p>
+    {#if failed}
+      <p class="notice">Não deu pra carregar as cidades. Confira a internet e tente de novo.</p>
+      <button type="button" class="retry" onclick={load}>Tentar de novo</button>
+    {:else if states === null}
+      <p class="notice">Carregando as cidades…</p>
+    {:else if states.length === 0}
+      <p class="notice">O FUU ainda não chegou em nenhuma cidade. Volte em breve!</p>
+    {:else}
+      <p class="section-label">ONDE O FUU JÁ ENTREGA</p>
       <div class="list-group">
-        {#each filteredMostUsed as state (state.uf)}
+        {#each filtered as state (state.uf)}
           <button
             type="button"
             class="list-group-item"
             class:selected={selected === state.uf}
-            onclick={() => select(state)}
+            onclick={() => (selected = state.uf)}
           >
-            <span class="uf">{state.uf} — {state.name}</span>
-            <span class="stores">
-              <strong>{state.stores.toLocaleString('pt-BR')}</strong>
-              <small>lojas ativas</small>
+            <span class="uf">
+              {state.uf} — {state.name}
+              <small class="cities">{state.cities.map((c) => c.name).join(', ')}</small>
             </span>
+            <span class="stores">{storesLabel(state.stores)}</span>
           </button>
         {/each}
       </div>
-    {/if}
-
-    {#if filteredAll.length > 0}
-      <p class="section-label">TODOS OS 27 ESTADOS</p>
-      <div class="list-group">
-        {#each filteredAll as state (state.uf)}
-          <button
-            type="button"
-            class="list-group-item"
-            class:selected={selected === state.uf}
-            onclick={() => select(state)}
-          >
-            <span class="uf">{state.uf} — {state.name}</span>
-          </button>
-        {/each}
-      </div>
+      {#if filtered.length === 0}
+        <p class="notice">Ainda não entregamos aí. Por enquanto, só nas cidades da lista.</p>
+      {/if}
     {/if}
   </div>
 
@@ -166,7 +167,7 @@
     background: var(--fuu-white);
     border: 1px solid var(--fuu-line-3);
     border-radius: var(--fuu-radius-card);
-    padding: 0 14px;
+    padding: 10px 14px;
     min-height: var(--fuu-tap-customer);
     font-family: var(--fuu-font-body);
     font-size: 14.5px;
@@ -176,19 +177,33 @@
     border-color: var(--fuu-red);
     background: var(--fuu-red-tint);
   }
-  .stores {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    line-height: 1.2;
+  .uf {
+    display: grid;
+    gap: 2px;
   }
-  .stores strong {
-    font-family: var(--fuu-font-mono);
-    font-size: 13.5px;
-  }
-  .stores small {
+  .cities {
     color: var(--fuu-ink-5);
-    font-size: 11px;
+    font-size: 12px;
+  }
+  .stores {
+    font-family: var(--fuu-font-mono);
+    font-size: 12.5px;
+    color: var(--fuu-ink-3);
+    white-space: nowrap;
+  }
+  .notice {
+    font-size: 14px;
+    color: var(--fuu-ink-3);
+    margin: 18px 0 10px;
+    line-height: 1.5;
+  }
+  .retry {
+    border: 1.5px solid var(--fuu-line-2);
+    background: var(--fuu-white);
+    border-radius: var(--fuu-radius-pill);
+    padding: 8px 16px;
+    font-family: inherit;
+    font-weight: 700;
   }
   .footer {
     position: sticky;

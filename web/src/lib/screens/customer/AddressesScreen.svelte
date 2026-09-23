@@ -83,7 +83,7 @@
         query: {
           lat: effectiveLat,
           lng: effectiveLng,
-          city_ibge_code: location?.city?.ibge ?? '3509502',
+          city_ibge_code: location?.city?.ibge ?? '',
         },
       });
     } catch (e) {
@@ -190,7 +190,7 @@
           reference: form.reference.trim() || undefined,
           neighborhood: form.neighborhood.trim() || undefined,
           city: location?.city?.name ?? 'Campinas',
-          city_ibge_code: location?.city?.ibge ?? '3509502',
+          city_ibge_code: location?.city?.ibge ?? '',
           state: location?.uf ?? 'SP',
           postal_code: form.postalCode,
           lat: effectiveLat,

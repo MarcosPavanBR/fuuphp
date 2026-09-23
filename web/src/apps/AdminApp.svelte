@@ -13,6 +13,7 @@
   import IncidentQueue from '../lib/screens/admin/IncidentQueue.svelte';
   import NettingScreen from '../lib/screens/admin/NettingScreen.svelte';
   import PartnerDeviceScreen from '../lib/screens/admin/PartnerDeviceScreen.svelte';
+  import CitiesScreen from '../lib/screens/admin/CitiesScreen.svelte';
 
   // Painel da plataforma (Fase 12 + tela 10.5). Quarto bundle, quarto
   // público: quem opera o negócio, não quem usa o app.
@@ -76,6 +77,7 @@
         <button type="button" class:on={tab === 'campaigns'} onclick={() => (tab = 'campaigns')}>
           Campanhas
         </button>
+        <button type="button" class:on={tab === 'cities'} onclick={() => (tab = 'cities')}>Cidades</button>
         <button type="button" class:on={tab === 'policy'} onclick={() => (tab = 'policy')}>Políticas</button>
         <button type="button" class:on={tab === 'devices'} onclick={() => (tab = 'devices')}>Aparelhos</button>
       </nav>
@@ -102,6 +104,9 @@
         <ReportsScreen />
       {:else if tab === 'campaigns'}
         <CampaignsScreen />
+      {:else if tab === 'cities'}
+        <!-- Onde o FUU opera: o que o onboarding e o cadastro de loja mostram. -->
+        <CitiesScreen />
       {:else if tab === 'devices'}
         <!-- Suporte: liberar a troca de tablet/celular de loja e entregador. -->
         <PartnerDeviceScreen />

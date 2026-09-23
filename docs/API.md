@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_api_catalog.php` a partir dos próprios arquivos de
 > `api/v1`. Não edite à mão: o CI confere (`--check`) e falha se estiver desatualizado.
 
-113 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
+115 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
 `{code, message, trace_id}` com o status HTTP certo (`lib/core/response.php`). As URLs são
 contrato público: mudar um caminho quebra app instalado.
 
@@ -25,6 +25,7 @@ contrato público: mudar um caminho quebra app instalado.
 | Rota | Métodos | Quem | Idem. | O que faz |
 |---|---|---|---|---|
 | `/api/v1/admin/campaigns.php` | GET, POST | admin |  | Tela 15.3 — "Cupons e campanhas". |
+| `/api/v1/admin/cities.php` | POST | admin |  | Aba Cidades do painel da plataforma: onde o FUU opera (migração 036). Ligar uma cidade é o que faz ela aparecer no onboarding do cliente (1.2/1.3) e no cadastro de loja. |
 | `/api/v1/admin/couriers.php` | GET, POST | admin |  | Tela 15.2, lado de dentro: a fila de análise das candidaturas. |
 | `/api/v1/admin/disputes.php` | POST | admin |  | Tela 12.2 — "Disputas e galeria antifraude". |
 | `/api/v1/admin/export.php` | GET | admin |  | Tela 12.3 — a exportação contábil que a tela promete. |
@@ -67,6 +68,12 @@ contrato público: mudar um caminho quebra app instalado.
 | `/api/v1/cart/remove_item.php` | POST | autenticado |  | Tela 3.3 — tira um item do carrinho do próprio cliente. |
 | `/api/v1/cart/show.php` | GET | autenticado |  | O carrinho do cliente numa loja (um pedido em status 'cart' por loja). |
 | `/api/v1/cart/update_quantity.php` | POST | autenticado |  | Tela 3.3 — muda a quantidade de um item do carrinho (mínimo 1; pra tirar, remove_item.php) e recalcula o subtotal. |
+
+## cities
+
+| Rota | Métodos | Quem | Idem. | O que faz |
+|---|---|---|---|---|
+| `/api/v1/cities/list.php` | GET | público |  | Telas 1.2 e 1.3 — onde você está / cidade e bairro. Público: é o que o app mostra antes de qualquer login, e o cadastro de loja usa a mesma lista. |
 
 ## App do entregador (Fases 8, 9, 13.3, 15)
 

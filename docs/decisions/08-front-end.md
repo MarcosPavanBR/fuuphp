@@ -33,7 +33,6 @@ web/
       datetime.js                   parsePgTimestamp() -- normaliza timestamptz
                                      do PDO (offset de 2 dígitos, sem T) pra
                                      algo que Date() sempre entende
-      data/states.js                UFs, cidades e coordenadas de exemplo (estático)
       pwa.svelte.js                 7.1 — registra o service worker, guarda o
                                      convite de instalação, sabe se está online
       components/
@@ -132,20 +131,20 @@ web/
   jeito de compilar `.svelte` pra produção sem alguma. Fica registrado
   aqui pela mesma razão que o Composer não apareceu no módulo PHP: é
   plumbing, não stack.
-- **UFs/cidades/bairros são dado estático local** (`web/src/lib/data/states.js`),
-  não um endpoint do backend. O esquema do banco só guarda
-  `city_ibge_code` por endereço — não existe tabela de UFs/municípios — e
-  a especificação diz que essa lista "vem do edge cache da Cloudflare",
-  que é exatamente o que um JSON estático bem cacheado seria em produção.
-  As 4 contagens de "lojas ativas" (SP 1.284, MG 612, PR 348, BA 297) são
-  as mesmas do mock original — não vêm de `COUNT(*)` real.
+- **UFs/cidades/bairros eram dado estático local** (`data/states.js`), com as
+  contagens de "lojas ativas" do mock (SP 1.284...). **Atualizado na
+  [37](37-cidades-e-numeros.md):** as cidades vêm do banco (`service_cities`,
+  ligadas pela aba Cidades do admin) com a contagem real de lojas, e o arquivo
+  estático saiu.
 - **Geolocalização e SweetAlert são reais, não simulados.** A tela 1.3
   chama de verdade `navigator.geolocation.getCurrentPosition` depois do
   SweetAlert confirmar — testado via Playwright com permissão de
   localização concedida e coordenadas fixas. O que é simplificado é achar
   o bairro a partir de lat/lng: geocodificação reversa pede um provedor
-  externo (Google/Mapbox/Nominatim) que não foi decidido ainda, então o
-  fluxo usa o primeiro bairro conhecido da cidade como resultado.
+  externo (Google/Mapbox/Nominatim) que não foi decidido ainda. Na 37, a
+  posição do aparelho passou a valer pra distância das lojas e o cliente
+  escolhe o bairro (antes o app dizia "bairro identificado" e pegava o
+  primeiro da lista).
 - **Validado visualmente, não só compilado.** `npm run build` limpo não
   prova que a tela se parece com o mock. As 3 telas da Fase 1 foram
   conferidas numa janela de 430px com Playwright + Chromium: splash com o
