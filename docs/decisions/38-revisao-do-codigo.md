@@ -32,7 +32,7 @@ inteiro por área de risco.
    (`lib/bootstrap.php`) e a sessão do banco (`lib/core/db.php`) usam
    America/Sao_Paulo. O teste de agendamento passou a comparar instantes, não
    texto, e confere que "hoje" é o dia de Brasília -- ele falhava só entre
-   21h e meia-noite, e é por isso que o CI nunca pegou.
+   21h e meia-noite de Brasília, e por isso passava no CI.
 2. **Cupom reutilizável trocando o CPF.** "Um uso por CPF", e o CPF se troca
    no perfil: usar, trocar, usar de novo passava. Agora é um uso por CPF **e**
    por conta (`coupon_used_by`), conferido ao aplicar e de novo no
