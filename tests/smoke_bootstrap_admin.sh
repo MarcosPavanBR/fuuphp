@@ -45,7 +45,7 @@ set +e; php "$ROOT/bin/bootstrap_admin.php" --name="Outro" --phone="11988887777"
   || fail "a segunda execução mexeu no banco"
 
 echo "== o fundador entra pelo OTP e vê o painel =="
-php -S "127.0.0.1:${PORT}" -t "$ROOT" >/tmp/smoke-boot-server.log 2>&1 &
+DATABASE_URL="${API_DATABASE_URL:-$DATABASE_URL}" php -S "127.0.0.1:${PORT}" -t "$ROOT" >/tmp/smoke-boot-server.log 2>&1 &
 SERVER_PID=$!
 for i in $(seq 1 20); do curl -s -o /dev/null "http://127.0.0.1:${PORT}/" && break; sleep 0.2; done
 BASE="http://127.0.0.1:${PORT}/api/v1"

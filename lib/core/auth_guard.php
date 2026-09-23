@@ -55,15 +55,22 @@ function require_store_staff(array $claims): string
     if ($restaurantId === null) {
         error_response(403, 'forbidden', 'Esse login não está vinculado a uma loja.');
     }
+    db_scope_to_restaurant((string) $restaurantId);
 
     return (string) $restaurantId;
 }
 
+/**
+ * IP de quem chamou, pra prova de consentimento e registro de sessão.
+ *
+ * Só REMOTE_ADDR: X-Forwarded-For vem do cliente e qualquer um escreve o que
+ * quiser nele. Atrás do Cloudflare, quem acerta REMOTE_ADDR é o Nginx
+ * (real_ip_header CF-Connecting-IP, confiando só nas faixas do Cloudflare --
+ * deploy/nginx/fuuphp.conf).
+ */
 function client_ip(): ?string
 {
-    $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? null;
-    if ($ip === null) {
-        return null;
-    }
-    return trim(explode(',', $ip)[0]);
+    $ip = $_SERVER['REMOTE_ADDR'] ?? null;
+
+    return $ip === null || $ip === '' ? null : $ip;
 }

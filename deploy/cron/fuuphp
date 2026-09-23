@@ -1,0 +1,36 @@
+# Tarefas agendadas do servidor (go-live, passo 7).
+#
+# Instalar: copie para /etc/cron.d/fuuphp (dono root, permissão 644).
+# Formato do cron.d: minuto hora dia mês dia-da-semana USUÁRIO comando.
+#
+# As tarefas do BANCO (recusa de Pix vencido, expiração de baixa de espécie,
+# abre/fecha loja pelo horário, repasses de terça, purga por retenção) rodam
+# no pg_cron e já foram criadas pelas migrações -- não entram aqui.
+#
+# Todos os scripts são idempotentes. O flock -n só evita duas cópias do mesmo
+# script ao mesmo tempo quando uma rodada demora mais de um minuto (a segunda
+# desiste; a próxima pega).
+# Um script que sai com erro (inclusive a trava de produção recusando
+# subir) deixa a mensagem no log -- é lá que olhar primeiro.
+
+SHELL=/bin/sh
+PATH=/usr/local/bin:/usr/bin:/bin
+FUU_ENV_FILE=/etc/fuuphp/fuuphp.env
+APP=/srv/fuuphp/current
+LOG=/var/log/fuuphp
+
+# Fila de push (tela 7.2)
+* * * * *  fuuphp  flock -n /tmp/fuu-push.lock        php $APP/bin/push_worker.php            >> $LOG/push.log 2>&1
+# Rodadas de oferta pros entregadores, raio crescente (fase 15)
+* * * * *  fuuphp  flock -n /tmp/fuu-dispatch.lock    php $APP/bin/dispatch_rounds.php        >> $LOG/dispatch.log 2>&1
+# Estornos pendentes no Mercado Pago (13.4)
+* * * * *  fuuphp  flock -n /tmp/fuu-refunds.lock     php $APP/bin/execute_refunds.php        >> $LOG/refunds.log 2>&1
+# Pedido sem entregador passado do prazo (15)
+* * * * *  fuuphp  flock -n /tmp/fuu-nocourier.lock   php $APP/bin/auto_cancel_no_courier.php >> $LOG/no_courier.log 2>&1
+# Bloqueio financeiro de entregador/loja inadimplente (10.4)
+0 * * * *  fuuphp  flock -n /tmp/fuu-blocks.lock      php $APP/bin/apply_financial_blocks.php >> $LOG/blocks.log 2>&1
+
+# Backup do banco e dos arquivos enviados, todo dia às 3h30 no relógio do
+# servidor (VPS em UTC = 0h30 em Brasília, madrugada de pouco pedido). Roda
+# como root: lê o storage (dono fuuphp) e chama o pg_dump como postgres.
+30 3 * * * root    $APP/deploy/backup/backup.sh >> $LOG/backup.log 2>&1

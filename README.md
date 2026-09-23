@@ -45,7 +45,8 @@ api/v1/<área>/<ação>.php   uma rota por arquivo (catálogo: docs/API.md)
 lib/                       regras compartilhadas, por domínio
   core/ catalog/ ordering/ payments/ ledger/ dispatch/ messaging/ account/
 db/migrations/             NNN_<assunto>.up.sql + .down.sql (mapa: docs/DATABASE.md)
-bin/                       tarefas agendadas e geradores de documentação
+bin/                       tarefas agendadas, primeiro deploy e geradores de documentação
+deploy/                    produção na VPS: Nginx, PHP-FPM, cron, backup, deploy, modelo do .env
 tests/smoke_<área>.sh      testes de ponta a ponta contra o banco, um por módulo
 web/                       front-end (Vite): 4 apps, 1 build
   src/entries/ src/apps/ src/lib/{screens/<app>,components,services,state,utils}
@@ -62,6 +63,7 @@ docs/                      a documentação do sistema (abaixo)
 | [docs/DATABASE.md](docs/DATABASE.md) | todas as tabelas, colunas e referências (gerado) |
 | [docs/CONVENTIONS.md](docs/CONVENTIONS.md) | nomes, comentários, erros, dinheiro, testes |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | subir, configurar, cron, migrar, testar |
+| [docs/GO_LIVE.md](docs/GO_LIVE.md) | do simulado ao real: VPS, credenciais, validação antes de abrir |
 | [docs/decisions/](docs/decisions/README.md) | as decisões de cada módulo: o que o mock pedia, o que foi feito, o que foi simplificado |
 
 ## Como rodar localmente
@@ -76,33 +78,41 @@ Detalhes (variáveis, tarefas agendadas, testes): [docs/OPERATIONS.md](docs/OPER
 
 ## Próximos passos
 
-As 15 fases do mock estão construídas. O que falta é o que depende de algo
-que não existe neste ambiente, ou de decisão do dono do produto:
+As 15 fases do mock estão construídas, e o caminho pra produção também:
 
-1. **Validar contra o Mercado Pago real.** Tudo roda em `MERCADOPAGO_MODE=fake`
-   (este ambiente não alcança a API). O formato das chamadas segue a
-   documentação, mas cartão, Pix automático, webhook, estorno e a gorjeta
-   "no mesmo cartão" precisam de uma rodada numa conta sandbox antes de
-   produção ([05](docs/decisions/05-pagamentos.md),
+- a trava de produção: com `APP_ENV=production`, qualquer integração simulada
+  ou sem segredo impede a API de subir;
+- o envio de OTP plugável;
+- o admin fundador;
+- os arquivos da VPS em `deploy/`;
+- a API conectando como `app_rw`, com RLS por loja.
+
+O passo a passo está em [docs/GO_LIVE.md](docs/GO_LIVE.md)
+([decisão 33](docs/decisions/33-go-live.md)). O que falta depende de conta
+real ou de decisão do dono do produto:
+
+1. **Provedor de OTP (SMS/e-mail).** Sem ele a produção não sobe. Escolhido
+   o provedor, ele entra como driver em `lib/messaging/otp_sender.php`, com
+   `curl` nativo.
+2. **Mercado Pago: token único da plataforma ou por loja**, e uma rodada no
+   sandbox antes de produção: cartão, Pix, webhook, estorno e gorjeta
+   ([05](docs/decisions/05-pagamentos.md),
    [14](docs/decisions/14-pontas-de-dinheiro.md),
-   [15](docs/decisions/15-troca-de-metodo-gorjeta-pix-automatico.md)).
-2. **MercadoPago.js com Public Key real.** Cartão novo e salvo já são
-   tokenizados no navegador ([30](docs/decisions/30-cartao-salvo-e-total-com-frete.md));
-   falta só configurar `MERCADOPAGO_PUBLIC_KEY` e conferir numa conta sandbox.
-3. **Validar o que sai pra internet.** Push de verdade (`PUSH_MODE=live`,
-   serviços de push dos navegadores), tiles do mapa (OpenStreetMap) e a busca
-   por CEP (ViaCEP) foram testados só até onde o ambiente deixa: assinatura,
-   pinos e caminho de falha, respectivamente
-   ([19](docs/decisions/19-push.md), [16](docs/decisions/16-lacunas-do-app-do-cliente.md)).
-4. **Impressora física.** A comanda e o recibo ESC/POS já saem pelo tablet do
-   balcão (WebUSB/Web Serial, [31](docs/decisions/31-impressao-escpos-e-recibo-de-baixa.md));
-   falta conferir numa térmica de verdade.
-5. **Decisão de produto: login social (Google, Apple).** A tela 10.1 mostra
-   os botões desabilitados: exige OAuth e uma tabela de identidade federada.
-6. **Armazenamento de arquivos em produção.** Comprovantes, fotos e
-   documentos ficam em disco local (`storage/`); em produção o plano é bucket
-   privado com URL assinada (Cloudflare R2), trocando só `app_path()` pelos
-   caminhos do bucket.
+   [15](docs/decisions/15-troca-de-metodo-gorjeta-pix-automatico.md),
+   [30](docs/decisions/30-cartao-salvo-e-total-com-frete.md)).
+3. **VPS e domínio**, e o destino da cópia do backup fora da VPS.
+4. **Validar o que sai pra internet.** Push de verdade, tiles do mapa
+   (OpenStreetMap) e busca por CEP (ViaCEP) foram testados só até onde o
+   ambiente deixa ([19](docs/decisions/19-push.md),
+   [16](docs/decisions/16-lacunas-do-app-do-cliente.md)). A impressora
+   térmica também precisa de um teste com o aparelho de verdade
+   ([31](docs/decisions/31-impressao-escpos-e-recibo-de-baixa.md)).
+5. **Quando levar os arquivos pro Cloudflare R2.** Hoje ficam no disco da
+   VPS, fora do projeto, e só saem por rota autenticada.
+6. **Fidelidade (2.3) agora ou na v2.** Está construída e ligada
+   ([32](docs/decisions/32-fidelidade.md)).
+7. **Login social (Google, Apple):** decisão de produto. A tela 10.1 mostra
+   os botões desabilitados.
 
 ## Origem
 

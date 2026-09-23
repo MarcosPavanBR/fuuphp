@@ -92,4 +92,35 @@ check_dev='define("FUU_SKIP_PRODUCTION_GUARD", 1); require $argv[1]; echo in_arr
 [ "$("${base_env[@]}" APP_ENV=staging php -r "$check_dev" "$ROOT/lib/bootstrap.php")" = "esconde" ] || fail "staging mostraria o dev_code"
 [ "$("${base_env[@]}" APP_ENV=testing php -r "$check_dev" "$ROOT/lib/bootstrap.php")" = "mostra" ] || fail "testing esconderia o dev_code"
 
+echo "== o modelo de produção sem preencher (<...>) é recusado =="
+set +e
+OUT=$(env -i PATH="$PATH" HOME="$HOME" FUU_ENV_FILE="$ROOT/deploy/env/fuuphp.env.example" php -r "$boot" "$ROOT/lib/bootstrap.php" 2>&1); CODE=$?
+set -e
+[ "$CODE" = "1" ] || fail "modelo de produção sem preencher subiu: $OUT"
+for key in DATABASE_URL JWT_SECRET MERCADOPAGO_ACCESS_TOKEN MERCADOPAGO_PUBLIC_KEY MERCADOPAGO_WEBHOOK_SECRET OTP_SENDER VAPID_SUBJECT; do
+  echo "$OUT" | grep -q "$key ainda com o marcador" || fail "marcador de $key não foi recusado: $OUT"
+done
+
+echo "== bin/check_production.php: papel do banco que ignora RLS é recusado =="
+# O guard já foi provado acima; aqui ele é pulado (auto_prepend) pra chegar
+# nas conferências de banco, que só o check_production faz.
+SKIP="$SAFE/skip_guard.php"
+echo '<?php define("FUU_SKIP_PRODUCTION_GUARD", 1);' > "$SKIP"
+set +e
+OUT=$("${base_env[@]}" APP_ENV=staging php -d auto_prepend_file="$SKIP" "$ROOT/bin/check_production.php" 2>&1); CODE=$?
+set -e
+if [ "$(psql "$DATABASE_URL" -tAc "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user")" = "t" ]; then
+  [ "$CODE" = "1" ] && echo "$OUT" | grep -q "ignora RLS" || fail "check_production aceitou superusuário: $OUT"
+fi
+if [ -n "${API_DATABASE_URL:-}" ]; then
+  OUT=$(env -i PATH="$PATH" HOME="$HOME" FUU_ENV_FILE=/dev/null DATABASE_URL="$API_DATABASE_URL" APP_ENV=staging \
+        php -d auto_prepend_file="$SKIP" "$ROOT/bin/check_production.php" 2>&1) || fail "check_production recusou app_rw: $OUT"
+  echo "$OUT" | grep -q "banco como app_rw" || fail "check_production não disse o papel: $OUT"
+fi
+set +e
+OUT=$(env -i PATH="$PATH" HOME="$HOME" FUU_ENV_FILE=/dev/null DATABASE_URL="postgres://ninguem:x@127.0.0.1:1/nada" APP_ENV=staging \
+      php -d auto_prepend_file="$SKIP" "$ROOT/bin/check_production.php" 2>&1); CODE=$?
+set -e
+[ "$CODE" = "1" ] && echo "$OUT" | grep -q "banco inacessível" || fail "check_production não recusou banco fora do ar: $OUT"
+
 echo "smoke_production_guard OK"

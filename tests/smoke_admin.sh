@@ -57,7 +57,7 @@ INSERT INTO disputes (order_id, courier_id, restaurant_id, kind, risk, amount)
 VALUES (NULL, '${COURIER_ID}', '${LIVE_STORE}', 'cash_unsettled', 'high', 80.00);
 SQL
 
-php -S "127.0.0.1:${PORT}" -t "$ROOT" >/tmp/smoke-admin-server.log 2>&1 &
+DATABASE_URL="${API_DATABASE_URL:-$DATABASE_URL}" php -S "127.0.0.1:${PORT}" -t "$ROOT" >/tmp/smoke-admin-server.log 2>&1 &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 for i in $(seq 1 20); do

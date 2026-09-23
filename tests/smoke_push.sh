@@ -53,7 +53,7 @@ VALUES ('${RESTAURANT_ID}', 'Prato Push', 45.00, 'Pratos', true);
 SQL
 ITEM_ID=$(query "SELECT id FROM menu_items WHERE restaurant_id='${RESTAURANT_ID}'")
 
-php -S "127.0.0.1:${PORT}" -t "$ROOT" >/tmp/smoke-push-server.log 2>&1 &
+DATABASE_URL="${API_DATABASE_URL:-$DATABASE_URL}" php -S "127.0.0.1:${PORT}" -t "$ROOT" >/tmp/smoke-push-server.log 2>&1 &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "/tmp/smoke-push-${STAMP}"' EXIT
 for i in $(seq 1 20); do

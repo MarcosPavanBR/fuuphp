@@ -28,6 +28,14 @@ const PRODUCTION_LIKE_ENVS = ['production', 'staging'];
 // O segredo de exemplo do .env.example: se chegou em produção, ninguém trocou.
 const JWT_SECRET_EXAMPLE = 'troque-por-um-segredo-de-verdade-no-vault';
 
+// Tudo que o .env de produção configura (deploy/env/fuuphp.env.example).
+const PRODUCTION_SETTINGS = [
+    'DATABASE_URL', 'JWT_SECRET', 'ALLOWED_ORIGIN',
+    'MERCADOPAGO_MODE', 'MERCADOPAGO_ACCESS_TOKEN', 'MERCADOPAGO_PUBLIC_KEY', 'MERCADOPAGO_WEBHOOK_SECRET',
+    'OTP_SENDER', 'PUSH_MODE', 'VAPID_PRIVATE_KEY_FILE', 'VAPID_SUBJECT',
+    'PROOF_STORAGE_DIR', 'MENU_PHOTO_DIR', 'COURIER_DOC_DIR',
+];
+
 function app_env(): string
 {
     return (string) env('APP_ENV', 'development');
@@ -50,6 +58,15 @@ function production_problems(): array
     }
     $problems = [];
     $env = app_env();
+
+    // O modelo de produção (deploy/env/fuuphp.env.example) marca o que falta
+    // preencher com <...>. Um marcador que sobrou não é vazio -- passaria nas
+    // conferências abaixo -- então é recusado aqui, pelo nome.
+    foreach (PRODUCTION_SETTINGS as $key) {
+        if (preg_match('/<[^<>]+>/', (string) env($key, '')) === 1) {
+            $problems[] = "{$key} ainda com o marcador do modelo (<...>)";
+        }
+    }
 
     $jwt = (string) env('JWT_SECRET', '');
     if ($jwt === '' || strlen($jwt) < 32 || $jwt === JWT_SECRET_EXAMPLE) {

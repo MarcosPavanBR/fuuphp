@@ -61,7 +61,9 @@ ordem, e é por ela que se lê qualquer um:
 
 1. `require_once .../lib/bootstrap.php` -- carrega `.env`, todas as libs,
    CORS de desenvolvimento e o tratador de erro que transforma exceção em
-   `500 {code, message, trace_id}` sem vazar stack trace.
+   `500 {code, message, trace_id}` sem vazar stack trace. Por último, a
+   **trava de produção**: em `staging`/`production` com integração simulada
+   ou sem segredo, a requisição para aqui com 503 ([GO_LIVE.md](GO_LIVE.md)).
 2. **Comentário de cabeçalho** -- a tela do mock que a rota serve e as
    decisões dela. O primeiro parágrafo vira o resumo em [API.md](API.md).
 3. `require_method('POST')` e o **guarda**: `require_auth()` (token),
@@ -105,6 +107,20 @@ isso a gorjeta da avaliação mora em `reviews`, não em `payments`.
 **Idempotência por chave única**: comprovante (`upload_key`), notificação
 (`outbox_id, kind`), resgate de cupom (`coupon_id, cpf`), lançamentos por
 origem.
+
+**Uma loja não enxerga a outra (RLS).** Em produção a API conecta como
+`app_rw`, que não é dona das tabelas. Em `orders`, `payments`,
+`payment_proofs` e `order_messages` (migração 009), `app_rw` só vê as linhas
+de acordo com o que a conexão diz ser:
+
+- `db()` abre toda conexão como `app.role = platform`, porque a autorização
+  fina é do PHP;
+- `require_store_staff()` troca pra `store` + o `restaurant_id` do token. Se
+  uma rota de loja esquecer o filtro, o banco ainda esconde o pedido da
+  vizinha.
+
+`app_rw` também não altera o livro nem os pontos e não faz DDL
+(`tests/smoke_db_roles.sh`).
 
 ## Dinheiro: quem deve o quê
 

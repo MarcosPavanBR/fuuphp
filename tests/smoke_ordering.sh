@@ -52,7 +52,7 @@ VALUES (:item1_id, 'Borda', 'Catupiry', 6.00, false);
 SQL
 # senha do hash acima é "senha123"
 
-php -S "127.0.0.1:${PORT}" -t "$ROOT" >/tmp/smoke-ordering-server.log 2>&1 &
+DATABASE_URL="${API_DATABASE_URL:-$DATABASE_URL}" php -S "127.0.0.1:${PORT}" -t "$ROOT" >/tmp/smoke-ordering-server.log 2>&1 &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 for i in $(seq 1 20); do

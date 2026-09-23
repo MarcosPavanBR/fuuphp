@@ -13,6 +13,8 @@ on:
       - "lib/**"
       - "tests/**"
       - "web/**"
+      - "bin/**"
+      - "deploy/**"
       - ".github/workflows/ci.yml"
   pull_request:
     paths:
@@ -21,11 +23,17 @@ on:
       - "lib/**"
       - "tests/**"
       - "web/**"
+      - "bin/**"
+      - "deploy/**"
       - ".github/workflows/ci.yml"
 
 jobs:
   apply:
     runs-on: ubuntu-latest
+    # Como em produção: a API das suítes conecta como app_rw (sem ser dona das
+    # tabelas, sujeita à RLS); o semeio dos testes usa o dono (DATABASE_URL).
+    env:
+      API_DATABASE_URL: postgres://app_rw:app-rw-ci@localhost:5432/fuudelivery
     steps:
       - uses: actions/checkout@v4
 
@@ -62,6 +70,11 @@ jobs:
         run: |
           bash db/migrate.sh down 29
           bash db/migrate.sh up
+
+      - name: "Senha do role app_rw (a API das suítes conecta com ele)"
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d fuudelivery -c "ALTER ROLE app_rw PASSWORD 'app-rw-ci'"
 
       - name: Conferir que as tabelas do esquema existem
         env:
@@ -278,6 +291,24 @@ jobs:
           JWT_SECRET: ci-test-secret
           MERCADOPAGO_MODE: fake
         run: bash tests/smoke_loyalty.sh
+
+      - name: "Papéis do banco: RLS por loja, livro só de inserção, app_rw sem DDL (go-live)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+        run: bash tests/smoke_db_roles.sh
+
+      - name: "Arquivos da VPS (deploy/): scripts sem erro de sintaxe e Nginx aceito pelo nginx -t"
+        run: |
+          for f in deploy/*.sh deploy/backup/*.sh db/migrate.sh; do bash -n "$f"; done
+          sudo apt-get install -y -qq nginx-core > /dev/null
+          D="$RUNNER_TEMP/ngx" && mkdir -p "$D"
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout "$D/k.key" -out "$D/c.pem" -days 1 -subj /CN=ci 2> /dev/null
+          sed -e "s#/etc/ssl/cloudflare/DOMINIO.pem#$D/c.pem#; s#/etc/ssl/cloudflare/DOMINIO.key#$D/k.key#; s#DOMINIO#ci.test#g" \
+            deploy/nginx/fuuphp.conf > "$D/site.conf"
+          [ -e /proc/net/if_inet6 ] || sed -i '/\[::\]/d' "$D/site.conf"   # runner sem IPv6
+          printf 'events{}\nhttp{\ninclude /etc/nginx/mime.types;\ninclude %s/site.conf;\n}\n' "$D" > "$D/nginx.conf"
+          cp /etc/nginx/fastcgi_params "$D/"
+          sudo nginx -t -c "$D/nginx.conf"
 
       - name: Instalar Node 22
         uses: actions/setup-node@v4

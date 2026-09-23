@@ -29,7 +29,26 @@ function db(): PDO
         PDO::ATTR_EMULATE_PREPARES => false,
     ]);
 
+    // RLS da migração 009 (orders, payments, payment_proofs, order_messages):
+    // em produção a API conecta como `app_rw`, que só enxerga linhas se a
+    // sessão disser quem é. Toda conexão começa como "platform" -- quem pode
+    // ver o quê é decidido no PHP (authorize_order_access, require_*) -- e a
+    // equipe de loja é estreitada pra própria loja em db_scope_to_restaurant().
+    // Conexão não persistente: a configuração morre com a requisição.
+    $pdo->exec("SELECT set_config('app.role', 'platform', false)");
+
     return $pdo;
+}
+
+/**
+ * Estreita a conexão à loja do token: dali pra frente, pedido, pagamento,
+ * comprovante e mensagem de outra loja não existem nem pro banco (RLS), mesmo
+ * que uma rota esqueça de filtrar. Chamada por require_store_staff().
+ */
+function db_scope_to_restaurant(string $restaurantId): void
+{
+    $stmt = db()->prepare("SELECT set_config('app.role', 'store', false), set_config('app.restaurant_id', :id, false)");
+    $stmt->execute(['id' => $restaurantId]);
 }
 
 /**
