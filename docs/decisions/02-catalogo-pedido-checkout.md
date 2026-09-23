@@ -29,3 +29,11 @@
   configurado em `009`) e emitir `SET LOCAL app.role` / `app.restaurant_id`
   por requisição é o próximo passo para RLS virar defesa em profundidade de
   verdade, não só desenho.
+
+**Atualização (go-live).** O que mudou desde este registro:
+
+- **A RLS por restaurante está em uso real.** Em produção a API conecta como
+  `app_rw`. `db()` abre toda conexão como `platform`, e `require_store_staff()`
+  estreita a conexão pra loja do token. O CI roda todas as suítes assim, e
+  `tests/smoke_db_roles.sh` confere a RLS direto no banco
+  ([33](33-go-live.md)).

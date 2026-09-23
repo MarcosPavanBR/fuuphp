@@ -403,3 +403,13 @@ web/
   aqui) → dois cartões salvos (Mastercard e Visa pelo heurístico de
   bandeira) → trocar padrão → configurações com os três toggles reais,
   incluindo o de promoções ligado manualmente e persistido.
+
+**Atualização (go-live).** O que mudou desde este registro:
+
+- As fases que aqui aparecem como "ainda não portadas" foram todas
+  construídas depois. A Fase 3 (cardápio, item, carrinho), a Fase 6 (CRUD de
+  endereços, cartões e configurações) e a tokenização real do cartão
+  (MercadoPago.js, [30](30-cartao-salvo-e-total-com-frete.md)) saíram
+  depois deste registro. O `QuickAddress.svelte` e o `QuickLogin.svelte`
+  deram lugar às telas completas ([09](09-login-e-cadastro.md),
+  [16](16-lacunas-do-app-do-cliente.md)).

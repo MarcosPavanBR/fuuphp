@@ -317,6 +317,16 @@
     display: flex;
     gap: 6px;
     margin-left: 10px;
+    /* Em tela estreita (celular, tablet em pé) a fileira de abas rola de lado
+       em vez de empurrar a página inteira pra fora da tela. */
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tabs button {
+    flex: none;
+    white-space: nowrap;
   }
   .tabs button {
     border: 1px solid var(--fuu-line-3);

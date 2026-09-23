@@ -54,3 +54,13 @@ Duas peças de banco existiam desde a migração `004` e estavam sem uso:
   faixa passada recusados, a terceira pessoa vendo `slot_full` com o banco
   intacto, a cozinha sem o pedido antes da hora e com ele depois, o
   cancelamento sem taxa, e a loja desligando o agendamento.
+
+**Atualização (go-live).** O que mudou desde este registro:
+
+- `payments/pay.php` já cobra com cartão salvo
+  ([30](30-cartao-salvo-e-total-com-frete.md)), e o push existe
+  ([19](19-push.md)). Mesmo assim, a cobrança de cartão e Pix do agendado
+  continua no checkout, de propósito: cobrar no início do preparo exigiria
+  cobrar sem a pessoa presente, e recusa de cartão nessa hora vira pedido
+  perdido com a cozinha já avisada. A tela continua dizendo qual dos dois é
+  o caso.

@@ -24,3 +24,11 @@ coluna no esquema — a Parte II original fixa 42 tabelas e nenhuma delas tem
   exatamente o que a tela 2.2 pede no chip "PostgreSQL trigram". Os
   filtros do mock (Entrega grátis / Até 30 min / 4,5+) passaram a filtrar
   de verdade -- ver "Lacunas do app do cliente fechadas".
+
+**Atualização (go-live).** O que mudou desde este registro:
+
+- **A nota da loja existe.** Ela vem das avaliações de pedido entregue
+  (`reviews`, migração 011) e é agregada em `restaurant_card_facts()`
+  (`lib/catalog/restaurant_facts.php`): média e contagem reais, e nunca um
+  número inventado quando não há avaliação ([06](06-acompanhamento.md),
+  [16](16-lacunas-do-app-do-cliente.md)).

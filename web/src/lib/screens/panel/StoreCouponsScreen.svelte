@@ -208,8 +208,13 @@
             <p><strong>Público:</strong> {projection.audience_size} {projection.audience_size === 1 ? 'pessoa' : 'pessoas'}.</p>
             {#if projection.projection.redemptions !== null}
               <p>
-                ~{projection.projection.redemptions} usos até o teto. Com o ticket médio da loja
-                ({money(projection.projection.ticket_avg)}), ≈ {money(projection.projection.gmv)} em pedidos.
+                ~{projection.projection.redemptions} usos até o teto.
+                {#if projection.projection.gmv !== null}
+                  Com o ticket médio da loja ({money(projection.projection.ticket_avg)}), ≈
+                  {money(projection.projection.gmv)} em pedidos.
+                {:else}
+                  Ainda não há pedidos suficientes pra estimar quanto isso vende.
+                {/if}
               </p>
             {:else}
               <p>{projection.projection.reason}</p>
@@ -369,6 +374,10 @@
   .two {
     display: flex;
     gap: 10px;
+  }
+  .two .field {
+    flex: 1;
+    min-width: 0;
   }
   .pills {
     display: flex;

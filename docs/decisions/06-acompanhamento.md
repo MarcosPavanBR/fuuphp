@@ -57,3 +57,9 @@ A Fase 5 no front (as 5 telas de verdade) ainda não foi portada — ver
   segundos depois, e confere que o evento `preparing` chegou no stream
   antes da conexão fechar — prova que o `LISTEN/NOTIFY` está entregando de
   verdade entre processos, não só que a rota responde 200.
+
+**Atualização (go-live).** O que mudou desde este registro:
+
+- A Fase 5 no front foi portada: aprovado, em análise, acompanhamento com
+  mapa, rejeitado e avaliação ([08](08-front-end.md),
+  [16](16-lacunas-do-app-do-cliente.md)).

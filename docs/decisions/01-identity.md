@@ -29,3 +29,10 @@ fechar essa lacuna:
   (`APP_ENV != production`). Sem um provedor de SMS/e-mail configurado
   ainda, é assim que o fluxo é testável; o código real nunca é logado nem
   devolvido quando `APP_ENV=production`.
+
+**Atualização (go-live).** O que mudou desde este registro:
+
+- A reescrita de URL continua de fora de propósito: a URL é o caminho do
+  arquivo (`api/v1/<área>/<ação>.php`). A hospedagem foi decidida no go-live
+  (VPS com Nginx), e o `deploy/nginx/fuuphp.conf` só deixa passar esse
+  formato ([33](33-go-live.md)).

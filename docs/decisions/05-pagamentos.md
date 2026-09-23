@@ -106,3 +106,17 @@ automático, gorjeta e estorno usam as credenciais da plataforma, que ficam no
 `.env` do servidor. A loja recebe pelo repasse semanal do livro-razão, sem
 split. As colunas de Mercado Pago por loja em `restaurant_credentials` ficam
 sem uso. Veja a [33](33-go-live.md).
+
+**Atualização (go-live).** O que mudou desde este registro:
+
+- A conferência na entrega foi construída: caixa do entregador e baixa de
+  espécie ([27](27-app-do-entregador-e-caixa.md), [29](29-baixa-por-pix.md)),
+  e maquininha e conciliação ([12](12-maquininha-conciliacao-netting.md)).
+- Aprovar ou recusar Pix continua passando por `advance_order()`, que escreve
+  na `outbox`. Dali o `bin/push_worker.php` avisa o cliente
+  ([19](19-push.md)), e o pedido aprovado (`paid`) entra na fila de impressão
+  do balcão ([31](31-impressao-escpos-e-recibo-de-baixa.md)).
+- `refunds` e `card_transactions` já têm endpoint: o reembolso está na Fase
+  13 ([10](10-caminho-do-erro.md)) e é executado por
+  `bin/execute_refunds.php`; a maquininha está na Fase 9
+  ([12](12-maquininha-conciliacao-netting.md)).

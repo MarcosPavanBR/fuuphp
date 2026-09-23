@@ -74,3 +74,13 @@ tentativas."
   que REALMENTE entra no app (`couriers/me.php` responde), campanha sem teto
   recusada, projeção sem gravar nada, código duplicado barrado, os dois
   lançamentos de R$ 5,00 no livro e o cupom desativado ao encostar no teto.
+
+**Atualização (go-live).** O que mudou desde este registro:
+
+- **O cupom que a loja cria sozinha está construído** (migração 031). A
+  plataforma libera um teto por loja na aba Campanhas
+  (`admin/store_coupon_limits.php`, com auditoria). A loja cria e desliga os
+  próprios cupons na aba Cupons do painel (`restaurants/coupons.php`), pagos
+  pelo repasse dela. O teto vale sobre o orçamento dos cupons vivos, e
+  desligar ou vencer um cupom devolve o que ele não gastou
+  (`tests/smoke_store_coupons.sh`).

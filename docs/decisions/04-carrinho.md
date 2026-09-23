@@ -42,3 +42,11 @@ status='cart'". Os dois modelos convivem — nenhum substituiu o outro.
   Achado com Playwright checando `boundingBox()` do modal (`null` = não
   estava renderizando, apesar de estar no DOM) — não teria aparecido só
   olhando o código.
+
+**Atualização (go-live).** O que mudou desde este registro:
+
+- O cupom deixou de ser só campo de UI. O resgate de verdade está em
+  `cart/apply_coupon.php` e `orders/checkout.php`, com teto, um uso por CPF e
+  livro contábil de quem paga ([20](20-chat-e-cupons.md)).
+- "Ir para pagamento" leva à Fase 4 construída
+  ([30](30-cartao-salvo-e-total-com-frete.md)).

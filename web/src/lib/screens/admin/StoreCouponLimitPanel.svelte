@@ -78,13 +78,13 @@
     <div class="table">
       {#each stores as store (store.id)}
         {@const used = Number(store.budget.limit) > 0 ? Math.min(100, Math.round((store.budget.committed * 100) / store.budget.limit)) : 0}
-        <div class="row">
+        <div class="store-row">
           <div class="who">
             <p class="name">{store.name}</p>
             <p class="meta fuu-mono">
               comprometido {money(store.budget.committed)} · livre {money(store.budget.available)}
             </p>
-            <span class="bar"><span class="fill" style:width={`${used}%`}></span></span>
+            <span class="limit-meter"><span class="limit-meter-fill" style:width={`${used}%`}></span></span>
           </div>
           <label class="limit">
             <span>Teto (R$)</span>
@@ -140,7 +140,7 @@
     border-radius: var(--fuu-radius-card);
     overflow: hidden;
   }
-  .row {
+  .store-row {
     display: flex;
     align-items: center;
     gap: 14px;
@@ -148,7 +148,7 @@
     border-top: 1px solid var(--fuu-line-5);
     flex-wrap: wrap;
   }
-  .row:first-child {
+  .store-row:first-child {
     border-top: none;
   }
   .who {
@@ -166,7 +166,7 @@
     color: var(--fuu-ink-4);
     margin: 2px 0 6px;
   }
-  .bar {
+  .limit-meter {
     display: block;
     height: 5px;
     background: var(--fuu-line-5);
@@ -174,9 +174,9 @@
     overflow: hidden;
     max-width: 240px;
   }
-  .fill {
+  .limit-meter-fill {
     display: block;
-    height: 100%;
+    height: 5px;
     background: var(--fuu-red);
   }
   .limit span {

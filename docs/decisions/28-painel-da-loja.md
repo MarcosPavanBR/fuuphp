@@ -77,3 +77,11 @@ esse buraco e junta o KDS, que é a outra metade do mesmo trabalho.
   exatamente o comportamento desenhado (`partner_accounts` faz confiança no
   primeiro uso). Liberar troca de tablet depende do suporte (Fase 14), que
   ainda não existe.
+
+**Atualização (go-live).** O que mudou desde este registro:
+
+- **A troca de aparelho existe.** O suporte acha a loja ou o entregador
+  por CNPJ, CPF ou nome, na aba Aparelhos do painel da plataforma
+  (`admin/partner_devices.php`), e libera com motivo. Isso encerra as sessões
+  do aparelho antigo e grava no `audit_log`; o próximo login vira o aparelho
+  confiável (`tests/smoke_partner_device.sh`).

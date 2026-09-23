@@ -261,9 +261,13 @@
           </p>
           {#if projection.projection.redemptions !== null}
             <p>
-              <strong>Projeção:</strong> ~{projection.projection.redemptions} resgates até o teto. Com ticket
-              médio de {money(projection.projection.ticket_avg)}, gera ≈ {money(projection.projection.gmv)} de
-              GMV e {money(projection.projection.commission)} de comissão.
+              <strong>Projeção:</strong> ~{projection.projection.redemptions} resgates até o teto.
+              {#if projection.projection.gmv !== null}
+                Com ticket médio de {money(projection.projection.ticket_avg)}, gera ≈
+                {money(projection.projection.gmv)} de GMV e {money(projection.projection.commission)} de comissão.
+              {:else}
+                Sem pedidos suficientes pra estimar GMV e comissão.
+              {/if}
             </p>
           {:else}
             <p>{projection.projection.reason}</p>
