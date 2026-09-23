@@ -1,4 +1,5 @@
 <script>
+  import { parsePgTimestamp } from '../../utils/datetime.js';
   import { onMount, onDestroy } from 'svelte';
   import { toastr } from '../../utils/toastr.js';
 
@@ -16,7 +17,7 @@
   });
   onDestroy(() => clearInterval(interval));
 
-  let remainingSeconds = $derived(deadline ? Math.max(0, Math.floor((new Date(deadline).getTime() - now) / 1000)) : 0);
+  let remainingSeconds = $derived(deadline ? Math.max(0, Math.floor((parsePgTimestamp(deadline).getTime() - now) / 1000)) : 0);
   let remainingLabel = $derived(
     `${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(remainingSeconds % 60).padStart(2, '0')}`
   );
