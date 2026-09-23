@@ -1,4 +1,5 @@
 <script>
+  import BrandMark from '../../components/BrandMark.svelte';
   import { toastr } from '../../utils/toastr.js';
   import { ApiError } from '../../services/api.js';
   import { requestOtp } from '../../state/customerSession.svelte.js';
@@ -73,7 +74,7 @@
 
 <div class="login">
   <header class="hero">
-    <div class="mark fuu-display">FUU</div>
+    <div class="mark"><BrandMark size={58} /></div>
     <h1 class="fuu-display">Entrar no FUUDelivery</h1>
     <p class="sub">
       {emailAvailable ? 'Telefone ou e-mail.' : 'Seu celular.'} Enviamos um código de 6 dígitos — você não precisa
@@ -169,16 +170,6 @@
   }
   .mark {
     width: 58px;
-    height: 58px;
-    border-radius: 17px;
-    background: var(--fuu-red);
-    color: var(--fuu-white);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 21px;
-    font-weight: 800;
-    letter-spacing: -0.04em;
   }
   h1 {
     font-size: 27px;

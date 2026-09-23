@@ -1,4 +1,5 @@
 <script>
+  import BrandMark from '../lib/components/BrandMark.svelte';
   import { api } from '../lib/services/api.js';
   import { toastr } from '../lib/utils/toastr.js';
   import {
@@ -109,7 +110,7 @@
 {:else}
   <div class="app">
     <header class="top">
-      <span class="brand fuu-display">FUU</span>
+      <BrandMark size={30} />
       <span class="title">Entregador</span>
       <button type="button" class="leave" onclick={leave} aria-label="Sair">
         <i class="bi bi-box-arrow-right"></i>
@@ -182,14 +183,6 @@
     display: flex;
     align-items: center;
     gap: 10px;
-  }
-  .brand {
-    background: var(--fuu-red);
-    color: var(--fuu-white);
-    border-radius: 9px;
-    padding: 4px 8px;
-    font-size: 12px;
-    font-weight: 800;
   }
   .title {
     font-weight: 800;

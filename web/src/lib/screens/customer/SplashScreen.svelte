@@ -1,6 +1,7 @@
 <script>
   import { fade } from 'svelte/transition';
   import PhoneStatusBar from '../../components/PhoneStatusBar.svelte';
+  import BrandMark from '../../components/BrandMark.svelte';
 
   // Tela 1.1 — Splash. "Transição fade do Svelte; service worker aquece o
   // cache enquanto a marca aparece." O service worker de verdade fica fora
@@ -15,11 +16,11 @@
   <PhoneStatusBar />
 
   <div class="splash-body">
-    <div class="mark">FUU</div>
+    <BrandMark size={88} />
     <div class="wordmark fuu-display">
-      <span class="fuu">FUU</span><span class="delivery">delivery</span>
+      <span class="fuu">fuu</span><span class="delivery">delivery</span>
     </div>
-    <p class="tagline">Sua cidade, num sopro.</p>
+    <p class="tagline">Pediu, fuu, chegou.</p>
   </div>
 
   <div class="splash-footer">
@@ -44,20 +45,6 @@
     gap: 18px;
     text-align: center;
     padding: 0 32px;
-  }
-  .mark {
-    width: 88px;
-    height: 88px;
-    border-radius: 30%;
-    background: var(--fuu-red);
-    color: var(--fuu-white);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--fuu-font-display);
-    font-weight: 800;
-    font-size: 26px;
-    letter-spacing: 0.02em;
   }
   .wordmark {
     font-size: 26px;

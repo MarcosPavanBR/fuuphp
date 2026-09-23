@@ -1,4 +1,5 @@
 <script>
+  import BrandMark from '../../components/BrandMark.svelte';
   import { staffLogin } from '../../state/staffSession.svelte.js';
   import { toastr } from '../../utils/toastr.js';
   import { ApiError } from '../../services/api.js';
@@ -53,7 +54,7 @@
 <div class="login-screen">
   <div class="login-card fuu-card">
     <div class="brand">
-      <span class="mark">FUU</span>
+      <BrandMark size={44} />
       <div>
         <p class="title fuu-display">Painel da loja</p>
         <p class="subtitle">Entre com o CNPJ e a senha da loja</p>
@@ -112,20 +113,6 @@
     align-items: center;
     gap: 12px;
     margin-bottom: 6px;
-  }
-  .mark {
-    width: 44px;
-    height: 44px;
-    border-radius: 30%;
-    background: var(--fuu-red);
-    color: var(--fuu-white);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--fuu-font-display);
-    font-weight: 800;
-    font-size: 13px;
-    flex: none;
   }
   .title {
     margin: 0;

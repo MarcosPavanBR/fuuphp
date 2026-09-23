@@ -1,4 +1,5 @@
 <script>
+  import BrandMark from '../../components/BrandMark.svelte';
   import { api, ApiError } from '../../services/api.js';
   import { toastr } from '../../utils/toastr.js';
 
@@ -73,7 +74,7 @@
 
 <div class="review-screen">
   <div class="header">
-    <div class="mark">FUU</div>
+    <div class="mark"><BrandMark size={44} /></div>
     <h1 class="fuu-display">Como foi o pedido?</h1>
     <p class="subtitle">{restaurantName} · #{orderCode}</p>
   </div>
@@ -139,16 +140,6 @@
   }
   .mark {
     width: 44px;
-    height: 44px;
-    border-radius: 30%;
-    background: var(--fuu-red);
-    color: var(--fuu-white);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--fuu-font-display);
-    font-weight: 800;
-    font-size: 13px;
     margin: 0 auto 12px;
   }
   h1 {

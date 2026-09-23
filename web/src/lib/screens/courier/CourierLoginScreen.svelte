@@ -1,4 +1,5 @@
 <script>
+  import BrandMark from '../../components/BrandMark.svelte';
   import { courierLogin } from '../../state/courierSession.svelte.js';
   import { toastr } from '../../utils/toastr.js';
   import { ApiError } from '../../services/api.js';
@@ -53,7 +54,7 @@
 </script>
 
 <div class="login">
-  <div class="mark fuu-display">FUU</div>
+  <div class="mark"><BrandMark size={58} /></div>
   <h1 class="fuu-display">App do entregador</h1>
   <p class="sub">Entre com o CPF e o código que o suporte te passou.</p>
 
@@ -121,15 +122,6 @@
   }
   .mark {
     width: 58px;
-    height: 58px;
-    border-radius: 17px;
-    background: var(--fuu-red);
-    color: var(--fuu-white);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 21px;
-    font-weight: 800;
   }
   h1 {
     font-size: 26px;

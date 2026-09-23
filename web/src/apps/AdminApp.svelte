@@ -1,4 +1,5 @@
 <script>
+  import BrandMark from '../lib/components/BrandMark.svelte';
   import { api } from '../lib/services/api.js';
   import { toastr } from '../lib/utils/toastr.js';
   import { isAdminAuthenticated, adminToken, adminLogout } from '../lib/state/adminSession.svelte.js';
@@ -57,7 +58,7 @@
 {:else}
   <div class="admin">
     <header class="top">
-      <span class="brand fuu-display">FUU</span>
+      <BrandMark size={30} />
       <span class="title">Painel da plataforma</span>
 
       <nav class="tabs">
@@ -124,14 +125,6 @@
     align-items: center;
     gap: 14px;
     flex-wrap: wrap;
-  }
-  .brand {
-    background: var(--fuu-red);
-    color: var(--fuu-white);
-    border-radius: 9px;
-    padding: 4px 8px;
-    font-size: 12px;
-    font-weight: 800;
   }
   .title {
     font-weight: 800;
