@@ -208,7 +208,7 @@ try {
         // ser "primeiro pedido".
         if (!coupon_audience_includes($pdo, $coupon, (string) $claims['sub'])) {
             $pdo->rollBack();
-            error_response(409, 'coupon_audience', coupon_audience_message((string) $coupon['audience']));
+            error_response(409, 'coupon_audience', coupon_audience_message((string) $coupon['audience'], ($coupon['owner_user_id'] ?? null) !== null));
         }
 
         // Frete grátis só tem valor agora: no carrinho ainda não há endereço,

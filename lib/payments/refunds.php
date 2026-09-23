@@ -174,6 +174,10 @@ function record_refund(PDO $pdo, array $order, array $plan, ?string $decidedBy, 
     ]);
     $refund = $insert->fetch();
 
+    // Pontos de fidelidade do pedido voltam na proporção do estorno (2.3):
+    // ponto de compra devolvida não é ponto de compra.
+    loyalty_reverse_for_refund($pdo, (int) $order['id'], (int) $refund['id'], (float) $refund['amount']);
+
     // O pagamento só vira 'refunded' quando o dinheiro realmente volta pelo
     // mesmo caminho E por inteiro. Devolução parcial (o frete de um pedido
     // que virou retirada, por exemplo) não desfaz a cobrança: o cliente

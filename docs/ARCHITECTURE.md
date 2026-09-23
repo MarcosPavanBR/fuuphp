@@ -41,7 +41,7 @@ próprio mock cita nos chips das telas: SweetAlert e Leaflet.
  │ dispatch/   ofertas em rodadas, ocorrências                  │
  │ messaging/  push, notificações, suporte                      │
  │ printing/   ESC/POS: comanda e recibo de baixa               │
- │ account/    LGPD (exportar, excluir)                         │
+ │ account/    LGPD (exportar, excluir), fidelidade (pontos)    │
  └───────────────┬──────────────────────────────────────────────┘
  ┌───────────────▼──── PostgreSQL 16 ───────────────────────────┐
  │ advance_order()  ·  ledger append-only  ·  outbox  ·  pg_cron │

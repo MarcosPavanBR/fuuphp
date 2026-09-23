@@ -119,6 +119,10 @@ function coupon_audience_size(PDO $pdo, string $audience, ?string $restaurantId 
 /** Esta pessoa está no público da campanha? (resgate e checkout) */
 function coupon_audience_includes(PDO $pdo, array $coupon, string $userId): bool
 {
+    // Cupom pessoal (troca de pontos, 2.3): só o dono usa, qualquer que seja o público.
+    if (($coupon['owner_user_id'] ?? null) !== null) {
+        return $coupon['owner_user_id'] === $userId;
+    }
     $audience = (string) $coupon['audience'];
     $restaurantId = $coupon['restaurant_id'] ?? null;
     $stmt = $pdo->prepare(
@@ -130,8 +134,11 @@ function coupon_audience_includes(PDO $pdo, array $coupon, string $userId): bool
 }
 
 /** A frase de recusa, no idioma da campanha. */
-function coupon_audience_message(string $audience): string
+function coupon_audience_message(string $audience, bool $personal = false): string
 {
+    if ($personal) {
+        return 'Esse cupom é pessoal: foi trocado por pontos de outra conta.';
+    }
     return match ($audience) {
         'first_order' => 'Esse cupom é só pra quem ainda não fez pedido.',
         'inactive_15d' => 'Esse cupom é pra quem não pede há mais de 15 dias.',

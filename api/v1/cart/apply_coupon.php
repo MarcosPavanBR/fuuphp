@@ -96,7 +96,7 @@ if ((int) $usedStmt->fetchColumn() > 0) {
 // era só usado pra PROJETAR o alcance -- qualquer pessoa resgatava. Agora é
 // a mesma condição (lib/ordering/coupons.php) que conta o público e barra.
 if (!coupon_audience_includes($pdo, $coupon, (string) $claims['sub'])) {
-    error_response(409, 'coupon_audience', coupon_audience_message((string) $coupon['audience']));
+    error_response(409, 'coupon_audience', coupon_audience_message((string) $coupon['audience'], ($coupon['owner_user_id'] ?? null) !== null));
 }
 
 if ((float) $coupon['spent'] >= (float) $coupon['budget_cap']) {

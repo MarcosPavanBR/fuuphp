@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_api_catalog.php` a partir dos próprios arquivos de
 > `api/v1`. Não edite à mão: o CI confere (`--check`) e falha se estiver desatualizado.
 
-105 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
+106 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
 `{code, message, trace_id}` com o status HTTP certo (`lib/core/response.php`). As URLs são
 contrato público: mudar um caminho quebra app instalado.
 
@@ -123,6 +123,7 @@ contrato público: mudar um caminho quebra app instalado.
 |---|---|---|---|---|
 | `/api/v1/profile/delete_account.php` | GET, POST | cliente |  | Tela 6.3 — "Excluir conta" (LGPD art. 18, VI). |
 | `/api/v1/profile/export.php` | GET | cliente |  | Tela 6.3 — "Baixar meus dados (LGPD)". Devolve um JSON com tudo que o sistema guarda sobre o cliente logado (lib/account/account_privacy.php decide o que entra e o que fica de fora), como anexo pra download. |
+| `/api/v1/profile/loyalty.php` | GET, POST | cliente |  | Tela 2.3 — Fidelidade. "Saldo calculado no banco (soma dos lançamentos), nunca no cliente." |
 | `/api/v1/profile/show.php` | GET | autenticado |  | Tela 2.5 — o perfil do cliente: dados da conta (CPF só mascarado) e os números do topo (pedidos, cupons; pontos ainda sem tabela). |
 | `/api/v1/profile/update.php` | POST | autenticado |  | Tela 10.3 — "Cadastro: mínimo necessário + LGPD por campo". O cadastro começa no OTP (que já cria o usuário com nome e telefone verificados) e termina aqui: CPF pra nota fiscal, e-mail, e os opcionais que só são gravados se a pessoa consentir. |
 | `/api/v1/profile/wallet.php` | GET, POST | autenticado |  | Tela 13.4, o lado do cliente: "crédito em carteira é oferta, nunca imposição". |

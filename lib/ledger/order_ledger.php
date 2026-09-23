@@ -75,6 +75,10 @@ function ledger_order_delivered(PDO $pdo, array $order, ?string $actorId): void
         return;
     }
 
+    // Pontos de fidelidade nascem na entrega, junto do acerto (2.3) --
+    // lib/account/loyalty.php. Idempotente como o resto desta função.
+    loyalty_earn_for_order($pdo, $order);
+
     $total = (float) $order['total'];
     $storeShare = round((float) $order['subtotal'] - (float) $order['commission'], 2);
     $method = (string) $order['payment_method'];

@@ -61,8 +61,9 @@ require_once __DIR__ . '/messaging/support.php';
 require_once __DIR__ . '/printing/escpos.php';
 require_once __DIR__ . '/printing/documents.php';
 
-// ── conta: privacidade (LGPD) ──────────────────────────────────────────
+// ── conta: privacidade (LGPD) e fidelidade ──────────────────────────────────────────
 require_once __DIR__ . '/account/account_privacy.php';
+require_once __DIR__ . '/account/loyalty.php';
 
 // Em produção, PWA e API ficam atrás do mesmo domínio via Cloudflare (a
 // especificação nunca fala em domínios separados) -- CORS não seria

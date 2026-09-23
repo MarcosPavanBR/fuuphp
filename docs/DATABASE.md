@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_db_map.php` a partir do banco com todas as migrações
 > aplicadas. Não edite à mão: o CI confere (`--check`).
 
-56 tabelas em PostgreSQL 16. Regras que o esquema garante sozinho (e que o
+58 tabelas em PostgreSQL 16. Regras que o esquema garante sozinho (e que o
 código não precisa repetir): `orders.status` só muda por `advance_order()`; `ledger_entries`
 é só de inserção (sem UPDATE/DELETE); um pagamento aprovado por pedido
 (`payments_one_approved`). Contexto de cada regra: `docs/ARCHITECTURE.md`.
@@ -15,7 +15,7 @@ código não precisa repetir): `orders.status` só muda por `advance_order()`; `
 
 ## Índice
 
-[`acquirer_statements`](#acquirer_statements) [`addresses`](#addresses) [`audit_log`](#audit_log) [`business_hours`](#business_hours) [`card_transactions`](#card_transactions) [`cash_settlement_intents`](#cash_settlement_intents) [`consents`](#consents) [`coupon_redemptions`](#coupon_redemptions) [`coupons`](#coupons) [`courier_applications`](#courier_applications) [`courier_documents`](#courier_documents) [`courier_positions`](#courier_positions) [`courier_shifts`](#courier_shifts) [`couriers`](#couriers) [`delivery_attempts`](#delivery_attempts) [`delivery_incidents`](#delivery_incidents) [`delivery_proofs`](#delivery_proofs) [`delivery_slots`](#delivery_slots) [`dispatch_attempts`](#dispatch_attempts) [`disputes`](#disputes) [`fraud_signals`](#fraud_signals) [`holiday_overrides`](#holiday_overrides) [`idempotency_keys`](#idempotency_keys) [`item_variants`](#item_variants) [`ledger_entries`](#ledger_entries) [`menu_items`](#menu_items) [`notifications`](#notifications) [`offers`](#offers) [`order_events`](#order_events) [`order_items`](#order_items) [`order_messages`](#order_messages) [`orders`](#orders) [`otp_codes`](#otp_codes) [`outbox`](#outbox) [`partner_accounts`](#partner_accounts) [`payment_proofs`](#payment_proofs) [`payments`](#payments) [`payouts`](#payouts) [`platform_policies`](#platform_policies) [`policy_overrides`](#policy_overrides) [`pos_custody`](#pos_custody) [`pos_devices`](#pos_devices) [`print_log`](#print_log) [`push_subscriptions`](#push_subscriptions) [`refunds`](#refunds) [`restaurant_credentials`](#restaurant_credentials) [`restaurant_payment_settings`](#restaurant_payment_settings) [`restaurants`](#restaurants) [`reviews`](#reviews) [`saved_cards`](#saved_cards) [`sessions`](#sessions) [`settlement_proofs`](#settlement_proofs) [`store_pauses`](#store_pauses) [`tickets`](#tickets) [`users`](#users) [`wallet_credits`](#wallet_credits) 
+[`acquirer_statements`](#acquirer_statements) [`addresses`](#addresses) [`audit_log`](#audit_log) [`business_hours`](#business_hours) [`card_transactions`](#card_transactions) [`cash_settlement_intents`](#cash_settlement_intents) [`consents`](#consents) [`coupon_redemptions`](#coupon_redemptions) [`coupons`](#coupons) [`courier_applications`](#courier_applications) [`courier_documents`](#courier_documents) [`courier_positions`](#courier_positions) [`courier_shifts`](#courier_shifts) [`couriers`](#couriers) [`delivery_attempts`](#delivery_attempts) [`delivery_incidents`](#delivery_incidents) [`delivery_proofs`](#delivery_proofs) [`delivery_slots`](#delivery_slots) [`dispatch_attempts`](#dispatch_attempts) [`disputes`](#disputes) [`fraud_signals`](#fraud_signals) [`holiday_overrides`](#holiday_overrides) [`idempotency_keys`](#idempotency_keys) [`item_variants`](#item_variants) [`ledger_entries`](#ledger_entries) [`loyalty_entries`](#loyalty_entries) [`loyalty_rewards`](#loyalty_rewards) [`menu_items`](#menu_items) [`notifications`](#notifications) [`offers`](#offers) [`order_events`](#order_events) [`order_items`](#order_items) [`order_messages`](#order_messages) [`orders`](#orders) [`otp_codes`](#otp_codes) [`outbox`](#outbox) [`partner_accounts`](#partner_accounts) [`payment_proofs`](#payment_proofs) [`payments`](#payments) [`payouts`](#payouts) [`platform_policies`](#platform_policies) [`policy_overrides`](#policy_overrides) [`pos_custody`](#pos_custody) [`pos_devices`](#pos_devices) [`print_log`](#print_log) [`push_subscriptions`](#push_subscriptions) [`refunds`](#refunds) [`restaurant_credentials`](#restaurant_credentials) [`restaurant_payment_settings`](#restaurant_payment_settings) [`restaurants`](#restaurants) [`reviews`](#reviews) [`saved_cards`](#saved_cards) [`sessions`](#sessions) [`settlement_proofs`](#settlement_proofs) [`store_pauses`](#store_pauses) [`tickets`](#tickets) [`users`](#users) [`wallet_credits`](#wallet_credits) 
 
 ## acquirer_statements
 
@@ -170,6 +170,7 @@ Criada em `db/migrations/008_support.up.sql`. Da migração: disputes, fraud_sig
 | `ends_at` | timestamp with time zone | sim |  |
 | `active` | boolean (padrão) |  |  |
 | `created_by` | uuid |  | `users.id` |
+| `owner_user_id` | uuid | sim | `users.id` |
 
 ## courier_applications
 
@@ -408,6 +409,35 @@ Criada em `db/migrations/006_ledger.up.sql`. Da migração: ledger_entries (appe
 | `actor_id` | uuid | sim | `users.id` |
 | `memo` | text | sim |  |
 | `created_at` | timestamp with time zone (padrão) |  |  |
+
+## loyalty_entries
+
+Criada em `db/migrations/029_loyalty.up.sql`. Da migração: Tela 2.3 — Fidelidade: "Seus pontos 1.240 de 1.500 · Faltam 260 pontos para o cupom de R$ 20 · R$ 10 de desconto 800 pontos · Entrega grátis 1.500 pontos · Histórico: Pedido #A38F2C +128 · Cupom R$ 10 −800". "Saldo ca…
+
+| Coluna | Tipo | Nulo | Referência |
+|---|---|---|---|
+| `id` | bigint (padrão) |  |  |
+| `user_id` | uuid |  | `users.id` |
+| `points` | integer |  |  |
+| `origin` | text |  |  |
+| `origin_id` | text |  |  |
+| `order_id` | bigint | sim | `orders.id` |
+| `memo` | text |  |  |
+| `created_at` | timestamp with time zone (padrão) |  |  |
+
+## loyalty_rewards
+
+Criada em `db/migrations/029_loyalty.up.sql`. O catálogo de trocas (o que a tela oferece), gerido pela plataforma.
+
+| Coluna | Tipo | Nulo | Referência |
+|---|---|---|---|
+| `id` | bigint (padrão) |  |  |
+| `label` | text |  |  |
+| `kind` | text |  |  |
+| `value` | numeric (padrão) |  |  |
+| `cost` | integer |  |  |
+| `valid_days` | integer (padrão) |  |  |
+| `active` | boolean (padrão) |  |  |
 
 ## menu_items
 
@@ -663,6 +693,7 @@ Criada em `db/migrations/003_policy.up.sql`. Da migração: platform_policies, p
 | `delivery_base_fee` | numeric (padrão) |  |  |
 | `delivery_per_km` | numeric (padrão) |  |  |
 | `delivery_max_km` | numeric | sim |  |
+| `loyalty_points_per_brl` | numeric (padrão) |  |  |
 
 ## policy_overrides
 

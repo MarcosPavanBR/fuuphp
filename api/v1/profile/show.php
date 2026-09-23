@@ -32,9 +32,8 @@ $ordersCount = (int) $ordersCountStmt->fetchColumn();
 
 // Cupons resgatados: coupon_redemptions só guarda CPF, não user_id -- só
 // dá pra contar se o usuário tiver CPF cadastrado (nem todo cadastro por
-// OTP de telefone pede CPF). Pontos de fidelidade não têm tabela no
-// esquema (Parte II não modela isso); fica null até existir decisão de
-// produto sobre o sistema de pontos.
+// OTP de telefone pede CPF). Pontos: o saldo do livro de fidelidade (2.3,
+// migração 029).
 $couponsCount = 0;
 if (is_string($cpf) && $cpf !== '') {
     $couponsStmt = $pdo->prepare('SELECT count(*) FROM coupon_redemptions WHERE cpf = :cpf');
@@ -47,6 +46,6 @@ json_response(200, [
     'stats' => [
         'orders_count' => $ordersCount,
         'coupons_count' => $couponsCount,
-        'loyalty_points' => null,
+        'loyalty_points' => loyalty_balance($pdo, (string) $claims['sub']),
     ],
 ]);

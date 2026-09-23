@@ -105,9 +105,6 @@
       <p class="label">CUPONS</p>
     </div>
   </div>
-  {#if stats && stats.loyalty_points === null}
-    <p class="note">Pontos de fidelidade ainda não têm tabela no banco — ver Fase 2.3.</p>
-  {/if}
 
   {#each wallet?.offers ?? [] as offer (offer.id)}
     <div class="offer">
