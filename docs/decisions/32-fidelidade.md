@@ -30,3 +30,6 @@ cliente". Foi construída seguindo isso à risca.
 - A tela mostra saldo, meta com barra, "Resgatar agora" (a melhor troca que já
   dá), as trocas com quanto falta, os cupons de pontos ainda não usados (toque
   copia o código) e o histórico. O perfil (2.5) mostra o saldo real.
+
+**Decidido pelo Marcos: entra no lançamento.** Ela está no roteiro de
+validação do go-live ([GO_LIVE.md](../GO_LIVE.md#8-validação-antes-de-abrir)).

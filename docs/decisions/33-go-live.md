@@ -86,6 +86,9 @@ stack sem autorização. As escolhas de provedor são do Marcos.
 - Mercado Pago: token único ou por loja;
 - a VPS e o domínio;
 - o destino da cópia externa do backup;
-- quando migrar pro R2;
-- se a fidelidade (2.3, já construída) entra agora ou na v2;
-- login com Google/Apple (não construído).
+- quando migrar pro R2.
+
+**Já decidido pelo Marcos:**
+
+- a fidelidade (2.3) entra no lançamento;
+- o login com Google/Apple fica pra v2.

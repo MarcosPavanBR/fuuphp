@@ -331,6 +331,7 @@ verdade:
 - [ ] Pix manual: comprovante enviado, a loja valida; o comprovante não abre sem login.
 - [ ] Espécie: entregador fecha o caixa, a loja dá baixa, o recibo imprime.
 - [ ] O push chega no Android e no iPhone (PWA instalado).
+- [ ] Fidelidade: um pedido entregue dá pontos; o resgate vira um cupom pessoal que só o dono usa; o estorno tira os pontos.
 - [ ] O acompanhamento ao vivo atualiza sem recarregar (SSE pelo Cloudflare).
 - [ ] O cron roda (`/var/log/fuuphp/*.log` mexendo) e o pg_cron também (`SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 5`).
 - [ ] O backup da noite existe, a restauração num banco de teste funciona e a cópia externa chegou.
@@ -349,5 +350,6 @@ baixo, estornado em seguida.
 | VPS (provedor, tamanho) e domínio | `deploy/` está pronto pra qualquer Ubuntu 24.04/Debian 12 |
 | Cópia do backup fora da VPS (destino) | backup só dentro da VPS (o script avisa) |
 | Quando levar os arquivos pro R2 | disco da VPS (fase 1) |
-| Fidelidade (2.3) entra agora ou na v2 | está construída e ligada |
-| Login com Google/Apple | não construído (v2) |
+
+Já decidido pelo Marcos: a **fidelidade (2.3) entra no lançamento** e fica
+na lista de validação abaixo; o **login com Google/Apple fica pra v2**.

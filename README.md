@@ -109,10 +109,11 @@ real ou de decisão do dono do produto:
    ([31](docs/decisions/31-impressao-escpos-e-recibo-de-baixa.md)).
 5. **Quando levar os arquivos pro Cloudflare R2.** Hoje ficam no disco da
    VPS, fora do projeto, e só saem por rota autenticada.
-6. **Fidelidade (2.3) agora ou na v2.** Está construída e ligada
-   ([32](docs/decisions/32-fidelidade.md)).
-7. **Login social (Google, Apple):** decisão de produto. A tela 10.1 mostra
-   os botões desabilitados.
+
+Já decidido: a **fidelidade (2.3) entra no lançamento**
+([32](docs/decisions/32-fidelidade.md)), e o **login com Google/Apple fica
+pra v2**. A tela 10.1 mostra esses botões desabilitados, com "em breve"
+([09](docs/decisions/09-login-e-cadastro.md)).
 
 ## Origem
 

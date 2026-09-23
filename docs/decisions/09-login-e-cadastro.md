@@ -44,7 +44,8 @@ mock).
 - **Google e Apple aparecem desabilitados, com "em breve".** Não existe
   OAuth neste backend nem tabela de identidade federada. Mesma escolha já
   feita com o BitPay na tela 4.1: melhor um botão que diz o que é do que um
-  botão que não faz nada.
+  botão que não faz nada. **Decidido pelo Marcos: fica pra v2**, e não
+  entra no lançamento.
 - **As seis caixas do código são um input só.** Um campo por dígito quebra
   colar o código, o preenchimento automático do SMS e o apagar pra trás. O
   que se vê são seis caixas desenhadas sobre um input transparente com
