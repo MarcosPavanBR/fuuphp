@@ -199,6 +199,11 @@ DRY=$(curl -s -X POST "$BASE/admin/campaigns.php" -H "Content-Type: application/
 [ "$(echo "$DRY" | jq -r '.dry_run')" = "true" ] || fail "dry_run não projetou: $DRY"
 [ "$(echo "$DRY" | jq -r '.projection.redemptions')" = "10" ] || fail "R$100 de teto com R$10 off dá 10 resgates: $DRY"
 [ "$(query "SELECT count(*) FROM coupons WHERE code='PROJETA'")" = "0" ] || fail "dry_run gravou campanha"
+# Regressão: campanha de UMA loja pra "Todo mundo" derrubava a projeção
+# (parâmetro :rid sobrando na consulta do público -> 500).
+DRY=$(curl -s -X POST "$BASE/admin/campaigns.php" -H "Content-Type: application/json" "${AADMIN[@]}" \
+  -d "{\"code\":\"PROJETALOJA\",\"kind\":\"fixed\",\"value\":10,\"audience\":\"all\",\"payer\":\"store\",\"restaurant_id\":\"${RESTAURANT_ID}\",\"budget_cap\":100,\"dry_run\":true}")
+[ "$(echo "$DRY" | jq -r '.dry_run')" = "true" ] || fail "projeção de campanha de loja pra todo mundo quebrou: $DRY"
 
 echo "== criar campanha com teto pequeno, pra ver o teto agir =="
 CREATE=$(curl -s -X POST "$BASE/admin/campaigns.php" -H "Content-Type: application/json" "${AADMIN[@]}" \

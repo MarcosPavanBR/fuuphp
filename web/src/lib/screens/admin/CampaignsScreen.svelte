@@ -2,6 +2,7 @@
   import { api } from '../../services/api.js';
   import { toastr } from '../../utils/toastr.js';
   import { adminToken } from '../../state/adminSession.svelte.js';
+  import StoreCouponLimitPanel from './StoreCouponLimitPanel.svelte';
 
   // Tela 15.3 — "Cupons e campanhas".
   //
@@ -170,14 +171,9 @@
             livro, com a conta de quem pagou.
           </li>
           <li>
-            <!-- O mock também promete "cupom de loja ela cria sozinha no
-                 painel, dentro do teto que você liberar aqui". O cupom de
-                 loja existe (payer = store, sai do repasse dela), mas quem
-                 cria ainda é a plataforma: um teto por loja não existe na
-                 política, e sem ele "dentro do teto que você liberar" não
-                 teria o que respeitar. -->
-            <strong>Cupom de loja sai do repasse dela</strong> — hoje quem cria é a plataforma; deixar a loja
-            criar sozinha exige um teto por loja na política, que ainda não existe.
+            <strong>Cupom de loja sai do repasse dela</strong> — e ela mesma cria, no painel, dentro do teto que
+            você liberar abaixo (0 = não cria). O teto conta o orçamento dos cupons vivos dela; desativar ou vencer
+            devolve o que não gastou.
           </li>
         </ul>
       </div>
@@ -186,6 +182,8 @@
         Já saiu de cada bolso, pelo livro: <strong>{money(data.paid_so_far.platform)}</strong> da plataforma e
         <strong>{money(data.paid_so_far.store)}</strong> do repasse das lojas.
       </p>
+
+      <StoreCouponLimitPanel />
     </main>
 
     <aside class="side">

@@ -61,3 +61,9 @@ function is_valid_phone(string $phone): bool
     $digits = only_digits($phone);
     return strlen($digits) >= 10 && strlen($digits) <= 13;
 }
+
+/** UUID no formato do PostgreSQL. Conferir antes evita que id malformado vire 500 (22P02) no banco. */
+function is_valid_uuid(string $value): bool
+{
+    return preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $value) === 1;
+}

@@ -96,7 +96,10 @@ function coupon_audience_condition(string $audience, bool $scoped): string
 
 function coupon_audience_params(string $audience, ?string $restaurantId): array
 {
-    $params = $restaurantId === null ? [] : ['rid' => $restaurantId];
+    // 'all' não consulta pedido nenhum (condição `true`): mandar :rid mesmo
+    // assim é parâmetro sobrando, e o PDO recusa (HY093). Era o que derrubava
+    // a projeção de campanha de loja pra "Todo mundo".
+    $params = $restaurantId === null || $audience === 'all' ? [] : ['rid' => $restaurantId];
     if (str_starts_with($audience, 'inactive_')) {
         $params['days'] = $audience === 'inactive_15d' ? 15 : 30;
     }
@@ -199,5 +202,40 @@ function coupon_projection(PDO $pdo, string $kind, float $value, float $budgetCa
         'gmv' => $gmv,
         'commission' => $gmv === null ? null : round($gmv * $commissionBps / 10000, 2),
         'reason' => null,
+    ];
+}
+
+/**
+ * Teto de cupom da loja (migração 031): o que a plataforma liberou, o que
+ * já está comprometido em cupons vivos criados pela própria loja e o que
+ * sobra pra criar outro.
+ *
+ * "Comprometido" é a soma dos tetos (`budget_cap`) dos cupons ativos e no
+ * prazo -- não o que já foi gasto: um cupom vivo ainda pode gastar até o teto
+ * dele. Desativar ou vencer libera o orçamento de volta.
+ *
+ * Chame com a linha da loja travada (FOR UPDATE) quando for criar cupom,
+ * senão dois cupons criados ao mesmo tempo passam do teto juntos.
+ *
+ * @return array{limit: float, committed: float, available: float}
+ */
+function store_coupon_budget(PDO $pdo, string $restaurantId): array
+{
+    $stmt = $pdo->prepare(
+        "SELECT r.coupon_budget_limit AS limit,
+                COALESCE((SELECT SUM(c.budget_cap) FROM coupons c
+                           WHERE c.restaurant_id = r.id AND c.created_by_store AND c.active
+                             AND (c.ends_at IS NULL OR c.ends_at > now())), 0) AS committed
+           FROM restaurants r WHERE r.id = :id"
+    );
+    $stmt->execute(['id' => $restaurantId]);
+    $row = $stmt->fetch();
+    $limit = $row === false ? 0.0 : (float) $row['limit'];
+    $committed = $row === false ? 0.0 : (float) $row['committed'];
+
+    return [
+        'limit' => $limit,
+        'committed' => $committed,
+        'available' => max(0.0, round($limit - $committed, 2)),
     ];
 }

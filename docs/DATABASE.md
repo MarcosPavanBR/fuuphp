@@ -171,6 +171,7 @@ Criada em `db/migrations/008_support.up.sql`. Da migração: disputes, fraud_sig
 | `active` | boolean (padrão) |  |  |
 | `created_by` | uuid |  | `users.id` |
 | `owner_user_id` | uuid | sim | `users.id` |
+| `created_by_store` | boolean (padrão) |  |  |
 
 ## courier_applications
 
@@ -802,9 +803,6 @@ Criada em `db/migrations/002_catalog.up.sql`. O ativo mais sensivel do sistema: 
 | Coluna | Tipo | Nulo | Referência |
 |---|---|---|---|
 | `restaurant_id` | uuid |  | `restaurants.id` |
-| `mp_public_key` | text | sim |  |
-| `mp_access_token` | bytea | sim |  |
-| `mp_user_id` | text | sim |  |
 | `pix_key` | text | sim |  |
 | `rotated_at` | timestamp with time zone (padrão) |  |  |
 
@@ -849,6 +847,7 @@ Criada em `db/migrations/002_catalog.up.sql`. Da migração: restaurants, restau
 | `prep_minutes` | integer (padrão) |  |  |
 | `prep_auto_bump` | boolean (padrão) |  |  |
 | `slot_capacity` | integer (padrão) |  |  |
+| `coupon_budget_limit` | numeric (padrão) |  |  |
 
 ## reviews
 

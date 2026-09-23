@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# Smoke test da troca de aparelho de parceiro pelo suporte
+# (api/v1/admin/partner_devices.php).
+#
+# O login de loja fica preso ao primeiro aparelho; o segundo recebe
+# device_mismatch ("Peça ao suporte para liberar a troca"). O admin acha a
+# conta pelo CNPJ, libera com motivo, as sessões do aparelho antigo morrem
+# (o refresh dele é recusado), o aparelho novo entra e vira o confiável, e a
+# liberação fica no audit_log. Cliente comum não libera nada.
+set -euo pipefail
+
+: "${DATABASE_URL:?defina DATABASE_URL apontando para um banco já migrado}"
+: "${JWT_SECRET:=ci-test-secret}"
+export DATABASE_URL JWT_SECRET
+export APP_ENV=development
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PORT=8129
+BASE="http://127.0.0.1:${PORT}/api/v1"
+
+fail() { echo "FALHOU: $1" >&2; cat /tmp/smoke-partner-device-server.log >&2 2>/dev/null || true; exit 1; }
+psql_run() { psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q "$@"; }
+gen_uuid() { php -r 'echo bin2hex(random_bytes(16));' | sed -E 's/(.{8})(.{4})(.{4})(.{4})(.{12})/\1-\2-\3-\4-\5/'; }
+
+ADMIN_ID="$(gen_uuid)"
+STAFF_ID="$(gen_uuid)"
+STORE="$(gen_uuid)"
+CNPJ="$(php "$ROOT/tests/support/random_cnpj.php")"
+ADMIN_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+STAMP="$(date +%s%N)"
+
+echo "== semear admin e uma loja com login de balcão =="
+psql_run <<SQL
+INSERT INTO users (id, role, full_name, phone, email) VALUES
+  ('${ADMIN_ID}', 'admin', 'Admin Suporte', '${ADMIN_PHONE}', 'admin-device-${STAMP}@test.com'),
+  ('${STAFF_ID}', 'restaurant_staff', 'Balcão Aparelho', NULL, 'staff-device-${STAMP}@test.com');
+INSERT INTO restaurants (id, name, cnpj, city_ibge_code, is_open, approved_at)
+VALUES ('${STORE}', 'Pizzaria Tablet Quebrado ${STAMP}', '${CNPJ}', '3550308', true, now());
+INSERT INTO partner_accounts (user_id, kind, restaurant_id, login_code, password_hash)
+VALUES ('${STAFF_ID}', 'restaurant', '${STORE}', '${CNPJ}',
+  '\$2y\$12\$pkP2tzQAJ7l.ofvtoHzJ4ezQFbNgN0d1PQWB4b6OQgnM.nUpP3S5a');
+SQL
+# senha do hash acima é "senha123"
+
+DATABASE_URL="${API_DATABASE_URL:-$DATABASE_URL}" php -S "127.0.0.1:${PORT}" -t "$ROOT" >/tmp/smoke-partner-device-server.log 2>&1 &
+SERVER_PID=$!
+trap '[ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2>/dev/null || true' EXIT
+for i in $(seq 1 20); do
+  curl -s -o /dev/null "http://127.0.0.1:${PORT}/api/v1/restaurants/show.php?id=${STORE}" && break
+  sleep 0.2
+done
+
+store_login() {
+  curl -s -X POST "$BASE/auth/partner_login.php" -H "Content-Type: application/json" \
+    -d "{\"kind\":\"restaurant\",\"login_code\":\"${CNPJ}\",\"secret\":\"senha123\",\"device_id\":\"$1\"}"
+}
+
+echo "== tablet A entra e vira o aparelho confiável; tablet B é barrado =="
+A=$(store_login "tablet-A-${STAMP}")
+A_REFRESH=$(echo "$A" | jq -er '.refresh_token') || fail "login do tablet A falhou: $A"
+B=$(store_login "tablet-B-${STAMP}")
+[ "$(echo "$B" | jq -r '.code')" = "device_mismatch" ] || fail "tablet B entrou sem liberação: $B"
+
+echo "== admin entra =="
+CODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
+  -d "{\"purpose\":\"login\",\"phone\":\"${ADMIN_PHONE}\"}" | jq -er '.dev_code') || fail "otp do admin falhou"
+ADMIN_TOKEN=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \
+  -d "{\"purpose\":\"login\",\"phone\":\"${ADMIN_PHONE}\",\"code\":\"$CODE\"}" | jq -er '.access_token') || fail "login do admin falhou"
+AAUTH=(-H "Authorization: Bearer $ADMIN_TOKEN")
+
+echo "== busca pelo começo do CNPJ e pelo nome =="
+FOUND=$(curl -s "$BASE/admin/partner_devices.php?q=${CNPJ:0:8}" "${AAUTH[@]}")
+ACCOUNT=$(echo "$FOUND" | jq -er ".accounts[] | select(.login_code == \"${CNPJ}\") | .id") || fail "busca por CNPJ não achou: $FOUND"
+[ "$(echo "$FOUND" | jq -r ".accounts[] | select(.id == \"${ACCOUNT}\") | .device_bound")" = "true" ] || fail "conta não aparece presa: $FOUND"
+BYNAME=$(curl -s "$BASE/admin/partner_devices.php?q=tablet%20quebrado%20${STAMP}" "${AAUTH[@]}")
+[ "$(echo "$BYNAME" | jq -r '.accounts | length')" = "1" ] || fail "busca por nome errada: $BYNAME"
+SHORT=$(curl -s "$BASE/admin/partner_devices.php?q=ab" "${AAUTH[@]}")
+[ "$(echo "$SHORT" | jq -r '.code')" = "query_too_short" ] || fail "busca curta aceita: $SHORT"
+
+echo "== cliente comum não libera; id malformado e motivo vazio são recusados =="
+PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+C=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
+  -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Curioso\"}" | jq -er '.dev_code')
+CUSTOMER=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \
+  -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"code\":\"$C\"}" | jq -er '.access_token')
+R=$(curl -s -X POST "$BASE/admin/partner_devices.php" -H "Authorization: Bearer $CUSTOMER" -H "Content-Type: application/json" \
+  -d "{\"partner_account_id\":\"${ACCOUNT}\",\"reason\":\"quero entrar\"}")
+[ "$(echo "$R" | jq -r '.code')" = "forbidden" ] || fail "cliente liberou aparelho: $R"
+R=$(curl -s -X POST "$BASE/admin/partner_devices.php" "${AAUTH[@]}" -H "Content-Type: application/json" \
+  -d '{"partner_account_id":"nao-e-uuid","reason":"tablet quebrou"}')
+[ "$(echo "$R" | jq -r '.code')" = "invalid_request" ] || fail "id malformado não virou 422: $R"
+R=$(curl -s -X POST "$BASE/admin/partner_devices.php" "${AAUTH[@]}" -H "Content-Type: application/json" \
+  -d "{\"partner_account_id\":\"${ACCOUNT}\",\"reason\":\" \"}")
+[ "$(echo "$R" | jq -r '.code')" = "reason_required" ] || fail "liberou sem motivo: $R"
+
+echo "== admin libera com motivo: sessões do tablet A encerradas =="
+R=$(curl -s -X POST "$BASE/admin/partner_devices.php" "${AAUTH[@]}" -H "Content-Type: application/json" \
+  -d "{\"partner_account_id\":\"${ACCOUNT}\",\"reason\":\"tablet A quebrou, dono confirmou por telefone\"}")
+[ "$(echo "$R" | jq -r '.released')" = "true" ] || fail "liberação falhou: $R"
+[ "$(echo "$R" | jq -r '.sessions_revoked')" -ge 1 ] || fail "nenhuma sessão encerrada: $R"
+OLD=$(curl -s -X POST "$BASE/auth/refresh.php" -H "Content-Type: application/json" -d "{\"refresh_token\":\"${A_REFRESH}\"}")
+echo "$OLD" | jq -e '.access_token' >/dev/null && fail "refresh do tablet A ainda vale depois da liberação: $OLD"
+
+echo "== liberar de novo: já está livre (409) =="
+R=$(curl -s -X POST "$BASE/admin/partner_devices.php" "${AAUTH[@]}" -H "Content-Type: application/json" \
+  -d "{\"partner_account_id\":\"${ACCOUNT}\",\"reason\":\"de novo, por engano\"}")
+[ "$(echo "$R" | jq -r '.code')" = "no_device_bound" ] || fail "segunda liberação não deu 409: $R"
+
+echo "== tablet B entra e vira o confiável; o A agora é barrado =="
+store_login "tablet-B-${STAMP}" | jq -e '.access_token' >/dev/null || fail "tablet B não entrou depois da liberação"
+[ "$(store_login "tablet-A-${STAMP}" | jq -r '.code')" = "device_mismatch" ] || fail "tablet A voltou a entrar"
+
+echo "== auditoria guarda quem, o aparelho antigo e o motivo =="
+AUDIT=$(psql "$DATABASE_URL" -tAc "SELECT actor_id || '|' || (before->>'device_id') || '|' || (after->>'reason')
+  FROM audit_log WHERE action = 'partner.device_released' AND target = 'partner_accounts:${ACCOUNT}'")
+[ "$AUDIT" = "${ADMIN_ID}|tablet-A-${STAMP}|tablet A quebrou, dono confirmou por telefone" ] || fail "auditoria errada: '$AUDIT'"
+
+echo "smoke_partner_device OK"

@@ -1,7 +1,7 @@
 name: ci
 
 # ADR-002 (Especificacao FUUDelivery, Parte I): migracoes versionadas rodam
-# no CI, nunca no cPanel. Este workflow aplica as vinte e nove migracoes do zero,
+# no CI, nunca no cPanel. Este workflow aplica as trinta e uma migracoes do zero,
 # reverte tudo e aplica de novo contra um PostgreSQL 16 real com pg_cron, e
 # depois roda o smoke test de cada modulo PHP sobre esse banco migrado.
 
@@ -57,7 +57,7 @@ jobs:
             sleep 2
           done
 
-      - name: Aplicar as 29 migracoes (up)
+      - name: Aplicar as 31 migracoes (up)
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
         run: |
@@ -68,7 +68,7 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
         run: |
-          bash db/migrate.sh down 29
+          bash db/migrate.sh down 31
           bash db/migrate.sh up
 
       - name: "Senha do role app_rw (a API das suítes conecta com ele)"
@@ -194,6 +194,12 @@ jobs:
           MERCADOPAGO_MODE: fake
         run: bash tests/smoke_admin.sh
 
+      - name: "Smoke test -- suporte libera troca de aparelho de loja/entregador"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+        run: bash tests/smoke_partner_device.sh
+
       - name: Smoke test -- pedido sem entregador (Fase 15.1 + migração 017)
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
@@ -291,6 +297,13 @@ jobs:
           JWT_SECRET: ci-test-secret
           MERCADOPAGO_MODE: fake
         run: bash tests/smoke_loyalty.sh
+
+      - name: "Smoke test -- cupom criado pela própria loja dentro do teto (tela 15.3 + migração 031)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_store_coupons.sh
 
       - name: "Papéis do banco: RLS por loja, livro só de inserção, app_rw sem DDL (go-live)"
         env:

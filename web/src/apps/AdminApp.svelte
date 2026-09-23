@@ -11,6 +11,7 @@
   import RefundsScreen from '../lib/screens/admin/RefundsScreen.svelte';
   import IncidentQueue from '../lib/screens/admin/IncidentQueue.svelte';
   import NettingScreen from '../lib/screens/admin/NettingScreen.svelte';
+  import PartnerDeviceScreen from '../lib/screens/admin/PartnerDeviceScreen.svelte';
 
   // Painel da plataforma (Fase 12 + tela 10.5). Quarto bundle, quarto
   // público: quem opera o negócio, não quem usa o app.
@@ -75,6 +76,7 @@
           Campanhas
         </button>
         <button type="button" class:on={tab === 'policy'} onclick={() => (tab = 'policy')}>Políticas</button>
+        <button type="button" class:on={tab === 'devices'} onclick={() => (tab = 'devices')}>Aparelhos</button>
       </nav>
 
       <button type="button" class="leave" onclick={leave} aria-label="Sair">
@@ -99,6 +101,9 @@
         <ReportsScreen />
       {:else if tab === 'campaigns'}
         <CampaignsScreen />
+      {:else if tab === 'devices'}
+        <!-- Suporte: liberar a troca de tablet/celular de loja e entregador. -->
+        <PartnerDeviceScreen />
       {:else}
         <PolicyScreen />
       {/if}

@@ -23,6 +23,7 @@
   import ReconciliationScreen from '../lib/screens/panel/ReconciliationScreen.svelte';
   import OrderChat from '../lib/components/OrderChat.svelte';
   import PrinterPanel from '../lib/screens/panel/PrinterPanel.svelte';
+  import StoreCouponsScreen from '../lib/screens/panel/StoreCouponsScreen.svelte';
 
   // Painel da loja (telas 7.3 e 11.1). Roda numa página própria
   // (painel.html), não dentro do app do cliente: são dois públicos e dois
@@ -178,6 +179,8 @@
           Pagamentos
         </button>
         <button type="button" class:active={tab === 'recon'} onclick={() => (tab = 'recon')}>Conciliação</button>
+        <!-- 15.3: cupom que a própria loja cria, dentro do teto da plataforma. -->
+        <button type="button" class:active={tab === 'coupons'} onclick={() => (tab = 'coupons')}>Cupons</button>
       </nav>
 
       <div class="meta">
@@ -214,6 +217,8 @@
       <PaymentSettingsScreen />
     {:else if tab === 'recon'}
       <ReconciliationScreen />
+    {:else if tab === 'coupons'}
+      <StoreCouponsScreen />
     {:else}
       <div class="overview-layout">
         <aside class="side">
