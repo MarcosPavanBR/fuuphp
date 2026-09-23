@@ -1,27 +1,30 @@
 # Marca FUUdelivery
 
-A identidade parte do guia do mock ("IDENTIDADE FUUDELIVERY"). Este documento
+A identidade parte do guia do mock ("IDENTIDADE FUUDELIVERY": cores, fontes e
+voz). O símbolo e o slogan foram refeitos na v2. Este documento
 diz onde estão os arquivos e como usar. O guia visual (as mesmas regras,
 com as imagens) foi entregue ao Marcos como página à parte.
 
 ## Conceito
 
-O nome já é um som: *fuu* é sopro, velocidade, comida quente saindo. O
-vermelho é quente e vai em dose pequena, sobre branco: a comida é o que tem
-cor, e a marca aparece no botão, no logotipo e no que está ativo. Não existe
-versão pra fundo escuro, por escolha.
+O nome é um som: o "fuu" do vapor da comida quente e da entrega que passa
+ligeiro. O **símbolo** é um U que é ao mesmo tempo tigela e sorriso, com dois
+fios de vapor subindo: a letra do nome, comida quente e cliente satisfeito.
+O **logotipo** é em minúsculas: **fuu** em peso máximo (tinta) e delivery em
+peso leve (cinza), colados. No texto corrido, o nome continua FUUdelivery.
+
+O vermelho vai em dose pequena, sobre branco: a comida é o que tem cor. Não
+existe versão pra fundo escuro, por escolha.
 
 ## Slogan
 
-- **Principal: "Sua cidade, num sopro."** Já está no mock e na splash do app,
-  e é o que vai na prévia do link.
-- Apoio, conforme o canal. A escolha é do Marcos:
-  - "Pediu, fuu, chegou.": anúncio e vídeo curto. Promete rapidez, então só
-    vale com o tempo de entrega bom de verdade.
+- **Principal: "Pediu, fuu, chegou."** Na splash do app, no título do site e
+  na prévia do link.
+- Apoio, conforme o canal:
+  - "Bateu a fome? Fuu.": anúncio, story, vídeo curto.
   - "O delivery da sua cidade.": subtítulo na loja de apps e no Google.
-  - Lojas: "Sua loja no app da cidade, com 8% de comissão." Vale enquanto a
-    política for 8%.
-  - Entregadores: "Você vê o valor antes de aceitar. Repasse toda terça."
+  - Lojas: "Venda mais, pague só 8%." Vale enquanto a comissão for 8%.
+  - Entregadores: "Você vê o valor antes de aceitar. Recebe toda terça."
 
 ## Arquivos (`web/public/`, publicados com o site)
 
@@ -32,13 +35,14 @@ versão pra fundo escuro, por escolha.
 | `brand/fuu-logo-horizontal.svg`, `-branco`, `-mono` | símbolo + palavra lado a lado |
 | `brand/fuu-logo-vertical.svg`, `-slogan` | símbolo em cima, palavra (e slogan) embaixo |
 | `brand/og-image.png` | prévia do link no WhatsApp, Instagram e Facebook (1200 × 630) |
-| `favicon.svg` | aba do navegador (letras maiores, pra ler em 16 px) |
+| `favicon.svg` | aba do navegador |
 | `icon-192.png`, `icon-512.png` | ícone do app instalado |
-| `icon-maskable-512.png` | Android: quadrado cheio, letras dentro da zona segura |
+| `icon-maskable-512.png` | Android: quadrado cheio, desenho dentro da zona segura |
 | `apple-touch-icon.png` | tela inicial do iPhone/iPad (quadrado cheio; o iOS arredonda) |
 
-Os SVG são o original: as letras estão em contorno (Bricolage Grotesque 800 e
-600, Familjen Grotesk 500 no slogan, todas com licença OFL), então abrem
+Os SVG são o original: o símbolo é desenho geométrico e as letras estão em
+contorno (Bricolage Grotesque 800 e 600, Familjen Grotesk 500 no slogan, todas
+com licença OFL), então abrem
 iguais em qualquer editor vetorial, sem fonte instalada. Os PNG foram
 rasterizados desses SVG no Chromium.
 
@@ -48,8 +52,8 @@ do `.env` e passa pro build (`VITE_PUBLIC_ORIGIN`, usado no `og:image` de
 
 ## Regras
 
-- **FUU em peso máximo, delivery em peso leve.** Nunca a palavra inteira em
-  caixa alta, nunca as duas partes na mesma cor.
+- **fuu em peso máximo, delivery em peso leve, em minúsculas.** Nunca o logo
+  em caixa alta, nunca as duas partes na mesma cor.
 - Em volta do símbolo, deixe livre pelo menos 1/4 da largura dele.
 - Tamanhos mínimos: 24 px pro símbolo (abaixo disso, use o favicon), 24 px de
   altura pro horizontal e 80 px de largura pro logotipo.
@@ -60,3 +64,6 @@ do `.env` e passa pro build (`VITE_PUBLIC_ORIGIN`, usado no `og:image` de
   `#FFF6E5`/`#8A5A00`, papel `#F7F7F7`, tinta `#2F2F2F`/`#717171`).
 - Voz: frase curta, sem emoji na interface, número sempre com unidade, e nunca
   comemorar o que ainda não aconteceu.
+
+No app, o símbolo é o componente `web/src/lib/components/BrandMark.svelte`
+(splash, logins, avaliação e topo dos painéis).
