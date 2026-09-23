@@ -56,9 +56,31 @@
   // 14.4 — a faixa escolhida, ou null pra "assim que ficar pronto".
   let slot = $state(null);
 
-  let total = $derived(Number(cart?.order?.total ?? 0));
+  // O total que as telas de pagamento mostram tem que ser o que vai ser
+  // cobrado. O carrinho ainda não tem frete (não tinha endereço); então, ao
+  // escolher o endereço, o frete é cotado pelo MESMO cálculo do checkout
+  // (addresses/quote.php → delivery_quote) e somado. Depois do checkout,
+  // vale o total do próprio pedido -- que já inclui crédito de carteira e
+  // cupom de frete grátis, aplicados lá.
+  let deliveryFee = $state(0);
+  let total = $derived(order ? Number(order.total) : Number(cart?.order?.total ?? 0) + deliveryFee);
 
-  function onAddressReady(id, label) {
+  async function onAddressReady(id, label) {
+    try {
+      const data = await api.get('/addresses/quote.php', {
+        auth: true,
+        query: { address_id: id, restaurant_id: restaurantId },
+      });
+      if (data.quote && data.quote.in_area === false) {
+        toastr.error(data.quote.reason ?? 'Esse endereço está fora da área de entrega da loja.');
+        return;
+      }
+      deliveryFee = Number(data.quote?.fee ?? 0);
+    } catch {
+      // sem cotação agora: o checkout calcula e cobra certo, e a tela do
+      // pagamento mostra o total do pedido assim que ele existir
+      deliveryFee = 0;
+    }
     addressId = id;
     addressLabel = label ?? 'endereço selecionado';
     // 14.4 entra ANTES do método de pagamento: quando receber muda o que a
@@ -227,7 +249,7 @@
     <QuickAddress {location} onReady={onAddressReady} />
   </div>
 {:else if step === 'select'}
-  <PaymentSelectorScreen {total} {addressLabel} {acceptedMethods} onContinue={onMethodContinue} {onBack} />
+  <PaymentSelectorScreen {total} {addressLabel} {deliveryFee} {acceptedMethods} onContinue={onMethodContinue} {onBack} />
 {:else if step === 'mp_card'}
   <CardPaymentScreen {total} onSubmit={onCardSubmit} onBack={backFromMethod} {busy} />
 {:else if step === 'pix_loading'}

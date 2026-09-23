@@ -57,13 +57,15 @@ function mp_request(string $method, string $path, array $body, ?string $idempote
 /**
  * @return array{provider_ref:string,status:string,status_detail:?string,card_brand:?string,card_last4:?string,raw:array}
  */
-function mp_create_card_payment(string $idempotencyKey, float $amount, string $cardToken, int $installments, string $payerEmail, ?string $payerCpf): array
+function mp_create_card_payment(string $idempotencyKey, float $amount, string $cardToken, int $installments, string $payerEmail, ?string $payerCpf, ?string $mpCustomerId = null): array
 {
     if (mp_mode() === 'fake') {
         return mp_fake_card_payment($cardToken, $amount, $installments);
     }
 
-    $payer = ['email' => $payerEmail];
+    // Token de cartão salvo só vale com o pagador identificado como o cliente
+    // dono do cartão no Mercado Pago.
+    $payer = $mpCustomerId !== null ? ['type' => 'customer', 'id' => $mpCustomerId, 'email' => $payerEmail] : ['email' => $payerEmail];
     if ($payerCpf !== null) {
         $payer['identification'] = ['type' => 'CPF', 'number' => $payerCpf];
     }

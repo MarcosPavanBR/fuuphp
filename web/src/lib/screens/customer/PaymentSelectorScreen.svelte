@@ -13,7 +13,7 @@
   // não tem dinheiro hoje). O Pix automático não está no grid do mock: é
   // forma que a LOJA liga (tela 10.5, "RECOMENDADO"), então só aparece
   // quando ela ligou.
-  let { total, addressLabel, acceptedMethods = null, onContinue, onBack } = $props();
+  let { total, addressLabel, deliveryFee = null, acceptedMethods = null, onContinue, onBack } = $props();
 
   function accepted(id) {
     return acceptedMethods === null || acceptedMethods.includes(id);
@@ -54,6 +54,9 @@
 
   <div class="delivery-info">
     <p class="street"><i class="bi bi-geo-alt"></i> Entrega em {addressLabel}</p>
+    {#if deliveryFee !== null}
+      <p class="eta">{deliveryFee > 0 ? `Frete de ${money(deliveryFee)} incluído no total` : 'Frete grátis'}</p>
+    {/if}
     <p class="eta">Chega entre {etaWindow()}</p>
   </div>
 

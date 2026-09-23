@@ -247,6 +247,21 @@ BLOCKED=$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: applicat
 [ "$(echo "$BLOCKED" | jq -r '.code')" = "payment_method_not_allowed" ] || fail "checkout aceitou espécie em loja em atraso: $BLOCKED"
 psql_run -c "UPDATE restaurants SET online_only_until = NULL WHERE id='${RESTAURANT_ID}'"
 
+echo "== 6.2 → 4.2: pagar com cartão salvo (token novo + qual cartão; o CVV não vem pro servidor) =="
+CARD=$(curl -s -X POST "$BASE/cards/create.php" -H "Content-Type: application/json" "${AUTH[@]}" \
+  -d '{"card_token":"4000123456780244","kind":"credit"}')
+CARD_ID=$(echo "$CARD" | jq -er '.card.id') || fail "cartão não salvou: $CARD"
+O10=$(checkout mp_card)
+SAVED_PAY=$(pay "$O10" "\"card_token\":\"SAVED-x\",\"saved_card_id\":${CARD_ID}")
+[ "$(echo "$SAVED_PAY" | jq -r '.order.status')" = "paid" ] || fail "pagamento com cartão salvo falhou: $SAVED_PAY"
+[ "$(query "SELECT raw_response->>'saved_card_id' FROM payments WHERE order_id=${O10} AND status='approved'")" = "${CARD_ID}" ] \
+  || fail "o pagamento não registrou qual cartão salvo foi usado"
+[ "$(query "SELECT meta->>'card_last4' FROM order_events WHERE order_id=${O10} AND to_status='paid'")" = "0244" ] \
+  || fail "a linha do tempo não mostra o final do cartão salvo"
+O11=$(checkout mp_card)
+[ "$(pay "$O11" '"card_token":"SAVED-y","saved_card_id":999999' | jq -r '.code')" = "card_not_found" ] \
+  || fail "pagou com cartão salvo que não é da pessoa"
+
 echo "== 2.1/2.2: nota, frete e tempo da loja no card e na busca =="
 # Três avaliações nesta loja até aqui: 5, 4 e 5 -> 4,7.
 LIST=$(curl -s "$BASE/restaurants/list.php?city_ibge_code=${CITY}&lat=-23.805&lng=${LNG}" | jq ".restaurants[] | select(.id == \"${RESTAURANT_ID}\")")

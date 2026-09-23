@@ -86,9 +86,9 @@ que não existe neste ambiente, ou de decisão do dono do produto:
    produção ([05](docs/decisions/05-pagamentos.md),
    [14](docs/decisions/14-pontas-de-dinheiro.md),
    [15](docs/decisions/15-troca-de-metodo-gorjeta-pix-automatico.md)).
-2. **Pagar com cartão salvo.** `cards/*` guarda o cartão (6.2), mas pagar
-   com ele exige o CVV + token de uso único que o próprio mock descreve, e
-   isso depende do MercadoPago.js real no navegador.
+2. **MercadoPago.js com Public Key real.** Cartão novo e salvo já são
+   tokenizados no navegador ([30](docs/decisions/30-cartao-salvo-e-total-com-frete.md));
+   falta só configurar `MERCADOPAGO_PUBLIC_KEY` e conferir numa conta sandbox.
 3. **Validar o que sai pra internet.** Push de verdade (`PUSH_MODE=live`,
    serviços de push dos navegadores), tiles do mapa (OpenStreetMap) e a busca
    por CEP (ViaCEP) foram testados só até onde o ambiente deixa: assinatura,

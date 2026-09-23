@@ -37,3 +37,4 @@ pra ele (ex.: o mapa do acompanhamento em 06 → 16).
 - [27 — App do entregador e caixa (Fase 8 e 9)](27-app-do-entregador-e-caixa.md)
 - [28 — Painel da loja (`web/painel.html`) — Fase 7.3 e 11.1 a 11.4](28-painel-da-loja.md)
 - [29 — Baixa de espécie por Pix (tela 9.5)](29-baixa-por-pix.md)
+- [30 — Cartão salvo, tokenização no navegador e total com frete](30-cartao-salvo-e-total-com-frete.md)

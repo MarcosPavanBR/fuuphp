@@ -74,11 +74,47 @@ function pay_with_card(PDO $pdo, array $order, array $body, array $claims, strin
         error_response(422, 'invalid_payer_cpf', 'CPF do titular inválido.', fields: ['payer_cpf' => 'inválido']);
     }
 
-    $userStmt = $pdo->prepare('SELECT email FROM users WHERE id = :id');
+    $userStmt = $pdo->prepare('SELECT email, mp_customer_id FROM users WHERE id = :id');
     $userStmt->execute(['id' => $claims['sub']]);
-    $payerEmail = (string) ($userStmt->fetchColumn() ?: 'cliente@fuudelivery.com.br');
+    $payer = $userStmt->fetch() ?: [];
+    $payerEmail = (string) (($payer['email'] ?? null) ?: 'cliente@fuudelivery.com.br');
 
-    $mp = mp_create_card_payment($idempotencyKey, (float) $order['total'], $cardToken, $installments, $payerEmail, $payerCpf);
+    // Tela 6.2 → 4.2 — cartão salvo: "pagar com ele ainda exige CVV e gera
+    // novo token de uso único". O CVV nunca chega aqui: o navegador gera o
+    // token com MercadoPago.js a partir do card_id + CVV, e manda só o token
+    // e QUAL cartão salvo foi usado. O servidor confere que o cartão é desta
+    // pessoa e cobra como cliente do Mercado Pago (payer.type = customer),
+    // que é o que o MP exige pra token de cartão salvo -- e o que permite,
+    // depois, cobrar a gorjeta "no mesmo cartão do pedido" (reviews/create.php).
+    $savedCard = null;
+    if (isset($body['saved_card_id'])) {
+        $cardStmt = $pdo->prepare('SELECT * FROM saved_cards WHERE id = :id AND user_id = :user');
+        $cardStmt->execute(['id' => (int) $body['saved_card_id'], 'user' => $claims['sub']]);
+        $savedCard = $cardStmt->fetch();
+        if ($savedCard === false) {
+            error_response(404, 'card_not_found', 'Cartão salvo não encontrado.');
+        }
+        if (($payer['mp_customer_id'] ?? null) === null) {
+            error_response(409, 'card_not_linked', 'Esse cartão não está mais vinculado à sua conta no Mercado Pago. Cadastre de novo.');
+        }
+    }
+
+    $mp = mp_create_card_payment(
+        $idempotencyKey,
+        (float) $order['total'],
+        $cardToken,
+        $installments,
+        $payerEmail,
+        $payerCpf,
+        $savedCard === null ? null : (string) $payer['mp_customer_id']
+    );
+    if ($savedCard !== null) {
+        // O cartão usado fica no registro do pagamento: é o que o recibo e o
+        // suporte mostram ("Visa •••• 6351"), mesmo no modo de teste.
+        $mp['card_brand'] = $savedCard['brand'];
+        $mp['card_last4'] = $savedCard['last4'];
+        $mp['raw']['saved_card_id'] = (int) $savedCard['id'];
+    }
 
     $pdo->beginTransaction();
     try {

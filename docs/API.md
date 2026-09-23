@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_api_catalog.php` a partir dos próprios arquivos de
 > `api/v1`. Não edite à mão: o CI confere (`--check`) e falha se estiver desatualizado.
 
-102 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
+103 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
 `{code, message, trace_id}` com o status HTTP certo (`lib/core/response.php`). As URLs são
 contrato público: mudar um caminho quebra app instalado.
 
@@ -111,6 +111,7 @@ contrato público: mudar um caminho quebra app instalado.
 | Rota | Métodos | Quem | Idem. | O que faz |
 |---|---|---|---|---|
 | `/api/v1/payments/change_method.php` | POST | cliente |  | Trocar a forma de pagamento de um pedido que ainda aguarda pagamento. |
+| `/api/v1/payments/config.php` | GET | público |  | Tela 4.2 — o que o navegador precisa pra tokenizar o cartão com MercadoPago.js: a Public Key (pública por definição; o Access Token fica só no PHP) e o modo. Em `fake` não há chave, e o app usa um token de teste local em vez de carregar o SDK -- o backend f… |
 | `/api/v1/payments/pay.php` | POST | cliente | sim | Fase 4 — dispara a cobrança do método já escolhido no checkout (orders/checkout.php). O método é lido do próprio pedido, não do corpo da requisição: o cliente não pode pagar um pedido de cartão como se fosse dinheiro só trocando o body. |
 | `/api/v1/payments/upload_proof.php` | POST | cliente | sim | Fase 4.4 — upload do comprovante de Pix manual. MIME real por finfo (não o Content-Type que o navegador mandou), hash sha256 (repetição exata) e um "average hash" (aHash) de 64 bits como phash simplificado (repetição de print reeditado/recortado) -- documen… |
 | `/api/v1/payments/webhook_mercadopago.php` | POST | Mercado Pago (assinatura) |  | Webhook do Mercado Pago (Fase 5.1: "O webhook do Mercado Pago é a fonte da verdade, não a resposta da tela"). Cobre dois casos que a resposta síncrona de payments/pay.php não fecha sozinha: cartão que muda de status depois de "in_process" (ex.: antifraude a… |
