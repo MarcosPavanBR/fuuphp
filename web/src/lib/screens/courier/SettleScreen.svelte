@@ -1,11 +1,15 @@
 <script>
-  import { api, ApiError } from '../../services/api.js';
+  import { api, ApiError, BASE } from '../../services/api.js';
   import { toastr } from '../../utils/toastr.js';
   import { courierToken } from '../../state/courierSession.svelte.js';
   import { parsePgTimestamp } from '../../utils/datetime.js';
 
-  // Telas 9.1, 9.2 e 9.4 — escolher a baixa, gerar o código e ver o saldo
-  // zerado.
+  // Telas 9.1, 9.2, 9.4 e 9.5 — escolher a baixa, gerar o código (balcão)
+  // ou pagar por Pix e mandar o comprovante (loja fechada).
+  //
+  // Pix (9.5): "O saldo só zera quando a loja validar o comprovante." A tela
+  // retoma sozinha uma baixa por Pix aberta (couriers/settle_proof.php GET):
+  // o entregador pode transferir agora e mandar o comprovante depois.
   //
   // "Guardamos só o hash do código; o valor é imutável depois de gerado."
   // Por isso o código aparece UMA vez, aqui, e a tela avisa: recarregar não
@@ -19,6 +23,59 @@
   let restaurants = $state([]);
   let busy = $state(false);
   let now = $state(Date.now());
+  let method = $state('in_person');
+  let pix = $state(null); // { id, amount, expires_at, restaurant_name, restaurant_cnpj, pix_copy_paste, proof_state, reject_reason }
+  let proofFile = $state(null);
+
+  async function loadPix() {
+    try {
+      const data = await api.get('/couriers/settle_proof.php', { token: courierToken() });
+      pix = data.intent;
+      if (pix) step = 'pix';
+    } catch {
+      // sem rede: fica na escolha
+    }
+  }
+  loadPix();
+
+  function cnpj(c) {
+    const d = String(c ?? '').replace(/\D/g, '');
+    return d.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : c;
+  }
+
+  async function copyPix() {
+    try {
+      await navigator.clipboard.writeText(pix.pix_copy_paste);
+      toastr.success('Código Pix copiado ✓');
+    } catch {
+      toastr.warning('Não deu pra copiar. Selecione o código manualmente.');
+    }
+  }
+
+  async function sendProof() {
+    if (!proofFile || busy) return;
+    busy = true;
+    try {
+      const form = new FormData();
+      form.append('intent_id', String(pix.id));
+      form.append('proof', proofFile);
+      // fetch direto: é multipart, e o UUID torna o reenvio seguro.
+      const res = await fetch(`${BASE}/couriers/settle_proof.php`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${courierToken()}`, 'X-Idempotency-Key': crypto.randomUUID() },
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? 'Não deu pra enviar o comprovante.');
+      toastr.success('Comprovante enviado. A loja confere e seu saldo zera.');
+      proofFile = null;
+      await loadPix();
+    } catch (e) {
+      toastr.error(e.message);
+    } finally {
+      busy = false;
+    }
+  }
 
   $effect(() => {
     const t = setInterval(() => (now = Date.now()), 1000);
@@ -72,13 +129,19 @@
       });
       intent = data.intent;
       code = data.code;
-      step = 'code';
+      if (method === 'pix') {
+        await loadPix();
+      } else {
+        step = 'code';
+      }
     } catch (e) {
       const known = e instanceof ApiError ? e.code : null;
       toastr.error(
         known === 'intent_already_open'
           ? 'Você já tem uma baixa em andamento. Termine ou espere expirar.'
-          : (e.message ?? 'Não deu pra gerar o código.')
+          : known === 'store_has_no_pix_key'
+            ? 'Essa loja não tem chave Pix cadastrada — dê baixa no balcão.'
+            : (e.message ?? 'Não deu pra gerar a baixa.')
       );
     } finally {
       busy = false;
@@ -121,18 +184,75 @@
       </div>
     {/if}
 
+    <p class="k label">COMO QUER DAR BAIXA?</p>
+    <div class="methods">
+      <button type="button" class="method" class:on={method === 'in_person'} onclick={() => (method = 'in_person')}>
+        <strong>Entregar na loja</strong>
+        <span>Gera um código de 6 dígitos. O atendente conta o dinheiro e digita o código.</span>
+        <em>Baixa na hora</em>
+      </button>
+      <button type="button" class="method" class:on={method === 'pix'} onclick={() => (method = 'pix')}>
+        <strong>Pix para a loja</strong>
+        <span>Você transfere e envia o comprovante. Entra na fila de validação da loja.</span>
+        <em>Até 1 dia útil</em>
+      </button>
+    </div>
+
     <button
       type="button"
       class="btn-fuu-primary w-100 big"
       disabled={busy || restaurantId === ''}
-      onclick={() => generate('in_person')}
+      onclick={() => generate(method)}
     >
-      Gerar código de baixa
+      {method === 'pix' ? 'Pagar por Pix' : 'Gerar código de baixa'}
     </button>
     <p class="note">
-      O valor fica travado no código. A loja conta o dinheiro e digita o código no painel dela — os dois
-      lançamentos nascem juntos.
+      {method === 'pix'
+        ? 'Prazo de baixa: até amanhã, 23:59. Depois disso as corridas em dinheiro ficam bloqueadas.'
+        : 'O valor fica travado no código. A loja conta o dinheiro e digita o código no painel dela — os dois lançamentos nascem juntos.'}
     </p>
+  {:else if step === 'pix' && pix}
+    <h1 class="fuu-display">Baixa por Pix</h1>
+    <p class="k">TRANSFERIR PARA</p>
+    <p class="pix-store">{pix.restaurant_name}</p>
+    {#if pix.restaurant_cnpj}<p class="sub fuu-mono">CNPJ {cnpj(pix.restaurant_cnpj)}</p>{/if}
+    <p class="pix-code fuu-mono">{pix.pix_copy_paste}</p>
+    <div class="pix-amount">
+      <span>Valor exato</span>
+      <strong class="fuu-mono">{money(pix.amount)}</strong>
+    </div>
+    <button type="button" class="copy" onclick={copyPix}><i class="bi bi-copy"></i> Copiar código Pix</button>
+
+    {#if pix.proof_state === 'pending'}
+      <div class="pending">
+        <i class="bi bi-hourglass-split"></i>
+        Comprovante enviado. O saldo zera quando a loja conferir.
+      </div>
+    {:else}
+      {#if pix.proof_state === 'rejected'}
+        <div class="warn">A loja recusou o comprovante: {pix.reject_reason}. Envie outro.</div>
+      {/if}
+      <p class="k label">COMPROVANTE</p>
+      <div class="pick">
+        <label class="pick-btn">
+          <i class="bi bi-camera"></i> Câmera
+          <input type="file" accept="image/*" capture="environment" hidden onchange={(e) => (proofFile = e.currentTarget.files?.[0] ?? null)} />
+        </label>
+        <label class="pick-btn">
+          <i class="bi bi-images"></i> Galeria
+          <input type="file" accept="image/jpeg,image/png,image/webp" hidden onchange={(e) => (proofFile = e.currentTarget.files?.[0] ?? null)} />
+        </label>
+      </div>
+      {#if proofFile}<p class="sub">{proofFile.name}</p>{/if}
+      <p class="note">
+        O saldo só zera quando a loja validar o comprovante. Enviar comprovante falso bloqueia a conta e gera
+        ocorrência.
+      </p>
+      <button type="button" class="btn-fuu-primary w-100 big" disabled={!proofFile || busy} onclick={sendProof}>
+        {busy ? 'Enviando…' : 'Enviar comprovante'}
+      </button>
+    {/if}
+    <button type="button" class="link" onclick={onDone}>Voltar ao início</button>
   {:else}
     <h1 class="fuu-display">Mostre este código</h1>
     <p class="sub center">Vale {money(intent.amount)}, por {countdown ?? '—'}.</p>
@@ -268,6 +388,104 @@
     color: var(--fuu-ink-2);
     line-height: 1.6;
     margin: 0 0 8px;
+  }
+  .methods {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .method {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: left;
+    border: 1px solid var(--fuu-line-3);
+    border-radius: 10px;
+    padding: 14px;
+    background: var(--fuu-white);
+    font-family: var(--fuu-font-body);
+    color: var(--fuu-ink-2);
+  }
+  .method.on {
+    border: 2px solid var(--fuu-red);
+    background: var(--fuu-red-tint);
+  }
+  .method strong {
+    font-size: 15px;
+    color: var(--fuu-ink-1);
+  }
+  .method span {
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+  .method em {
+    font-style: normal;
+    font-family: var(--fuu-font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--fuu-ink-4);
+  }
+  .pix-store {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 4px 0 0;
+    color: var(--fuu-ink-1);
+  }
+  .pix-code {
+    background: var(--fuu-line-6);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 11px;
+    word-break: break-all;
+    margin: 14px 0 10px;
+    color: var(--fuu-ink-3);
+  }
+  .pix-amount {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+  .copy,
+  .pick-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    border: 1px solid var(--fuu-line-2);
+    border-radius: 10px;
+    background: var(--fuu-white);
+    min-height: var(--fuu-tap-operator);
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--fuu-ink-1);
+    cursor: pointer;
+  }
+  .pick {
+    display: flex;
+    gap: 9px;
+  }
+  .pending {
+    display: flex;
+    gap: 9px;
+    align-items: center;
+    border-radius: 10px;
+    padding: 14px;
+    margin-top: 16px;
+    background: var(--fuu-leaf-tint);
+    color: var(--fuu-leaf-dark);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .link {
+    display: block;
+    margin: 16px auto 0;
+    background: none;
+    border: none;
+    color: var(--fuu-ink-4);
+    font-weight: 600;
+    font-size: 13px;
   }
   .warn {
     border: 1px solid var(--fuu-wait-text);

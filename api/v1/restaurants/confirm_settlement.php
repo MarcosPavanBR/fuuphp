@@ -103,28 +103,7 @@ try {
     }
 
     if ($matches) {
-        ledger_add(
-            $pdo,
-            'courier_cash',
-            (string) $intent['courier_id'],
-            -$declared,
-            'cash_settlement',
-            (string) $intent['id'],
-            null,
-            (string) $claims['sub'],
-            'baixa de espécie na loja'
-        );
-        ledger_add(
-            $pdo,
-            'store_receivable',
-            (string) $restaurantId,
-            $declared,
-            'cash_settlement',
-            (string) $intent['id'],
-            null,
-            (string) $claims['sub'],
-            'recebimento de espécie do entregador'
-        );
+        ledger_cash_settled($pdo, $intent, (string) $claims['sub'], 'na loja');
     }
 
     $pdo->commit();

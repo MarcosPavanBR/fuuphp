@@ -3,6 +3,7 @@
   import { toastr } from '../../utils/toastr.js';
   import { staffToken } from '../../state/staffSession.svelte.js';
   import { parsePgTimestamp } from '../../utils/datetime.js';
+  import SettlementProofQueue from './SettlementProofQueue.svelte';
 
   // Tela 9.3 — "Esta é a resposta a 'como eu sei que o motoboy entregou': a
   // loja conta, digita o código do app dele e confirma."
@@ -71,6 +72,7 @@
 </script>
 
 <div class="desk">
+  <SettlementProofQueue onDecided={onDone} />
   <div class="confirm-card fuu-card">
     <p class="section-label">CONFIRMAR RECEBIMENTO</p>
 

@@ -58,20 +58,7 @@ if ($order['status'] !== 'pending_payment' || $order['payment_method'] !== 'pix_
     error_response(409, 'proof_not_applicable', 'Esse pedido não está aguardando comprovante de Pix.');
 }
 
-$tmpPath = $_FILES['proof']['tmp_name'];
-$finfo = new finfo(FILEINFO_MIME_TYPE);
-$mime = $finfo->file($tmpPath) ?: '';
-$allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
-if (!in_array($mime, $allowedMimes, true)) {
-    error_response(422, 'invalid_file_type', 'Envie uma foto (JPEG, PNG ou WEBP) do comprovante.', fields: ['proof' => 'tipo de arquivo não aceito']);
-}
-$bytes = file_get_contents($tmpPath);
-if ($bytes === false || $bytes === '') {
-    error_response(422, 'empty_file', 'Arquivo vazio.');
-}
-if (strlen($bytes) > 10 * 1024 * 1024) {
-    error_response(422, 'file_too_large', 'Comprovante maior que 10 MB.');
-}
+[$bytes, $mime] = proof_read_upload('proof');
 
 $paymentStmt = $pdo->prepare("SELECT * FROM payments WHERE order_id = :id ORDER BY created_at DESC LIMIT 1");
 $paymentStmt->execute(['id' => $orderId]);
@@ -86,22 +73,11 @@ if ($payment['status'] !== 'in_process') {
     error_response(409, 'payment_not_started', 'Gere o QR do Pix de novo antes de enviar o comprovante.');
 }
 
-$sha256 = hash('sha256', $bytes);
-$phash = pix_proof_average_hash($bytes, $mime);
-$watermarked = pix_proof_watermark($bytes, $mime, (string) $order['public_code']);
-
-$storageDir = rtrim((string) env('PROOF_STORAGE_DIR', 'storage/proofs'), '/');
-$absoluteDir = app_path($storageDir);
-if (!is_dir($absoluteDir) && !mkdir($absoluteDir, 0770, true) && !is_dir($absoluteDir)) {
-    throw new RuntimeException("não deu pra criar {$absoluteDir}");
-}
-$extension = match ($mime) {
-    'image/png' => 'png',
-    'image/webp' => 'webp',
-    default => 'jpg',
-};
-$storageKey = "{$sha256}.{$extension}";
-file_put_contents("{$absoluteDir}/{$storageKey}", $watermarked ?? $bytes);
+// Marca d'água, hash e gravação: lib/payments/proof_images.php.
+$stored = proof_store($bytes, $mime, 'PEDIDO #' . $order['public_code']);
+$storageKey = $stored['storage_key'];
+$sha256 = $stored['sha256'];
+$phash = $stored['phash'];
 
 $pdo->beginTransaction();
 try {
@@ -139,80 +115,3 @@ json_response(201, [
     'order' => fetch_order($pdo, $orderId),
     'proof' => $proof,
 ]);
-
-function pix_proof_average_hash(string $bytes, string $mime): ?string
-{
-    $image = pix_proof_load_image($bytes, $mime);
-    if ($image === false) {
-        return null;
-    }
-    $small = imagescale($image, 8, 8);
-    imagedestroy($image);
-    if ($small === false) {
-        return null;
-    }
-
-    $values = [];
-    for ($y = 0; $y < 8; $y++) {
-        for ($x = 0; $x < 8; $x++) {
-            $rgb = imagecolorat($small, $x, $y);
-            $r = ($rgb >> 16) & 0xFF;
-            $g = ($rgb >> 8) & 0xFF;
-            $b = $rgb & 0xFF;
-            $values[] = (int) round(($r + $g + $b) / 3);
-        }
-    }
-    imagedestroy($small);
-
-    $avg = array_sum($values) / count($values);
-    $bits = '';
-    foreach ($values as $v) {
-        $bits .= $v >= $avg ? '1' : '0';
-    }
-
-    $hex = '';
-    foreach (str_split($bits, 4) as $nibble) {
-        $hex .= dechex(bindec(str_pad($nibble, 4, '0')));
-    }
-    return $hex;
-}
-
-function pix_proof_watermark(string $bytes, string $mime, string $orderCode): ?string
-{
-    $image = pix_proof_load_image($bytes, $mime);
-    if ($image === false) {
-        return null;
-    }
-    $width = imagesx($image);
-    $height = imagesy($image);
-
-    $text = "FUUDELIVERY · PEDIDO #{$orderCode} · " . date('d/m/Y H:i');
-    $white = imagecolorallocatealpha($image, 255, 255, 255, 40);
-    $black = imagecolorallocatealpha($image, 0, 0, 0, 60);
-    $y = max(0, $height - 18);
-    imagestring($image, 3, 9, $y + 1, $text, $black);
-    imagestring($image, 3, 8, $y, $text, $white);
-
-    ob_start();
-    match ($mime) {
-        'image/png' => imagepng($image),
-        'image/webp' => imagewebp($image),
-        default => imagejpeg($image, null, 85),
-    };
-    $out = ob_get_clean();
-    imagedestroy($image);
-    return $out === false ? null : $out;
-}
-
-/**
- * @return \GdImage|false
- */
-function pix_proof_load_image(string $bytes, string $mime)
-{
-    return match ($mime) {
-        'image/png' => @imagecreatefromstring($bytes),
-        'image/webp' => @imagecreatefromstring($bytes),
-        'image/jpeg' => @imagecreatefromstring($bytes),
-        default => false,
-    };
-}

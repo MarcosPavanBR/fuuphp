@@ -150,3 +150,19 @@ function order_was_delivered(PDO $pdo, int $orderId): bool
 
     return $stmt->fetchColumn() !== false;
 }
+
+/**
+ * Baixa de espécie aceita pela loja (tela 9.3 no balcão, 9.5 por Pix): o
+ * dinheiro sai da mão do entregador e paga a parte da loja que devíamos desde
+ * a entrega. Os dois lançamentos nascem juntos -- quem chama já está numa
+ * transação e já trancou a intenção (FOR UPDATE).
+ */
+function ledger_cash_settled(PDO $pdo, array $intent, string $actorId, string $how): void
+{
+    $amount = (float) $intent['amount'];
+    ledger_add($pdo, 'courier_cash', (string) $intent['courier_id'], -$amount, 'cash_settlement',
+        (string) $intent['id'], null, $actorId, "baixa de espécie {$how}");
+    ledger_add($pdo, 'store_receivable', (string) $intent['restaurant_id'], $amount, 'cash_settlement',
+        (string) $intent['id'], null, $actorId, "recebimento de espécie do entregador {$how}");
+}
+

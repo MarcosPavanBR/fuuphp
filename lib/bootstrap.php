@@ -38,6 +38,7 @@ require_once __DIR__ . '/ordering/delivery.php';
 // ── pagamentos: Mercado Pago, Pix, estornos, carteira ──────────────────
 require_once __DIR__ . '/payments/mercadopago.php';
 require_once __DIR__ . '/payments/pix.php';
+require_once __DIR__ . '/payments/proof_images.php';
 require_once __DIR__ . '/payments/refunds.php';
 require_once __DIR__ . '/payments/refund_executor.php';
 require_once __DIR__ . '/payments/wallet.php';

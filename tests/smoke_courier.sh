@@ -266,6 +266,76 @@ echo "== código de baixa de outra loja não confere =="
    -d "{\"code\":\"000000\",\"counted_amount\":10.00}" | jq -r '.code')" = "intent_not_found" ] \
   || fail "código inventado foi aceito"
 
+echo "== 9.5: baixa por Pix -- loja sem chave Pix manda pro balcão =="
+cash_in() { # espécie nova na mão do entregador (como se tivesse entregue um pedido em dinheiro)
+  psql_run -c "INSERT INTO ledger_entries (account, party_id, amount, origin, origin_id, memo)
+               VALUES ('courier_cash', '${COURIER_ID}', $1, 'adjustment', 'smoke-pix-$RANDOM$RANDOM', 'smoke: espécie')"
+}
+proof_img() { php -r '$i=imagecreatetruecolor(320,200);imagestring($i,5,10,90,$argv[2],imagecolorallocate($i,255,255,255));imagejpeg($i,$argv[1]);' "$1" "$2"; }
+pix_intent() { curl -s -X POST "$BASE/couriers/settle_intent.php" -H "Content-Type: application/json" "${CAUTH[@]}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"method\":\"pix\"}"; }
+send_proof() { curl -s -X POST "$BASE/couriers/settle_proof.php" "${CAUTH[@]}" ${3:+-H "X-Idempotency-Key: $3"} \
+  -F "intent_id=$1" -F "proof=@$2;type=image/jpeg"; }
+decide() { curl -s -X POST "$BASE/restaurants/settlement_proofs.php" -H "Content-Type: application/json" "${SAUTH[@]}" -d "$1"; }
+cash_in 40.00
+[ "$(pix_intent | jq -r '.code')" = "store_has_no_pix_key" ] || fail "baixa por Pix sem chave da loja"
+psql_run -c "INSERT INTO restaurant_credentials (restaurant_id, pix_key) VALUES ('${RESTAURANT_ID}', 'loja-courier@pix.test')
+             ON CONFLICT (restaurant_id) DO UPDATE SET pix_key = EXCLUDED.pix_key"
+
+echo "== 9.5: intenção por Pix -- sem código, com o copia-e-cola da loja e prazo até amanhã =="
+PIX=$(pix_intent)
+PIX_ID=$(echo "$PIX" | jq -er '.intent.id') || fail "intenção por Pix falhou: $PIX"
+[ "$(echo "$PIX" | jq -r '.code')" = "null" ] || fail "baixa por Pix não devia ter código de balcão"
+echo "$PIX" | jq -r '.pix_copy_paste' | grep -q '^000201' || fail "sem copia-e-cola BR Code: $PIX"
+echo "$PIX" | jq -r '.pix_copy_paste' | grep -q '40.00' || fail "o Pix não tem o valor exato: $PIX"
+[ "$(psql "$DATABASE_URL" -tAc "SELECT expires_at > now() + interval '20 hours' FROM cash_settlement_intents WHERE id=${PIX_ID}")" = "t" ] \
+  || fail "prazo da baixa por Pix não é até amanhã"
+[ "$(curl -s "$BASE/couriers/settle_proof.php" "${CAUTH[@]}" | jq -r '.intent.proof_state')" = "null" ] || fail "estado inicial errado"
+
+echo "== 9.5: comprovante entra na fila da loja; o saldo não mexe até a loja conferir =="
+proof_img "/tmp/courier-pix-a.jpg" "A$RANDOM"
+KEY_A=$(gen_uuid)
+FIRST=$(send_proof "$PIX_ID" /tmp/courier-pix-a.jpg "$KEY_A")
+PROOF_A=$(echo "$FIRST" | jq -er '.proof.id') || fail "comprovante não entrou: $FIRST"
+[ "$(send_proof "$PIX_ID" /tmp/courier-pix-a.jpg "$KEY_A" | jq -r '.replayed')" = "true" ] || fail "reenvio da fila offline duplicou"
+[ "$(send_proof "$PIX_ID" /tmp/courier-pix-a.jpg | jq -r '.code')" = "proof_pending" ] || fail "dois comprovantes na fila ao mesmo tempo"
+QUEUE=$(curl -s "$BASE/restaurants/settlement_proofs.php" "${SAUTH[@]}")
+[ "$(echo "$QUEUE" | jq -r ".proofs[] | select(.id == ${PROOF_A}) | .amount")" = "40.00" ] || fail "fila da loja sem o comprovante: $QUEUE"
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/restaurants/settlement_proofs.php?image=${PROOF_A}" "${SAUTH[@]}")" = "200" ] \
+  || fail "a loja não vê a imagem"
+[ "$(curl -s "$BASE/couriers/me.php" "${CAUTH[@]}" | jq -r '.balances.cash')" = "40" ] || fail "saldo mexeu antes da conferência"
+psql_run -c "UPDATE cash_settlement_intents SET expires_at = now() - interval '1 minute' WHERE id=${PIX_ID}; SELECT expire_cash_settlements();" >/dev/null
+[ "$(psql "$DATABASE_URL" -tAc "SELECT state FROM cash_settlement_intents WHERE id=${PIX_ID}")" = "open" ] \
+  || fail "baixa com comprovante esperando a loja expirou (culpa da demora da loja caiu no entregador)"
+psql_run -c "UPDATE cash_settlement_intents SET expires_at = now() + interval '1 day' WHERE id=${PIX_ID}"
+
+echo "== 9.5: recusa sem motivo não passa; recusa com motivo deixa reenviar =="
+[ "$(decide "{\"proof_id\":${PROOF_A},\"decision\":\"reject\"}" | jq -r '.code')" = "reason_required" ] || fail "recusou sem motivo"
+decide "{\"proof_id\":${PROOF_A},\"decision\":\"reject\",\"reason\":\"valor não aparece\"}" >/dev/null
+[ "$(curl -s "$BASE/couriers/settle_proof.php" "${CAUTH[@]}" | jq -r '.intent.reject_reason')" = "valor não aparece" ] \
+  || fail "o entregador não vê o motivo da recusa"
+proof_img "/tmp/courier-pix-b.jpg" "B$RANDOM"
+PROOF_B=$(send_proof "$PIX_ID" /tmp/courier-pix-b.jpg | jq -er '.proof.id') || fail "reenvio depois da recusa falhou"
+
+echo "== 9.5: aprovada, a baixa nasce igual à do balcão =="
+APPROVED=$(decide "{\"proof_id\":${PROOF_B},\"decision\":\"approve\"}")
+[ "$(echo "$APPROVED" | jq -r '.courier_cash_balance')" = "0" ] || fail "aprovação não zerou o saldo: $APPROVED"
+[ "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM ledger_entries WHERE origin='cash_settlement' AND origin_id='${PIX_ID}'")" = "2" ] \
+  || fail "baixa por Pix sem os dois lançamentos"
+[ "$(decide "{\"proof_id\":${PROOF_B},\"decision\":\"approve\"}" | jq -r '.code')" = "already_decided" ] || fail "aprovou duas vezes"
+
+echo "== 9.5: comprovante falso bloqueia as corridas em dinheiro e abre ocorrência =="
+cash_in 25.00
+FAKE_ID=$(pix_intent | jq -er '.intent.id')
+PROOF_F=$(send_proof "$FAKE_ID" /tmp/courier-pix-b.jpg | jq -er '.proof.id')
+[ "$(curl -s "$BASE/restaurants/settlement_proofs.php" "${SAUTH[@]}" | jq -r ".proofs[] | select(.id == ${PROOF_F}) | .seen_before")" = "true" ] \
+  || fail "a loja não foi avisada de que o comprovante já apareceu antes"
+decide "{\"proof_id\":${PROOF_F},\"decision\":\"reject\",\"reason\":\"comprovante repetido\",\"fraud\":true}" >/dev/null
+[ "$(psql "$DATABASE_URL" -tAc "SELECT cash_blocked FROM couriers WHERE id='${COURIER_ID}'")" = "t" ] || fail "fraude não bloqueou o entregador"
+[ "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM disputes WHERE courier_id='${COURIER_ID}' AND kind='fake_proof'")" = "1" ] || fail "fraude sem ocorrência"
+[ "$(psql "$DATABASE_URL" -tAc "SELECT state FROM cash_settlement_intents WHERE id=${FAKE_ID}")" = "disputed" ] || fail "baixa fraudada não ficou em disputa"
+psql_run -c "UPDATE couriers SET cash_blocked = false WHERE id='${COURIER_ID}'"
+
 echo "== cliente não acessa rota de entregador =="
 [ "$(curl -s "$BASE/couriers/me.php" "${AUTH[@]}" | jq -r '.code')" = "forbidden" ] \
   || fail "cliente entrou na área do entregador"

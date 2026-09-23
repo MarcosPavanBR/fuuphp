@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_db_map.php` a partir do banco com todas as migrações
 > aplicadas. Não edite à mão: o CI confere (`--check`).
 
-54 tabelas em PostgreSQL 16. Regras que o esquema garante sozinho (e que o
+55 tabelas em PostgreSQL 16. Regras que o esquema garante sozinho (e que o
 código não precisa repetir): `orders.status` só muda por `advance_order()`; `ledger_entries`
 é só de inserção (sem UPDATE/DELETE); um pagamento aprovado por pedido
 (`payments_one_approved`). Contexto de cada regra: `docs/ARCHITECTURE.md`.
@@ -15,7 +15,7 @@ código não precisa repetir): `orders.status` só muda por `advance_order()`; `
 
 ## Índice
 
-[`acquirer_statements`](#acquirer_statements) [`addresses`](#addresses) [`audit_log`](#audit_log) [`business_hours`](#business_hours) [`card_transactions`](#card_transactions) [`cash_settlement_intents`](#cash_settlement_intents) [`consents`](#consents) [`coupon_redemptions`](#coupon_redemptions) [`coupons`](#coupons) [`courier_applications`](#courier_applications) [`courier_documents`](#courier_documents) [`courier_positions`](#courier_positions) [`courier_shifts`](#courier_shifts) [`couriers`](#couriers) [`delivery_attempts`](#delivery_attempts) [`delivery_incidents`](#delivery_incidents) [`delivery_proofs`](#delivery_proofs) [`delivery_slots`](#delivery_slots) [`dispatch_attempts`](#dispatch_attempts) [`disputes`](#disputes) [`fraud_signals`](#fraud_signals) [`holiday_overrides`](#holiday_overrides) [`idempotency_keys`](#idempotency_keys) [`item_variants`](#item_variants) [`ledger_entries`](#ledger_entries) [`menu_items`](#menu_items) [`notifications`](#notifications) [`offers`](#offers) [`order_events`](#order_events) [`order_items`](#order_items) [`order_messages`](#order_messages) [`orders`](#orders) [`otp_codes`](#otp_codes) [`outbox`](#outbox) [`partner_accounts`](#partner_accounts) [`payment_proofs`](#payment_proofs) [`payments`](#payments) [`payouts`](#payouts) [`platform_policies`](#platform_policies) [`policy_overrides`](#policy_overrides) [`pos_custody`](#pos_custody) [`pos_devices`](#pos_devices) [`push_subscriptions`](#push_subscriptions) [`refunds`](#refunds) [`restaurant_credentials`](#restaurant_credentials) [`restaurant_payment_settings`](#restaurant_payment_settings) [`restaurants`](#restaurants) [`reviews`](#reviews) [`saved_cards`](#saved_cards) [`sessions`](#sessions) [`store_pauses`](#store_pauses) [`tickets`](#tickets) [`users`](#users) [`wallet_credits`](#wallet_credits) 
+[`acquirer_statements`](#acquirer_statements) [`addresses`](#addresses) [`audit_log`](#audit_log) [`business_hours`](#business_hours) [`card_transactions`](#card_transactions) [`cash_settlement_intents`](#cash_settlement_intents) [`consents`](#consents) [`coupon_redemptions`](#coupon_redemptions) [`coupons`](#coupons) [`courier_applications`](#courier_applications) [`courier_documents`](#courier_documents) [`courier_positions`](#courier_positions) [`courier_shifts`](#courier_shifts) [`couriers`](#couriers) [`delivery_attempts`](#delivery_attempts) [`delivery_incidents`](#delivery_incidents) [`delivery_proofs`](#delivery_proofs) [`delivery_slots`](#delivery_slots) [`dispatch_attempts`](#dispatch_attempts) [`disputes`](#disputes) [`fraud_signals`](#fraud_signals) [`holiday_overrides`](#holiday_overrides) [`idempotency_keys`](#idempotency_keys) [`item_variants`](#item_variants) [`ledger_entries`](#ledger_entries) [`menu_items`](#menu_items) [`notifications`](#notifications) [`offers`](#offers) [`order_events`](#order_events) [`order_items`](#order_items) [`order_messages`](#order_messages) [`orders`](#orders) [`otp_codes`](#otp_codes) [`outbox`](#outbox) [`partner_accounts`](#partner_accounts) [`payment_proofs`](#payment_proofs) [`payments`](#payments) [`payouts`](#payouts) [`platform_policies`](#platform_policies) [`policy_overrides`](#policy_overrides) [`pos_custody`](#pos_custody) [`pos_devices`](#pos_devices) [`push_subscriptions`](#push_subscriptions) [`refunds`](#refunds) [`restaurant_credentials`](#restaurant_credentials) [`restaurant_payment_settings`](#restaurant_payment_settings) [`restaurants`](#restaurants) [`reviews`](#reviews) [`saved_cards`](#saved_cards) [`sessions`](#sessions) [`settlement_proofs`](#settlement_proofs) [`store_pauses`](#store_pauses) [`tickets`](#tickets) [`users`](#users) [`wallet_credits`](#wallet_credits) 
 
 ## acquirer_statements
 
@@ -856,6 +856,26 @@ Criada em `db/migrations/001_identity.up.sql`. Access token de 15 min (fora do b
 | `rotated_from` | uuid | sim | `sessions.id` |
 | `revoked_at` | timestamp with time zone | sim |  |
 | `expires_at` | timestamp with time zone |  |  |
+| `created_at` | timestamp with time zone (padrão) |  |  |
+
+## settlement_proofs
+
+Criada em `db/migrations/027_settlement_pix.up.sql`. Da migração: Tela 9.5 — "Entregador — baixa por Pix (loja fechada)".
+
+| Coluna | Tipo | Nulo | Referência |
+|---|---|---|---|
+| `id` | bigint (padrão) |  |  |
+| `intent_id` | bigint |  | `cash_settlement_intents.id` |
+| `courier_id` | uuid |  |  |
+| `restaurant_id` | uuid |  | `restaurants.id` |
+| `storage_key` | text |  |  |
+| `sha256` | character |  |  |
+| `phash` | character | sim |  |
+| `upload_key` | uuid | sim |  |
+| `state` | text (padrão) |  |  |
+| `reject_reason` | text | sim |  |
+| `reviewed_by` | uuid | sim | `users.id` |
+| `reviewed_at` | timestamp with time zone | sim |  |
 | `created_at` | timestamp with time zone (padrão) |  |  |
 
 ## store_pauses
