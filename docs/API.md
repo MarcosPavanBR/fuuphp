@@ -91,12 +91,6 @@ contrato público: mudar um caminho quebra app instalado.
 | `/api/v1/couriers/shift.php` | POST | entregador |  | Tela 8.1 — abrir e fechar turno. O índice `one_open_shift` (migração 007) garante um turno aberto por entregador: abrir duas vezes não cria dois registros, e é o banco que diz isso, não um `if` no PHP. |
 | `/api/v1/couriers/submit_application.php` | POST | autenticado |  | Tela 15.2, última etapa: "você lê e aceita o contrato de prestação de serviço e a política de dados". |
 
-## health.php
-
-| Rota | Métodos | Quem | Idem. | O que faz |
-|---|---|---|---|---|
-| `/api/v1/health.php` | GET | público |  | Saúde do sistema, pro monitoramento externo (UptimeRobot, Better Stack...) e pro deploy conferir que a versão nova respondeu. |
-
 ## Pedido: checkout, acompanhamento, recibo (Fases 4, 5, 13, 14, 15.1)
 
 | Rota | Métodos | Quem | Idem. | O que faz |
@@ -192,3 +186,9 @@ contrato público: mudar um caminho quebra app instalado.
 | `/api/v1/support/answer.php` | GET | cliente |  | Tela 14.1 — "cada um abre um fluxo automático antes de chamar gente". |
 | `/api/v1/support/home.php` | GET | cliente |  | Tela 14.1 — a central de ajuda inteira numa chamada. |
 | `/api/v1/support/ticket.php` | POST | cliente |  | Tela 14.1 — abrir chamado, depois do fluxo automático. |
+
+## system
+
+| Rota | Métodos | Quem | Idem. | O que faz |
+|---|---|---|---|---|
+| `/api/v1/system/health.php` | GET | público |  | Saúde do sistema, pro monitoramento externo (UptimeRobot, Better Stack...) e pra quem acabou de pôr uma versão no ar conferir que ela respondeu. |

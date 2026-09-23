@@ -78,10 +78,10 @@ Todos são idempotentes: rodar duas vezes, ou atrasar, não duplica nada.
 
 ## Saúde
 
-`GET /api/v1/health.php` responde `200 {"status":"ok"}` com o banco e o
+`GET /api/v1/system/health.php` responde `200 {"status":"ok"}` com o banco e o
 pg_cron rodando, e `503 {"status":"degraded","failing":["db"|"cron"]}` se
-não. É o endereço do monitor externo e o que o deploy consulta depois de
-trocar a versão.
+não. É o endereço do monitor externo, e o primeiro endereço a abrir depois
+de um deploy.
 
 ## Tarefas de uma vez
 

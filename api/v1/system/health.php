@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../../lib/bootstrap.php';
+require_once __DIR__ . '/../../../lib/bootstrap.php';
 
 // Saúde do sistema, pro monitoramento externo (UptimeRobot, Better Stack...)
-// e pro deploy conferir que a versão nova respondeu.
+// e pra quem acabou de pôr uma versão no ar conferir que ela respondeu.
 //
-// GET /api/v1/health.php
+// GET /api/v1/system/health.php
 //   200 {status: ok}        API no ar, banco respondendo e pg_cron rodando;
 //   503 {status: degraded}  algo não responde -- e o motivo vem só como
 //                           nome curto (db, cron), sem detalhe interno.

@@ -48,7 +48,14 @@ find "$RELEASE/lib" "$RELEASE/api" "$RELEASE/bin" -name '*.php' -print0 \
   | xargs -0 -n1 -P4 php -l > /dev/null
 
 echo "deploy: build do front"
-( cd "$RELEASE/web" && npm ci --silent && npx vite build > /dev/null )
+# A prévia do link (og:image) precisa do endereço absoluto do site.
+PUBLIC_ORIGIN="$(sed -n 's/^PUBLIC_ORIGIN=//p' "$ENV_FILE" | tail -1)"
+case "$PUBLIC_ORIGIN" in
+  https://*) ;;
+  *) echo "deploy: aviso: PUBLIC_ORIGIN vazio ou sem https:// no .env -- a prévia do link sai sem imagem" >&2 ;;
+esac
+case "$PUBLIC_ORIGIN" in *'<'*) PUBLIC_ORIGIN='' ;; esac
+( cd "$RELEASE/web" && npm ci --silent && VITE_PUBLIC_ORIGIN="${PUBLIC_ORIGIN%/}" npx vite build > /dev/null )
 rm -rf "$RELEASE/web/node_modules"
 
 echo "deploy: trava de produção com o .env real"

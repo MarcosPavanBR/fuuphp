@@ -56,10 +56,15 @@ acerto de terça não sairia.
 
 ## 3. Nada avisava que o sistema caiu
 
-**O que foi feito:** `GET api/v1/health.php` responde 200 com banco e cron
+**O que foi feito:** `GET api/v1/system/health.php` responde 200 com banco e cron
 rodando, 503 com `failing: ["db"|"cron"]` se não, sem detalhe interno. É o
 endereço do monitor externo; qual monitor usar fica com o Marcos. O teste
 (`smoke_db_roles.sh`) consulta a rota com a API como `app_rw`.
+
+A rota nasceu em `api/v1/health.php` e passava nos testes, mas o Nginx de
+produção só entrega ao PHP o formato `api/v1/<área>/<ação>.php`: daria 404
+no ar. Foi pra `api/v1/system/health.php`, e o CI agora recusa qualquer rota
+fora desse formato (passo do Nginx).
 
 Junto, o GO_LIVE ganhou o endurecimento do Cloudflare: TLS 1.2 mínimo, Bot
 Fight Mode e rate limit por IP nas rotas de login e cadastro.

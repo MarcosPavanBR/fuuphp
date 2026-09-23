@@ -37,7 +37,7 @@ Os termos do FUUdelivery, na língua do negócio e no nome que têm no código.
 | **Recibo de baixa** | o papel assinado (HMAC) que comprova a baixa de espécie | `print_settlement_receipt()` |
 | **Repasse** | o pagamento semanal da plataforma à loja ou ao entregador | `payouts` |
 | **RLS** | a regra do banco que esconde de uma loja os pedidos das outras | migração 009, `db_scope_to_restaurant()` |
-| **Saúde (health)** | a rota que o monitor externo consulta: banco e pg_cron respondendo | `api/v1/health.php`, `cron_healthy()` |
+| **Saúde (health)** | a rota que o monitor externo consulta: banco e pg_cron respondendo | `api/v1/system/health.php`, `cron_healthy()` |
 | **Surge** | o valor a mais na corrida quando falta entregador | rodadas de despacho |
 | **Teto de cupom (da loja)** | quanto a loja pode ter comprometido em cupons criados por ela | `restaurants.coupon_budget_limit` |
 | **Teto de espécie** | quanto dinheiro vivo o entregador pode ter em mãos (R$ 300) | `platform_policies.cash_ceiling` |

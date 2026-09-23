@@ -1,5 +1,5 @@
 -- 035_cron_health.up.sql
--- "O pg_cron está rodando?" -- pra rota de saúde (api/v1/health.php) e pro
+-- "O pg_cron está rodando?" -- pra rota de saúde (api/v1/system/health.php) e pro
 -- bin/check_production.php.
 --
 -- Achado no go-live: com a configuração padrão, o pg_cron abre conexão TCP

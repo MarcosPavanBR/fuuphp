@@ -13,6 +13,7 @@ Por onde começar, conforme quem você é e o que precisa.
 | **pôr no ar** na VPS: servidor, credenciais reais, validação antes de abrir | [GO_LIVE.md](GO_LIVE.md) |
 | **escrever código** aqui: nomes, comentários, erros, dinheiro, commits | [CONVENTIONS.md](CONVENTIONS.md) |
 | saber **por que** algo é do jeito que é (o que o mock pedia, o que foi feito, o que ficou de fora) | [decisions/](decisions/README.md) |
+| usar a **marca**: logo, símbolo, slogan, cores, arquivos | [BRAND.md](BRAND.md) |
 | entender um **termo** (baixa, netting, KDS, só-online...) | [GLOSSARY.md](GLOSSARY.md) |
 
 ## Onde mais há documentação

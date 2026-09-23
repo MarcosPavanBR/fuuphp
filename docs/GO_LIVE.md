@@ -41,6 +41,7 @@ Chamada no fim de `lib/bootstrap.php`, vale pra toda rota e todo script de
 - `PUSH_MODE` não é `live` ou a chave VAPID não está legível;
 - o provedor de OTP não está configurado (ou é o `log` de desenvolvimento);
 - `ALLOWED_ORIGIN` ausente (vazia é válido: mesmo domínio, sem CORS);
+- `PUBLIC_ORIGIN` ainda com o marcador do modelo (é o endereço do site, usado na prévia do link);
 - as pastas de arquivo não existem, não são graváveis ou ficam dentro do projeto;
 - qualquer valor ainda com o marcador `<...>` do modelo.
 
@@ -112,7 +113,7 @@ failed`, em silêncio: Pix vencido não é recusado, loja não abre nem fecha
 sozinha, o repasse de terça não sai. Com os background workers, as tarefas
 rodam dentro do próprio servidor, sem conexão nem senha. `max_worker_processes`
 precisa de folga pra eles. Conferido neste projeto: sem a linha, 100% de falha;
-com ela, sucesso. A rota `api/v1/health.php` e o `bin/check_production.php`
+com ela, sucesso. A rota `api/v1/system/health.php` e o `bin/check_production.php`
 acusam se o cron parar.
 
 O relógio da VPS fica em UTC (padrão). `cron.timezone` faz as tarefas do
@@ -218,7 +219,7 @@ forjado. No firewall da VPS, deixe aberto só SSH e 80/443.
 
 ### Monitoramento: saber que caiu antes do cliente
 
-`GET https://<dominio>/api/v1/health.php` responde `200 {"status":"ok"}` com
+`GET https://<dominio>/api/v1/system/health.php` responde `200 {"status":"ok"}` com
 a API, o banco e o pg_cron funcionando. Quando algo para, responde `503` com o
 que parou (`db` ou `cron`). Com a trava de produção reprovada, também dá 503.
 
@@ -397,8 +398,8 @@ verdade:
 - [ ] O push chega no Android e no iPhone (PWA instalado).
 - [ ] Fidelidade: um pedido entregue dá pontos; o resgate vira um cupom pessoal que só o dono usa; o estorno tira os pontos.
 - [ ] O acompanhamento ao vivo atualiza sem recarregar (SSE pelo Cloudflare).
-- [ ] O cron roda (`/var/log/fuuphp/*.log` mexendo) e o pg_cron também: `/api/v1/health.php` dá `200 ok`, e `SELECT status, return_message FROM cron.job_run_details ORDER BY start_time DESC LIMIT 5` mostra `succeeded`, não `connection failed`.
-- [ ] O monitor externo está apontado pra `/api/v1/health.php` e o alerta chega no celular (teste parando o PHP-FPM por 1 minuto).
+- [ ] O cron roda (`/var/log/fuuphp/*.log` mexendo) e o pg_cron também: `/api/v1/system/health.php` dá `200 ok`, e `SELECT status, return_message FROM cron.job_run_details ORDER BY start_time DESC LIMIT 5` mostra `succeeded`, não `connection failed`.
+- [ ] O monitor externo está apontado pra `/api/v1/system/health.php` e o alerta chega no celular (teste parando o PHP-FPM por 1 minuto).
 - [ ] Cadastro de loja: uma loja de teste se cadastra por `/painel.html`, aparece "em análise", o admin aprova, e ela passa a aparecer pros clientes.
 - [ ] `/termos.html` e `/privacidade.html` estão com os dados da empresa preenchidos e revisados por advogado.
 - [ ] O backup da noite existe, a restauração num banco de teste funciona e a cópia externa chegou.

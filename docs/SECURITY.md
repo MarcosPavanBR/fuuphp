@@ -163,7 +163,7 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
 - **Cloudflare** na frente (docs/GO_LIVE.md): TLS 1.2 no mínimo, Bot Fight
   Mode e uma regra de rate limit por IP nas rotas de login e de cadastro de
   loja. É a proteção de volume que o PHP, sozinho, não dá.
-- **Saúde** (`api/v1/health.php`): responde 503 se o banco ou o pg_cron
+- **Saúde** (`api/v1/system/health.php`): responde 503 se o banco ou o pg_cron
   pararem, pro monitor externo avisar antes do cliente. A resposta diz só
   `db` ou `cron`, sem detalhe interno.
 - **Erros** viram `{code, message, trace_id}` sem stack trace. O detalhe fica

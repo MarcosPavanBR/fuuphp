@@ -57,8 +57,8 @@ DATABASE_URL="$API_DATABASE_URL" JWT_SECRET=ci-test-secret APP_ENV=development \
   php -S 127.0.0.1:8141 -t "$ROOT" >/tmp/smoke-db-roles-server.log 2>&1 &
 SERVER_PID=$!
 trap '[ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2>/dev/null || true' EXIT
-for i in $(seq 1 20); do curl -s -o /dev/null http://127.0.0.1:8141/api/v1/health.php && break; sleep 0.2; done
-HEALTH=$(curl -s -w ' %{http_code}' http://127.0.0.1:8141/api/v1/health.php)
+for i in $(seq 1 20); do curl -s -o /dev/null http://127.0.0.1:8141/api/v1/system/health.php && break; sleep 0.2; done
+HEALTH=$(curl -s -w ' %{http_code}' http://127.0.0.1:8141/api/v1/system/health.php)
 [ "${HEALTH##* }" = "200" ] && [ "$(echo "${HEALTH% *}" | jq -r '.status')" = "ok" ] || fail "health não respondeu ok: $HEALTH"
 
 echo "OK: papéis do banco e RLS como a API supõe"

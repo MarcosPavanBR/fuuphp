@@ -68,6 +68,7 @@ Começo rápido: [docs/README.md](docs/README.md) diz qual documento ler pra cad
 | [docs/GO_LIVE.md](docs/GO_LIVE.md) | do simulado ao real: VPS, credenciais, validação antes de abrir |
 | [docs/MANUAL.md](docs/MANUAL.md) | como cada público usa o sistema: cliente, loja, entregador, plataforma |
 | [docs/SECURITY.md](docs/SECURITY.md) | o que protege o sistema, onde, e com qual teste |
+| [docs/BRAND.md](docs/BRAND.md) | a marca: logo, símbolo, slogan, arquivos e regras de uso |
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | os termos do negócio e o nome deles no código |
 | [docs/decisions/](docs/decisions/README.md) | as decisões de cada módulo: o que o mock pedia, o que foi feito, o que foi simplificado |
 
@@ -122,7 +123,7 @@ real ou de decisão do dono do produto:
 6. **Dados da empresa nos termos e no aviso de privacidade** (os trechos entre
    colchetes em `web/public/termos.html` e `privacidade.html`) e a revisão de
    um advogado.
-7. **Um monitor externo** apontado pra `api/v1/health.php` (UptimeRobot,
+7. **Um monitor externo** apontado pra `api/v1/system/health.php` (UptimeRobot,
    Better Stack ou outro, à escolha).
 
 Já decidido: o **código de login vai por SMS pela Twilio**; o **Mercado Pago usa token único da plataforma** (a loja

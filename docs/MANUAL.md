@@ -196,7 +196,7 @@ admin é criado no servidor com `bin/bootstrap_admin.php`
   pagar os repasses).
 - **Toda semana:** conferir o backup (servidor) e os logs
   ([OPERATIONS](OPERATIONS.md)).
-- **Sempre:** o monitor externo avisa se `api/v1/health.php` parar de
+- **Sempre:** o monitor externo avisa se `api/v1/system/health.php` parar de
   responder `ok` ([GO_LIVE](GO_LIVE.md#monitoramento-saber-que-caiu-antes-do-cliente)).
 
 Tudo que o admin muda (políticas, tetos, liberações de aparelho, decisões de

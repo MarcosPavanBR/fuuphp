@@ -326,6 +326,10 @@ jobs:
       - name: "Arquivos da VPS (deploy/): scripts sem erro de sintaxe e Nginx aceito pelo nginx -t"
         run: |
           for f in deploy/*.sh deploy/backup/*.sh db/migrate.sh; do bash -n "$f"; done
+          # O Nginx só entrega ao PHP ^/api/v1/<área>/<ação>.php$: rota fora
+          # desse formato passa no php -S dos testes e dá 404 em produção.
+          fora=$(find api -name '*.php' | grep -vE '^api/v1/[a-z_]+/[a-z_]+\.php$' || true)
+          [ -z "$fora" ] || { echo "rotas que o Nginx não serve: $fora"; exit 1; }
           sudo apt-get install -y -qq nginx-core > /dev/null
           D="$RUNNER_TEMP/ngx" && mkdir -p "$D"
           openssl req -x509 -newkey rsa:2048 -nodes -keyout "$D/k.key" -out "$D/c.pem" -days 1 -subj /CN=ci 2> /dev/null
