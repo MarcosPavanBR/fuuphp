@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 6.1/14.3 — cadastra um endereço do cliente logado. CEP de 8 dígitos,
+// UF de 2 letras e coordenada obrigatórias: é a coordenada que o frete e a
+// área de entrega usam (lib/ordering/delivery.php).
+
 require_method('POST');
 $claims = require_auth();
 $body = read_json_body();

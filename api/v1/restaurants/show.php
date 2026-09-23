@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 3.1 — os dados públicos de uma loja: horário, tempo de preparo em
+// vigor e as formas de pagamento que ela aceita agora.
+
 require_method('GET');
 $id = $_GET['id'] ?? '';
 if (!is_string($id) || $id === '') {

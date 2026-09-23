@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 2.5 — o perfil do cliente: dados da conta (CPF só mascarado) e os
+// números do topo (pedidos, cupons; pontos ainda sem tabela).
+
 require_method('GET');
 $claims = require_auth();
 

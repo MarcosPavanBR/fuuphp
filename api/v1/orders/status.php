@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Pede uma mudança de status do pedido. Aqui só se decide QUEM pode pedir
+// cada transição (loja: preparo, pronto, saiu, recusar, cancelar e -- só
+// na retirada no balcão -- entregue; cliente: cancelar); se a transição é válida, quem decide é `advance_order()` no
+// banco -- o único caminho que muda orders.status.
+
 require_method('POST');
 $claims = require_auth();
 $body = read_json_body();

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 6.1 — apaga um endereço do cliente logado. Endereço já usado em
+// pedido não apaga (409 address_in_use): o pedido guarda pra onde foi, e a
+// chave estrangeira impede que o histórico perca o destino.
+
 require_method('POST');
 $claims = require_auth();
 $body = read_json_body();

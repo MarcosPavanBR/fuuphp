@@ -4,17 +4,15 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
-/*
- * POST /v1/push/subscribe.php — liga, ajusta ou desliga o push deste aparelho.
- *
- * Corpo: { "subscription": PushSubscription.toJSON(), "prefs": {status,
- * payment, promotion}, "action": "subscribe" | "prefs" | "unsubscribe" }.
- *
- * As três preferências são as da tela 6.3 ("push separado por tipo, status
- * × promoção, pro usuário não desligar tudo e perder o aviso da aprovação"),
- * e moram na ASSINATURA, não no usuário: o celular pode querer promoção e o
- * computador do trabalho não.
- */
+// POST /v1/push/subscribe.php — liga, ajusta ou desliga o push deste aparelho.
+//
+// Corpo: { "subscription": PushSubscription.toJSON(), "prefs": {status,
+// payment, promotion}, "action": "subscribe" | "prefs" | "unsubscribe" }.
+//
+// As três preferências são as da tela 6.3 ("push separado por tipo, status
+// × promoção, pro usuário não desligar tudo e perder o aviso da aprovação"),
+// e moram na ASSINATURA, não no usuário: o celular pode querer promoção e o
+// computador do trabalho não.
 
 require_method('POST');
 $claims = require_auth();

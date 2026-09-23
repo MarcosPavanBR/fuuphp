@@ -4,18 +4,16 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
-/*
- * POST /v1/couriers/position.php — onde o entregador está agora.
- *
- * Especificação, Parte II §7: "A posição do entregador é escrita a cada
- * 15 s, então não pode ficar junto do histórico: vive em courier_positions,
- * tabela UNLOGGED com uma linha por entregador (UPSERT, sem histórico)."
- *
- * É esta posição que decide quem enxerga uma corrida em cada rodada do
- * despacho (lib/dispatch/dispatch.php): o raio cresce a partir da loja, e só entra
- * quem está dentro dele. Só vale com turno aberto -- fora do turno não há
- * motivo pra saber onde a pessoa está.
- */
+// POST /v1/couriers/position.php — onde o entregador está agora.
+//
+// Especificação, Parte II §7: "A posição do entregador é escrita a cada
+// 15 s, então não pode ficar junto do histórico: vive em courier_positions,
+// tabela UNLOGGED com uma linha por entregador (UPSERT, sem histórico)."
+//
+// É esta posição que decide quem enxerga uma corrida em cada rodada do
+// despacho (lib/dispatch/dispatch.php): o raio cresce a partir da loja, e só entra
+// quem está dentro dele. Só vale com turno aberto -- fora do turno não há
+// motivo pra saber onde a pessoa está.
 
 require_method('POST');
 $claims = require_auth();

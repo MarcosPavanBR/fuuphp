@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 3.3 — tira um item do carrinho do próprio cliente.
+
 require_method('POST');
 $claims = require_auth();
 $body = read_json_body();

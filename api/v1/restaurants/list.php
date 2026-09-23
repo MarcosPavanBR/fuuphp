@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 2.1 — lojas aprovadas de uma cidade, abertas por padrão, com
+// distância, nota, frete e tempo quando o app manda a posição (lat/lng).
+
 require_method('GET');
 
 $cityIbge = $_GET['city_ibge_code'] ?? null;

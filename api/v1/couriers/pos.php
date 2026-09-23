@@ -4,28 +4,26 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
-/*
- * POST|GET /v1/couriers/pos.php — maquininha no app do entregador.
- *
- * Telas 10.6 ("devolução da maquininha") e 9.6 (a venda que alimenta a
- * conciliação), com as duas donas possíveis da máquina:
- *
- *   MÁQUINA DA LOJA (o padrão). "O dinheiro da maquininha cai direto na
- *   conta da loja — você não deve nada por essas vendas. Só o equipamento e
- *   os NSUs." Venda NÃO lança `courier_cash`: é conferência, não dívida.
- *
- *   MÁQUINA DO PRÓPRIO ENTREGADOR (só se `allow_courier_own_pos` na
- *   política). "O valor cai na conta dele, então vira dívida com a loja e
- *   segue o mesmo fluxo da espécie." Venda LANÇA `courier_cash` -- e daí em
- *   diante é baixa de caixa como dinheiro vivo (tela 9.3).
- *
- * Ações:
- *   GET                 → máquina em mãos, prazo, vendas, máquinas livres
- *   POST take           → retira uma máquina da loja (registra posse)
- *   POST register_own   → cadastra a própria máquina
- *   POST sale           → informa NSU e valor de uma venda (ou completa o NSU)
- *   POST return         → "Devolvi a maquininha"; a loja confirma depois
- */
+// POST|GET /v1/couriers/pos.php — maquininha no app do entregador.
+//
+// Telas 10.6 ("devolução da maquininha") e 9.6 (a venda que alimenta a
+// conciliação), com as duas donas possíveis da máquina:
+//
+//   MÁQUINA DA LOJA (o padrão). "O dinheiro da maquininha cai direto na
+//   conta da loja — você não deve nada por essas vendas. Só o equipamento e
+//   os NSUs." Venda NÃO lança `courier_cash`: é conferência, não dívida.
+//
+//   MÁQUINA DO PRÓPRIO ENTREGADOR (só se `allow_courier_own_pos` na
+//   política). "O valor cai na conta dele, então vira dívida com a loja e
+//   segue o mesmo fluxo da espécie." Venda LANÇA `courier_cash` -- e daí em
+//   diante é baixa de caixa como dinheiro vivo (tela 9.3).
+//
+// Ações:
+//   GET                 → máquina em mãos, prazo, vendas, máquinas livres
+//   POST take           → retira uma máquina da loja (registra posse)
+//   POST register_own   → cadastra a própria máquina
+//   POST sale           → informa NSU e valor de uma venda (ou completa o NSU)
+//   POST return         → "Devolvi a maquininha"; a loja confirma depois
 
 $claims = require_auth();
 $courierId = require_courier($claims);

@@ -70,44 +70,74 @@ function record_coupon_ledger(PDO $pdo, array $coupon, array $order, float $amou
  * tabela de segmentação, e não precisa haver: "sem pedir há 15 dias" é uma
  * consulta, não um cadastro.
  */
-function coupon_audience_size(PDO $pdo, string $audience, ?string $restaurantId = null): int
+/**
+ * A condição SQL (sobre `users u`) de quem pertence ao público de uma
+ * campanha. UMA definição só, usada pra contar o público na projeção (tela
+ * 15.3) e pra decidir se a pessoa pode usar o cupom (resgate e checkout):
+ * a campanha que promete "primeiro pedido" não pode contar um público e
+ * aceitar outro.
+ *
+ * "Pedido" aqui é pedido que andou (nem carrinho nem pagamento pendente).
+ * Com loja (`:rid`), vale só o histórico naquela loja.
+ */
+function coupon_audience_condition(string $audience, bool $scoped): string
 {
-    $scope = $restaurantId === null ? '' : ' AND o.restaurant_id = :rid';
-    $params = $restaurantId === null ? [] : ['rid' => $restaurantId];
+    $scope = $scoped ? ' AND o.restaurant_id = :rid' : '';
+    $placed = "SELECT 1 FROM orders o WHERE o.user_id = u.id AND o.status NOT IN ('cart','pending_payment'){$scope}";
 
-    $sql = match ($audience) {
-        'all' => "SELECT count(*) FROM users WHERE role = 'customer'",
-        'first_order' => "SELECT count(*) FROM users u
-                           WHERE u.role = 'customer'
-                             AND NOT EXISTS (
-                               SELECT 1 FROM orders o
-                                WHERE o.user_id = u.id
-                                  AND o.status NOT IN ('cart','pending_payment'){$scope}
-                             )",
-        'inactive_15d', 'inactive_30d' => "SELECT count(*) FROM users u
-                           WHERE u.role = 'customer'
-                             AND EXISTS (
-                               SELECT 1 FROM orders o
-                                WHERE o.user_id = u.id
-                                  AND o.status NOT IN ('cart','pending_payment'){$scope}
-                             )
-                             AND NOT EXISTS (
-                               SELECT 1 FROM orders o
-                                WHERE o.user_id = u.id
-                                  AND o.status NOT IN ('cart','pending_payment')
-                                  AND o.created_at >= now() - make_interval(days => :days){$scope}
-                             )",
-        default => 'SELECT 0',
+    return match ($audience) {
+        'all' => 'true',
+        'first_order' => "NOT EXISTS ({$placed})",
+        'inactive_15d', 'inactive_30d' => "EXISTS ({$placed})
+            AND NOT EXISTS ({$placed} AND o.created_at >= now() - make_interval(days => :days))",
+        default => 'false',
     };
+}
 
-    if (str_contains($sql, ':days')) {
+function coupon_audience_params(string $audience, ?string $restaurantId): array
+{
+    $params = $restaurantId === null ? [] : ['rid' => $restaurantId];
+    if (str_starts_with($audience, 'inactive_')) {
         $params['days'] = $audience === 'inactive_15d' ? 15 : 30;
     }
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
+    return $params;
+}
+
+/** Tamanho do público (projeção da tela 15.3). */
+function coupon_audience_size(PDO $pdo, string $audience, ?string $restaurantId = null): int
+{
+    $stmt = $pdo->prepare(
+        "SELECT count(*) FROM users u WHERE u.role = 'customer' AND "
+        . coupon_audience_condition($audience, $restaurantId !== null)
+    );
+    $stmt->execute(coupon_audience_params($audience, $restaurantId));
 
     return (int) $stmt->fetchColumn();
+}
+
+/** Esta pessoa está no público da campanha? (resgate e checkout) */
+function coupon_audience_includes(PDO $pdo, array $coupon, string $userId): bool
+{
+    $audience = (string) $coupon['audience'];
+    $restaurantId = $coupon['restaurant_id'] ?? null;
+    $stmt = $pdo->prepare(
+        'SELECT 1 FROM users u WHERE u.id = :uid AND ' . coupon_audience_condition($audience, $restaurantId !== null)
+    );
+    $stmt->execute(['uid' => $userId] + coupon_audience_params($audience, $restaurantId));
+
+    return $stmt->fetchColumn() !== false;
+}
+
+/** A frase de recusa, no idioma da campanha. */
+function coupon_audience_message(string $audience): string
+{
+    return match ($audience) {
+        'first_order' => 'Esse cupom é só pra quem ainda não fez pedido.',
+        'inactive_15d' => 'Esse cupom é pra quem não pede há mais de 15 dias.',
+        'inactive_30d' => 'Esse cupom é pra quem não pede há mais de 30 dias.',
+        default => 'Esse cupom não vale pra sua conta.',
+    };
 }
 
 /**

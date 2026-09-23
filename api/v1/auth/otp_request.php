@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 10.1/10.2 — pede o código de 6 dígitos (OTP) por telefone ou e-mail,
+// pra entrar (`login`), criar conta (`signup`) ou confirmar um telefone
+// (`phone_verify`). Em desenvolvimento o código volta em `dev_code`; em
+// produção só vai pelo canal.
+
 require_method('POST');
 $body = read_json_body();
 

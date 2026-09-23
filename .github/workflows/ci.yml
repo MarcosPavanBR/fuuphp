@@ -82,6 +82,15 @@ jobs:
         run: |
           find lib api bin -name "*.php" -print0 | xargs -0 -n1 php -l
 
+      - name: "Documentação gerada em dia (catálogo da API e mapa do banco)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+        run: |
+          php bin/generate_api_catalog.php --check
+          php bin/generate_api_catalog.php --missing || { echo "rota sem comentário de cabeçalho (acima)"; exit 1; }
+          php bin/generate_db_map.php --check
+
       - name: Smoke test -- módulo identity
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery

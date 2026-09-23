@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 10.7 / 8.1 — login de parceiro: loja com CNPJ + senha, entregador com
+// CPF + código de acesso. Devolve o token com o papel e o vínculo
+// (restaurant_id / courier_id) que os guardas de cada rota conferem.
+
 require_method('POST');
 $body = read_json_body();
 

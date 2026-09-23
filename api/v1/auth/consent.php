@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 10.3 — registra o aceite de um termo (termos, privacidade, marketing,
+// localização) com versão e IP. Termos + privacidade marcam a conta como
+// `lgpd_accepted_at`; marketing e localização ficam como consentimentos
+// separados e revogáveis.
+
 require_method('POST');
 $claims = require_auth();
 $body = read_json_body();

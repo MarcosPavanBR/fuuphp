@@ -1,4 +1,7 @@
 <script>
+  // A moldura de celular das telas do mock: largura máxima de 430 px,
+  // centralizada, fundo papel. Em celular de verdade ocupa a tela toda; no
+  // computador, o app aparece do tamanho que foi desenhado.
   let { children } = $props();
 </script>
 

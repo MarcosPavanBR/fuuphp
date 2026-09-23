@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 10.2 — confere o código OTP e devolve access token (15 min) e refresh
+// token (30 dias, com rotação). Código tem prazo e limite de tentativas; conta
+// bloqueada ou excluída (LGPD, migração 026) não entra.
+
 require_method('POST');
 $body = read_json_body();
 

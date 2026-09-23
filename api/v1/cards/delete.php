@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 6.2 — remove um cartão salvo, aqui e no Mercado Pago (Customer/Card).
+
 require_method('POST');
 $claims = require_auth();
 $body = read_json_body();

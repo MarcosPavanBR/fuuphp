@@ -1,6 +1,9 @@
 <?php
 declare(strict_types=1);
 
+// UUID v4 com random_bytes (fonte criptográfica). Usado onde o id é criado
+// no PHP antes de existir no banco; o resto usa gen_random_uuid() do Postgres.
+
 function uuid_v4(): string
 {
     $data = random_bytes(16);

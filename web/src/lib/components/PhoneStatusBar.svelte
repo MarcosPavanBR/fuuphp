@@ -1,4 +1,7 @@
 <script>
+  // A barra de status "9:41" que o mock desenha no topo das telas. É
+  // decoração do mock (o celular real já tem a sua); aparece só nas telas
+  // que a desenham, como o splash e o onboarding.
   let { dark = false } = $props();
 </script>
 

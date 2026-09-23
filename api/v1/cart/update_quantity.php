@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 3.3 — muda a quantidade de um item do carrinho (mínimo 1; pra tirar,
+// remove_item.php) e recalcula o subtotal.
+
 require_method('POST');
 $claims = require_auth();
 $body = read_json_body();

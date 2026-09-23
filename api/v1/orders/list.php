@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 2.4 — os pedidos do cliente logado (sem carrinhos), mais novos
+// primeiro, com loja, total, forma de pagamento e quantidade de itens.
+
 require_method('GET');
 $claims = require_auth();
 

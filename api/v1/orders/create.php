@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Checkout em um passo (lista de itens no corpo), anterior ao carrinho
+// incremental: cria o pedido já em 'pending_payment'. O app usa
+// cart/* + orders/checkout.php; esta rota fica pra integrações e testes.
+
 require_method('POST');
 $claims = require_auth();
 $body = read_json_body();

@@ -1,6 +1,10 @@
 <?php
 declare(strict_types=1);
 
+// Validação de dado brasileiro e de contato: CPF e CNPJ pelos dígitos
+// verificadores, telefone com DDD, e-mail. Tudo recebe só os dígitos
+// (`only_digits`) -- máscara é coisa da tela, não do dado.
+
 function only_digits(string $s): string
 {
     return preg_replace('/\D+/', '', $s) ?? '';

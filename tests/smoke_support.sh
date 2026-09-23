@@ -135,6 +135,48 @@ curl -s -X POST "$BASE/cart/add_item.php" -H "Content-Type: application/json" "$
    -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"code\":\"${CUPOM}\"}" | jq -r '.code')" = "coupon_already_used" ] \
   || fail "cupom foi usado duas vezes pelo mesmo CPF"
 
+echo "== público da campanha vale no resgate: 'primeiro pedido' barra quem já pediu =="
+CUPOM_NOVO="NOVO$(( RANDOM % 900000 + 100000 ))"
+CUPOM_FRETE="FRETE$(( RANDOM % 900000 + 100000 ))"
+psql_run <<SQL
+INSERT INTO coupons (code, kind, value, min_order, restaurant_id, audience, payer, budget_cap, starts_at, created_by) VALUES
+  ('${CUPOM_NOVO}',  'fixed',         5.00, 0, NULL, 'first_order', 'platform', 1000.00, now() - interval '1 day', '${ADMIN_ID}'),
+  ('${CUPOM_FRETE}', 'free_delivery', 0.00, 0, NULL, 'all',         'platform', 1000.00, now() - interval '1 day', '${ADMIN_ID}');
+-- Frete de R\$ 7 só nesta loja (sem coordenada, o frete é a tarifa base).
+INSERT INTO policy_overrides (scope, scope_id, patch, reason, created_by)
+VALUES ('restaurant', '${RESTAURANT_ID}', '{"delivery_base_fee": 7}', 'smoke: frete pro cupom de frete grátis', '${ADMIN_ID}');
+SQL
+# O primeiro pedido dela só "conta" depois de pago (pendente de pagamento não é pedido feito).
+curl -s -X POST "$BASE/payments/pay.php" -H "Content-Type: application/json" -H "X-Idempotency-Key: $(php -r 'echo bin2hex(random_bytes(16));' | sed -E 's/(.{8})(.{4})(.{4})(.{4})(.{12})/\1-\2-\3-\4-\5/')" "${AUTH[@]}" \
+  -d "{\"order_id\":${ORDER_ID}}" >/dev/null
+NOT_FIRST=$(curl -s -X POST "$BASE/cart/apply_coupon.php" -H "Content-Type: application/json" "${AUTH[@]}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"code\":\"${CUPOM_NOVO}\"}")
+[ "$(echo "$NOT_FIRST" | jq -r '.code')" = "coupon_audience" ] || fail "cupom de primeiro pedido aceito pra quem já pediu: $NOT_FIRST"
+
+PHONE2="119$(( RANDOM % 90000000 + 10000000 ))"
+CODE2=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
+  -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE2\",\"full_name\":\"Cliente Novo\"}" | jq -er '.dev_code')
+AUTH2=(-H "Authorization: Bearer $(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \
+  -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE2\",\"code\":\"$CODE2\"}" | jq -er '.access_token')")
+curl -s -X POST "$BASE/profile/update.php" -H "Content-Type: application/json" "${AUTH2[@]}" -d "{\"cpf\":\"$(gen_cpf)\"}" >/dev/null
+curl -s -X POST "$BASE/cart/add_item.php" -H "Content-Type: application/json" "${AUTH2[@]}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"menu_item_id\":${ITEM_ID},\"quantity\":1}" >/dev/null
+FIRST=$(curl -s -X POST "$BASE/cart/apply_coupon.php" -H "Content-Type: application/json" "${AUTH2[@]}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"code\":\"${CUPOM_NOVO}\"}")
+[ "$(echo "$FIRST" | jq -r '.coupon.discount')" = "5" ] || fail "cupom de primeiro pedido recusado pra quem nunca pediu: $FIRST"
+
+echo "== frete grátis desconta o frete calculado no checkout =="
+FREE=$(curl -s -X POST "$BASE/cart/apply_coupon.php" -H "Content-Type: application/json" "${AUTH[@]}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"code\":\"${CUPOM_FRETE}\"}")
+[ "$(echo "$FREE" | jq -r '.coupon.applies_at')" = "checkout" ] || fail "cupom de frete não avisou que vale no checkout: $FREE"
+FREE_ORDER=$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: application/json" "${AUTH[@]}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR_ID},\"payment_method\":\"cash\",\"coupon_code\":\"${CUPOM_FRETE}\"}")
+[ "$(echo "$FREE_ORDER" | jq -r '.order.delivery_fee')" = "7.00" ] || fail "frete da loja não veio da política: $FREE_ORDER"
+[ "$(echo "$FREE_ORDER" | jq -r '.order.discount')" = "7.00" ] || fail "frete grátis não descontou o frete: $FREE_ORDER"
+[ "$(echo "$FREE_ORDER" | jq -r '.order.total')" = "50.00" ] || fail "total com frete grátis errado: $FREE_ORDER"
+[ "$(psql "$DATABASE_URL" -tAc "SELECT amount FROM coupon_redemptions r JOIN coupons c ON c.id = r.coupon_id WHERE c.code='${CUPOM_FRETE}'")" = "7.00" ] \
+  || fail "o resgate do frete grátis não registrou o valor"
+
 echo "== chat: cliente manda, loja responde, evento do sistema entra na mesma linha =="
 curl -s -X POST "$BASE/payments/pay.php" -H "Content-Type: application/json" \
   -H "X-Idempotency-Key: $(gen_uuid)" "${AUTH[@]}" -d "{\"order_id\":${ORDER_ID}}" >/dev/null

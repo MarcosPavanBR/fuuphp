@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 5 — um pedido com itens, linha do tempo (order_events) e a avaliação,
+// se houver. Cliente vê só o próprio; loja, só os da loja.
+
 require_method('GET');
 $claims = require_auth();
 

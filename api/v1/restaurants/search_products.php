@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 2.2 — busca de produto por nome nas lojas abertas da cidade (índice
+// trigram), cada resultado com nota, frete e tempo da loja pros filtros.
+
 require_method('GET');
 
 $cityIbge = $_GET['city_ibge_code'] ?? null;

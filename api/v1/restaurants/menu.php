@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 3.1 — o cardápio público de uma loja, com variações; item esgotado vem
+// marcado, não escondido.
+
 require_method('GET');
 $restaurantId = $_GET['id'] ?? '';
 if (!is_string($restaurantId) || $restaurantId === '') {

@@ -4,18 +4,16 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
-/*
- * POST /v1/push/pending.php — o que o service worker mostra ao ser acordado.
- *
- * O push chega sem conteúdo (ver lib/messaging/push.php). O service worker não tem o
- * token da sessão -- ele roda com o app fechado --, então a credencial é o
- * ENDPOINT da própria assinatura: um endereço longo e único que só o
- * navegador daquele aparelho conhece. Vai no corpo (POST), não na URL, pra
- * não parar em log de servidor nem de proxy.
- *
- * Devolve as notificações ainda não entregues da pessoa dona da assinatura
- * (no máximo 5, as mais novas) e as marca como entregues.
- */
+// POST /v1/push/pending.php — o que o service worker mostra ao ser acordado.
+//
+// O push chega sem conteúdo (ver lib/messaging/push.php). O service worker não tem o
+// token da sessão -- ele roda com o app fechado --, então a credencial é o
+// ENDPOINT da própria assinatura: um endereço longo e único que só o
+// navegador daquele aparelho conhece. Vai no corpo (POST), não na URL, pra
+// não parar em log de servidor nem de proxy.
+//
+// Devolve as notificações ainda não entregues da pessoa dona da assinatura
+// (no máximo 5, as mais novas) e as marca como entregues.
 
 require_method('POST');
 $body = read_json_body();

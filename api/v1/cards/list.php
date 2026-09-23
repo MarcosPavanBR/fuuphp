@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 6.2 — os cartões salvos do cliente (bandeira, final, validade; nunca
+// o número): referência tokenizada no Mercado Pago, o padrão primeiro.
+
 require_method('GET');
 $claims = require_auth();
 

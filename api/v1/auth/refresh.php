@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Troca um refresh token válido por um par novo (rotação: o antigo deixa de
+// valer). Sessão revogada -- logout, conta excluída -- responde 401.
+
 require_method('POST');
 $body = read_json_body();
 

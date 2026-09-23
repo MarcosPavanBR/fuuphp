@@ -192,35 +192,59 @@ try {
     // dinheiro de campanha. A UNIQUE (coupon_id, cpf) e o CHECK
     // `within_budget` fazem o resto -- se o orçamento estourou entre aplicar
     // e fechar, o banco recusa e o checkout inteiro volta atrás.
-    if ((float) $cart['discount'] > 0 && $couponCode !== null) {
+    // O desconto do pedido, que o cupom pode ainda mudar abaixo.
+    $discount = (float) $cart['discount'];
+
+    if ($couponCode !== null) {
         $couponStmt = $pdo->prepare('SELECT * FROM coupons WHERE code = :code FOR UPDATE');
         $couponStmt->execute(['code' => $couponCode]);
         $coupon = $couponStmt->fetch();
         if ($coupon === false) {
             throw new RuntimeException('cupom sumiu entre aplicar e fechar o pedido');
         }
-        $pdo->prepare(
-            'INSERT INTO coupon_redemptions (coupon_id, order_id, cpf, amount)
-             VALUES (:coupon_id, :order_id, :cpf, :amount)'
-        )->execute([
-            'coupon_id' => $coupon['id'],
-            'order_id' => $cart['id'],
-            'cpf' => $customerCpf,
-            'amount' => $cart['discount'],
-        ]);
-        $pdo->prepare('UPDATE coupons SET spent = spent + :amount WHERE id = :id')
-            ->execute(['amount' => $cart['discount'], 'id' => $coupon['id']]);
 
-        // Tela 15.3 — "o desconto entra como linha própria no pedido E no
-        // ledger, com a conta de quem pagou". Sem isto, `coupons.payer` era
-        // um rótulo bonito que não movia dinheiro nenhum.
-        record_coupon_ledger($pdo, $coupon, $cart, (float) $cart['discount'], (string) $claims['sub']);
+        // O público da campanha é conferido de novo no fechamento: entre
+        // aplicar e fechar, a pessoa pode ter feito outro pedido e deixado de
+        // ser "primeiro pedido".
+        if (!coupon_audience_includes($pdo, $coupon, (string) $claims['sub'])) {
+            $pdo->rollBack();
+            error_response(409, 'coupon_audience', coupon_audience_message((string) $coupon['audience']));
+        }
 
-        // "Estourado, o cupom desativa sozinho -- nada de descobrir no
-        // fechamento." O CHECK within_budget impede passar do teto; isto
-        // aqui é o que faz o cupom sumir da vitrine ao ENCOSTAR nele.
-        $pdo->prepare('UPDATE coupons SET active = false WHERE id = :id AND spent >= budget_cap')
-            ->execute(['id' => $coupon['id']]);
+        // Frete grátis só tem valor agora: no carrinho ainda não há endereço,
+        // então o frete era zero e o desconto também. Aqui o frete acabou de
+        // ser calculado ($deliveryFee), e é ele que o cupom paga.
+        $couponAmount = $coupon['kind'] === 'free_delivery' ? $deliveryFee : $discount;
+        if ($coupon['kind'] === 'free_delivery' && $couponAmount > 0) {
+            $discount = round($discount + $couponAmount, 2);
+            $pdo->prepare('UPDATE orders SET discount = :d WHERE id = :id')
+                ->execute(['d' => $discount, 'id' => $cart['id']]);
+        }
+
+        if ($couponAmount > 0) {
+            $pdo->prepare(
+                'INSERT INTO coupon_redemptions (coupon_id, order_id, cpf, amount)
+                 VALUES (:coupon_id, :order_id, :cpf, :amount)'
+            )->execute([
+                'coupon_id' => $coupon['id'],
+                'order_id' => $cart['id'],
+                'cpf' => $customerCpf,
+                'amount' => $couponAmount,
+            ]);
+            $pdo->prepare('UPDATE coupons SET spent = spent + :amount WHERE id = :id')
+                ->execute(['amount' => $couponAmount, 'id' => $coupon['id']]);
+
+            // Tela 15.3 — "o desconto entra como linha própria no pedido E no
+            // ledger, com a conta de quem pagou". Sem isto, `coupons.payer` era
+            // um rótulo bonito que não movia dinheiro nenhum.
+            record_coupon_ledger($pdo, $coupon, $cart, $couponAmount, (string) $claims['sub']);
+
+            // "Estourado, o cupom desativa sozinho -- nada de descobrir no
+            // fechamento." O CHECK within_budget impede passar do teto; isto
+            // aqui é o que faz o cupom sumir da vitrine ao ENCOSTAR nele.
+            $pdo->prepare('UPDATE coupons SET active = false WHERE id = :id AND spent >= budget_cap')
+                ->execute(['id' => $coupon['id']]);
+        }
     }
 
     // Crédito em carteira (tela 13.4): saldo aceito entra sozinho no próximo
@@ -234,7 +258,7 @@ try {
     $walletApplied = 0.0;
     $chargeable = round(
         (float) $cart['subtotal'] + $deliveryFee + $tip
-            + (float) $cart['surge_fee'] - (float) $cart['discount'],
+            + (float) $cart['surge_fee'] - $discount,
         2
     );
     if ($chargeable > 0) {

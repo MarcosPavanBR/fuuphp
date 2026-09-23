@@ -92,12 +92,20 @@ if ((int) $usedStmt->fetchColumn() > 0) {
     error_response(409, 'coupon_already_used', 'Você já usou esse cupom.');
 }
 
+// O público da campanha (tela 15.3: primeiro pedido, inativos há 15/30 dias)
+// era só usado pra PROJETAR o alcance -- qualquer pessoa resgatava. Agora é
+// a mesma condição (lib/ordering/coupons.php) que conta o público e barra.
+if (!coupon_audience_includes($pdo, $coupon, (string) $claims['sub'])) {
+    error_response(409, 'coupon_audience', coupon_audience_message((string) $coupon['audience']));
+}
+
 if ((float) $coupon['spent'] >= (float) $coupon['budget_cap']) {
     error_response(409, 'coupon_exhausted', 'Esse cupom acabou (orçamento da campanha esgotou).');
 }
 
-// free_delivery desconta o frete; como o frete ainda vem do cliente (ver
-// "Próximos passos"), o desconto é do que estiver gravado no carrinho.
+// free_delivery: no carrinho ainda não há endereço, então não há frete pra
+// descontar -- o desconto sai 0 aqui e é aplicado no checkout, sobre o frete
+// calculado (orders/checkout.php). A resposta avisa com `applies_at`.
 $discount = match ($coupon['kind']) {
     'fixed' => (float) $coupon['value'],
     'percent' => round($subtotal * (float) $coupon['value'] / 100, 2),
@@ -117,5 +125,6 @@ json_response(200, [
         'code' => $coupon['code'],
         'kind' => $coupon['kind'],
         'discount' => $discount,
+        'applies_at' => $coupon['kind'] === 'free_delivery' ? 'checkout' : 'cart',
     ],
 ]);

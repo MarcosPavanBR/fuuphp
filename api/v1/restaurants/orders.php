@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 7.3/11.1 — a fila de pedidos da loja: `scope=kds` (o que a cozinha
+// precisa preparar agora) ou `scope=recent` (a tabela do painel).
+
 require_method('GET');
 $claims = require_auth();
 

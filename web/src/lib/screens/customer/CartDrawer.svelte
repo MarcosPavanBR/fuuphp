@@ -54,7 +54,11 @@
       appliedCoupon = data.coupon;
       await loadCart(restaurantId);
       toastr.success(
-        data.coupon ? `Cupom aplicado: −${money(data.coupon.discount)}` : 'Cupom removido.'
+        !data.coupon
+          ? 'Cupom removido.'
+          : data.coupon.applies_at === 'checkout'
+            ? 'Cupom aplicado: o frete sai grátis no pagamento.'
+            : `Cupom aplicado: −${money(data.coupon.discount)}`
       );
     } catch (e) {
       const code = e instanceof ApiError ? e.code : null;

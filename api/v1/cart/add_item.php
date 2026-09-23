@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../../lib/bootstrap.php';
 
+// Tela 3.2 — põe um item (com variações e observação) no carrinho da loja,
+// criando o carrinho se preciso. O preço vem do cardápio atual, nunca do
+// corpo da requisição (lib/ordering/cart.php).
+
 require_method('POST');
 $claims = require_auth();
 $body = read_json_body();
