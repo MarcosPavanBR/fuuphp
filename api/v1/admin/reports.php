@@ -104,9 +104,10 @@ $prev = $prevStmt->fetch();
 
 $ticket = static fn (float $gmv, int $orders): ?float => $orders > 0 ? round($gmv / $orders, 2) : null;
 
-// Hora do dia e dia da semana no fuso de Brasília: é o relógio da cidade.
+// Hora do dia e dia da semana na hora de parede de cada loja (o fuso da
+// cidade dela): "pico às 19h" tem de ser 19h lá, não em Brasília.
 $hourStmt = $pdo->prepare(
-    "SELECT extract(hour FROM created_at AT TIME ZONE 'America/Sao_Paulo')::int AS h,
+    "SELECT extract(hour FROM created_at AT TIME ZONE restaurant_timezone(restaurant_id))::int AS h,
             count(*) AS orders, COALESCE(SUM(total), 0) AS gmv
      FROM orders
      WHERE created_at >= now() - (:days || ' days')::interval AND {$paid}
@@ -120,7 +121,7 @@ foreach ($hourStmt->fetchAll() as $row) {
 
 // 0 = domingo ... 6 = sábado (dow do Postgres).
 $dowStmt = $pdo->prepare(
-    "SELECT extract(dow FROM created_at AT TIME ZONE 'America/Sao_Paulo')::int AS d,
+    "SELECT extract(dow FROM created_at AT TIME ZONE restaurant_timezone(restaurant_id))::int AS d,
             count(*) AS orders, COALESCE(SUM(total), 0) AS gmv
      FROM orders
      WHERE created_at >= now() - (:days || ' days')::interval AND {$paid}

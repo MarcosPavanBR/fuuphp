@@ -109,9 +109,9 @@ function notification_for_order_event(PDO $pdo, string $topic, int $orderId, int
     $body = 'Seu pedido está a caminho.';
     if ($order['distance_km'] !== null) {
         $minutes = (int) ceil((float) $order['distance_km'] / DELIVERY_AVG_KMH * 60) + 3;
-        // Hora de parede de quem lê: o mesmo fuso fixo do resto do projeto
-        // (ver "A loja operando a si mesma" no README), não o do servidor.
-        $eta = (new DateTimeImmutable('now', new DateTimeZone('America/Sao_Paulo')))->modify("+{$minutes} minutes");
+        // Hora de parede de quem lê: o fuso da cidade da loja (quem pede está
+        // na mesma cidade), não o do servidor.
+        $eta = (new DateTimeImmutable('now', store_timezone($pdo, (string) $order['restaurant_id'])))->modify("+{$minutes} minutes");
         $body = 'Chega em torno de ' . $eta->format('H:i') . '.';
     }
 

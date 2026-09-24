@@ -944,6 +944,7 @@ Criada em `db/migrations/036_service_cities.up.sql`. Da migração: Cidades aten
 | `active` | boolean (padrão) |  |  |
 | `created_at` | timestamp with time zone (padrão) |  |  |
 | `updated_at` | timestamp with time zone (padrão) |  |  |
+| `timezone` | text (padrão) |  |  |
 
 ## sessions
 

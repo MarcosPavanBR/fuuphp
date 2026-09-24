@@ -26,6 +26,7 @@ Os termos do FUUdelivery, na língua do negócio e no nome que têm no código.
 | **Fake (modo)** | Mercado Pago e push simulados, pra rodar sem conta real; proibido em produção | `mp_mode()`, `push_mode()` |
 | **Favorita (loja)** | loja marcada com o coração pelo cliente; vira atalho na Home | `favorite_restaurants`, `profile/favorites.php` |
 | **Fidelidade / pontos** | 1 ponto por real de subtotal, trocado por cupom pessoal | `loyalty_entries`, `loyalty_rewards` |
+| **Fuso da cidade** | o relógio das lojas de uma cidade (MS, MT, AM, RO, RR: UTC−4; AC: UTC−5); o da plataforma é o de Brasília | `service_cities.timezone`, `restaurant_timezone()`, `store_timezone()` |
 | **Homologação (staging)** | o ambiente igual à produção, mas com o Mercado Pago de teste | `APP_ENV=staging` |
 | **KDS** | a tela da cozinha: a fila de pedidos pra aceitar, preparar e marcar pronto | `KdsBoard.svelte` |
 | **Livro (livro-razão)** | todo movimento de dinheiro, só de inserção: quem deve o quê a quem | `ledger_entries`, `lib/ledger/` |

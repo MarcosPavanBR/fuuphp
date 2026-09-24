@@ -75,7 +75,8 @@ if ($method === 'pix' && ($store['pix_key'] ?? '') === '') {
 $code = $method === 'in_person' ? str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT) : null;
 $expiresAt = $method === 'in_person'
     ? (new DateTimeImmutable('+10 minutes'))->format(DATE_ATOM)
-    : (new DateTimeImmutable('tomorrow 23:59:59', new DateTimeZone('America/Sao_Paulo')))->format(DATE_ATOM);
+    // "Fim de amanhã" no relógio da loja que recebe a baixa.
+    : (new DateTimeImmutable('tomorrow 23:59:59', store_timezone($pdo, $restaurantId)))->format(DATE_ATOM);
 
 try {
     $stmt = $pdo->prepare(

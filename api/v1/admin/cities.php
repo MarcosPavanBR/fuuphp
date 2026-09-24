@@ -10,10 +10,11 @@ require_once __DIR__ . '/guard.php';
 // (1.2/1.3) e no cadastro de loja.
 //
 // GET   todas as cidades (ligadas e desligadas), com as lojas aprovadas.
-// POST  {ibge_code, name, uf, lat, lng, neighborhoods[], active?}
+// POST  {ibge_code, name, uf, lat, lng, neighborhoods[], timezone?, active?}
 //       cria ou atualiza pela chave ibge_code (o código IBGE do município).
 //       Sem `active`: cidade nova nasce ligada e a existente fica como está
-//       (editar bairros não religa uma cidade desligada).
+//       (editar bairros não religa uma cidade desligada). Sem `timezone`,
+//       vale o fuso da UF (migração 038): é o relógio das lojas da cidade.
 //
 // Desligar não apaga nada: some do app, lojas e pedidos continuam. Toda
 // mudança vai pro audit_log com o valor anterior.
@@ -23,7 +24,7 @@ $adminId = require_admin($claims);
 $pdo = db();
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
-    json_response(200, ['cities' => service_cities($pdo, activeOnly: false)]);
+    json_response(200, ['cities' => service_cities($pdo, activeOnly: false), 'timezones' => CITY_TIMEZONES]);
 }
 
 require_method('POST');
@@ -34,6 +35,7 @@ $name = trim((string) ($body['name'] ?? ''));
 $uf = strtoupper(trim((string) ($body['uf'] ?? '')));
 $lat = $body['lat'] ?? null;
 $lng = $body['lng'] ?? null;
+$timezone = trim((string) ($body['timezone'] ?? ''));
 $activeGiven = array_key_exists('active', $body);
 $active = ($body['active'] ?? true) !== false;
 $neighborhoods = $body['neighborhoods'] ?? [];
@@ -69,13 +71,18 @@ if (!is_numeric($lng) || (float) $lng < -74 || (float) $lng > -34) {
 if ($neighborhoods === []) {
     $fields['neighborhoods'] = 'ao menos um bairro';
 }
+if ($timezone === '' && array_key_exists($uf, UF_NAMES)) {
+    $timezone = uf_default_timezone($uf);
+} elseif ($timezone !== '' && !array_key_exists($timezone, CITY_TIMEZONES)) {
+    $fields['timezone'] = 'fuso não aceito';
+}
 if ($fields !== []) {
     error_response(422, 'invalid_request', 'Confira os campos marcados.', fields: $fields);
 }
 
 $pdo->beginTransaction();
 try {
-    $prev = $pdo->prepare('SELECT name, uf, lat::float AS lat, lng::float AS lng, array_to_json(neighborhoods) AS neighborhoods, active
+    $prev = $pdo->prepare('SELECT name, uf, lat::float AS lat, lng::float AS lng, array_to_json(neighborhoods) AS neighborhoods, timezone, active
                              FROM service_cities WHERE ibge_code = :c FOR UPDATE');
     $prev->execute(['c' => $ibge]);
     $before = $prev->fetch() ?: null;
@@ -84,18 +91,20 @@ try {
     }
 
     $pdo->prepare(
-        'INSERT INTO service_cities (ibge_code, name, uf, lat, lng, neighborhoods, active)
-         VALUES (:c, :name, :uf, :lat, :lng, ARRAY(SELECT json_array_elements_text(CAST(:n AS json))), :active)
+        'INSERT INTO service_cities (ibge_code, name, uf, lat, lng, neighborhoods, timezone, active)
+         VALUES (:c, :name, :uf, :lat, :lng, ARRAY(SELECT json_array_elements_text(CAST(:n AS json))), :tz, :active)
          ON CONFLICT (ibge_code) DO UPDATE
             SET name = EXCLUDED.name, uf = EXCLUDED.uf, lat = EXCLUDED.lat, lng = EXCLUDED.lng,
-                neighborhoods = EXCLUDED.neighborhoods, active = EXCLUDED.active, updated_at = now()'
+                neighborhoods = EXCLUDED.neighborhoods, timezone = EXCLUDED.timezone,
+                active = EXCLUDED.active, updated_at = now()'
     )->execute([
         'c' => $ibge, 'name' => $name, 'uf' => $uf, 'lat' => (float) $lat, 'lng' => (float) $lng,
-        'n' => json_encode($neighborhoods, JSON_UNESCAPED_UNICODE), 'active' => $active ? 'true' : 'false',
+        'n' => json_encode($neighborhoods, JSON_UNESCAPED_UNICODE), 'tz' => $timezone,
+        'active' => $active ? 'true' : 'false',
     ]);
 
     $after = ['name' => $name, 'uf' => $uf, 'lat' => (float) $lat, 'lng' => (float) $lng,
-        'neighborhoods' => $neighborhoods, 'active' => $active];
+        'neighborhoods' => $neighborhoods, 'timezone' => $timezone, 'active' => $active];
     if ($before !== null) {
         $before['neighborhoods'] = json_decode((string) $before['neighborhoods'], true);
     }

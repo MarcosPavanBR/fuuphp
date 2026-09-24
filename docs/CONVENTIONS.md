@@ -80,11 +80,16 @@ Em português, explicando **por quê** -- o "o quê" o código já diz.
 
 ## Fuso horário
 
-- O relógio do negócio é **America/Sao_Paulo**, no PHP
-  (`lib/bootstrap.php`) e na sessão do banco (`lib/core/db.php`). "Hoje",
-  faixa de agendamento, a hora do comprovante e a semana do acerto são de
-  Brasília. O servidor continua em UTC; instantes (`timestamptz`) são os
-  mesmos em qualquer fuso.
+- Dois relógios. O **da plataforma** é America/Sao_Paulo, no PHP
+  (`lib/bootstrap.php`) e na sessão do banco (`lib/core/db.php`): relatórios,
+  acerto de terça, exportação. O **da loja** é o fuso da cidade dela
+  (`service_cities.timezone`, migração 038): abrir e fechar sozinha, faixa de
+  agendamento, "hoje" da conciliação, "fechar por hoje", hora no comprovante e
+  na comanda. No PHP, `store_timezone($pdo, $restaurantId)`; no SQL,
+  `restaurant_timezone(restaurant_id)`. Hora de parede de loja nunca sai de
+  `date()` puro.
+- O servidor continua em UTC; instantes (`timestamptz`) são os mesmos em
+  qualquer fuso.
 - Em teste, compare horários como instante (`date -d ... +%s`), nunca como
   texto: `20:30-03:00` e `23:30Z` são o mesmo momento.
 

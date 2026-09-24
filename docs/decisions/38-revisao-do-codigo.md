@@ -30,7 +30,8 @@ inteiro por área de risco.
    agendamento das 8h às 20h; depois das 21h o "hoje" já era amanhã; a hora
    carimbada no comprovante de Pix saía 3 horas adiantada. Agora o PHP
    (`lib/bootstrap.php`) e a sessão do banco (`lib/core/db.php`) usam
-   America/Sao_Paulo. O teste de agendamento passou a comparar instantes, não
+   America/Sao_Paulo (e, desde a [40](40-fuso-por-cidade.md), o relógio de
+   cada loja é o fuso da cidade dela). O teste de agendamento passou a comparar instantes, não
    texto, e confere que "hoje" é o dia de Brasília -- ele falhava só entre
    21h e meia-noite de Brasília, e por isso passava no CI.
 2. **Cupom reutilizável trocando o CPF.** "Um uso por CPF", e o CPF se troca

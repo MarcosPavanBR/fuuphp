@@ -60,9 +60,10 @@ function pix_proof_average_hash(string $bytes, string $mime): ?string
 
 /**
  * Carimba o comprovante com o pedido e a hora do envio, pra imagem não servir
- * de prova em outro lugar. Devolve null se a imagem não abre.
+ * de prova em outro lugar. Devolve null se a imagem não abre. A hora é a de
+ * parede da loja (`$tz`, o fuso da cidade dela); sem ela, a de Brasília.
  */
-function pix_proof_watermark(string $bytes, string $mime, string $label): ?string
+function pix_proof_watermark(string $bytes, string $mime, string $label, ?DateTimeZone $tz = null): ?string
 {
     $image = pix_proof_load_image($bytes, $mime);
     if ($image === false) {
@@ -71,7 +72,7 @@ function pix_proof_watermark(string $bytes, string $mime, string $label): ?strin
     $width = imagesx($image);
     $height = imagesy($image);
 
-    $text = "FUUDELIVERY · {$label} · " . date('d/m/Y H:i');
+    $text = "FUUDELIVERY · {$label} · " . (new DateTimeImmutable('now', $tz))->format('d/m/Y H:i');
     $white = imagecolorallocatealpha($image, 255, 255, 255, 40);
     $black = imagecolorallocatealpha($image, 0, 0, 0, 60);
     $y = max(0, $height - 18);
@@ -135,11 +136,11 @@ function proof_read_upload(string $field): array
  *
  * @return array{storage_key:string, sha256:string, phash:?string}
  */
-function proof_store(string $bytes, string $mime, string $watermarkLabel, string $subdir = ''): array
+function proof_store(string $bytes, string $mime, string $watermarkLabel, string $subdir = '', ?DateTimeZone $tz = null): array
 {
     $sha256 = hash('sha256', $bytes);
     $phash = pix_proof_average_hash($bytes, $mime);
-    $watermarked = pix_proof_watermark($bytes, $mime, $watermarkLabel);
+    $watermarked = pix_proof_watermark($bytes, $mime, $watermarkLabel, $tz);
 
     $dir = app_path(rtrim((string) env('PROOF_STORAGE_DIR', 'storage/proofs'), '/') . ($subdir !== '' ? '/' . $subdir : ''));
     if (!is_dir($dir) && !mkdir($dir, 0770, true) && !is_dir($dir)) {

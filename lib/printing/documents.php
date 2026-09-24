@@ -51,9 +51,9 @@ function print_order_ticket(PDO $pdo, int $orderId): ?array
     $stmt = $pdo->prepare(
         "SELECT o.*, r.name AS store_name, u.full_name AS customer_name,
                 a.street, a.number, a.complement, a.neighborhood, a.reference,
-                to_char(o.created_at AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') AS created_local,
-                to_char(lower(o.scheduled_for) AT TIME ZONE 'America/Sao_Paulo', 'DD/MM HH24:MI') AS slot_start,
-                to_char(upper(o.scheduled_for) AT TIME ZONE 'America/Sao_Paulo', 'HH24:MI') AS slot_end
+                to_char(o.created_at AT TIME ZONE restaurant_timezone(o.restaurant_id), 'DD/MM/YYYY HH24:MI') AS created_local,
+                to_char(lower(o.scheduled_for) AT TIME ZONE restaurant_timezone(o.restaurant_id), 'DD/MM HH24:MI') AS slot_start,
+                to_char(upper(o.scheduled_for) AT TIME ZONE restaurant_timezone(o.restaurant_id), 'HH24:MI') AS slot_end
            FROM orders o
            JOIN restaurants r ON r.id = o.restaurant_id
            JOIN users u ON u.id = o.user_id
@@ -171,7 +171,7 @@ function settlement_receipt(PDO $pdo, int $intentId): ?array
     $stmt = $pdo->prepare(
         "SELECT i.*, r.name AS store_name, r.cnpj AS store_cnpj,
                 cu.full_name AS courier_name, st.full_name AS confirmer_name,
-                to_char(i.confirmed_at AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') AS confirmed_local
+                to_char(i.confirmed_at AT TIME ZONE restaurant_timezone(i.restaurant_id), 'DD/MM/YYYY HH24:MI') AS confirmed_local
            FROM cash_settlement_intents i
            JOIN restaurants r ON r.id = i.restaurant_id
            JOIN couriers c ON c.id = i.courier_id

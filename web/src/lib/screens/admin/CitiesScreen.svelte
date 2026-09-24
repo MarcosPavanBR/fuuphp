@@ -14,9 +14,12 @@
     'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
   // O formulário não carrega `active`: ligar/desligar é só pelo botão da
   // lista, pra salvar uma edição nunca desfazer um liga/desliga.
-  const EMPTY = { ibge_code: '', name: '', uf: 'SP', lat: '', lng: '', neighborhoods: '' };
+  const EMPTY = { ibge_code: '', name: '', uf: 'SP', lat: '', lng: '', neighborhoods: '', timezone: '' };
 
   let cities = $state(null);
+  // Fusos aceitos (migração 038): o relógio das lojas da cidade. Vazio no
+  // formulário = automático pela UF (MS, MT, AM, RO, RR e AC não são UTC−3).
+  let timezones = $state({});
   let form = $state({ ...EMPTY });
   let editing = $state(false);
   let errors = $state({});
@@ -24,7 +27,9 @@
 
   async function load() {
     try {
-      cities = (await api.get('/admin/cities.php', { token: adminToken() })).cities;
+      const res = await api.get('/admin/cities.php', { token: adminToken() });
+      cities = res.cities;
+      timezones = res.timezones ?? {};
     } catch (e) {
       toastr.error(e.message ?? 'Não deu pra carregar as cidades.');
     }
@@ -42,6 +47,7 @@
       lat: String(city.lat),
       lng: String(city.lng),
       neighborhoods: city.neighborhoods.join(', '),
+      timezone: city.timezone ?? '',
     };
     editing = true;
     errors = {};
@@ -100,6 +106,7 @@
       lat: city.lat,
       lng: city.lng,
       neighborhoods: city.neighborhoods.join(','),
+      timezone: city.timezone ?? '',
       active: !city.active,
     });
   }
@@ -135,6 +142,14 @@
         <input inputmode="decimal" placeholder="-47.0608" bind:value={form.lng} />
         {#if errors.lng}<small>{errors.lng}</small>{/if}
       </label>
+      <label class="wide" class:bad={errors.timezone}>
+        <span>Fuso (o relógio das lojas da cidade)</span>
+        <select bind:value={form.timezone}>
+          <option value="">Automático pela UF</option>
+          {#each Object.entries(timezones) as [tz, label] (tz)}<option value={tz}>{label}</option>{/each}
+        </select>
+        {#if errors.timezone}<small>{errors.timezone}</small>{/if}
+      </label>
       <label class="full" class:bad={errors.neighborhoods}>
         <span>Bairros (separados por vírgula)</span>
         <input placeholder="Centro, Cambuí, Taquaral" bind:value={form.neighborhoods} />
@@ -168,6 +183,7 @@
           <div class="info">
             <strong>{city.name} — {city.uf}</strong>
             <span class="fuu-mono">IBGE {city.ibge} · {city.stores} {city.stores === 1 ? 'loja aprovada' : 'lojas aprovadas'}</span>
+            <span>{timezones[city.timezone] ?? city.timezone}</span>
             <span class="hoods">{city.neighborhoods.join(' · ')}</span>
           </div>
           <span class="state">{city.active ? 'No app' : 'Desligada'}</span>

@@ -30,13 +30,59 @@ const UF_IBGE_PREFIX = [
 ];
 
 /**
+ * Os fusos do Brasil que o sistema aceita por cidade (migração 038), com o
+ * rótulo que o admin vê. Sem horário de verão desde 2019.
+ */
+const CITY_TIMEZONES = [
+    'America/Sao_Paulo' => 'Brasília (UTC−3) — a maioria do país',
+    'America/Campo_Grande' => 'Mato Grosso do Sul (UTC−4)',
+    'America/Cuiaba' => 'Mato Grosso (UTC−4)',
+    'America/Manaus' => 'Amazonas (UTC−4)',
+    'America/Porto_Velho' => 'Rondônia (UTC−4)',
+    'America/Boa_Vista' => 'Roraima (UTC−4)',
+    'America/Rio_Branco' => 'Acre (UTC−5)',
+    'America/Noronha' => 'Fernando de Noronha (UTC−2)',
+];
+
+/** O fuso padrão de uma UF (o admin pode trocar, ex.: o oeste do Amazonas). */
+function uf_default_timezone(string $uf): string
+{
+    return match ($uf) {
+        'MS' => 'America/Campo_Grande',
+        'MT' => 'America/Cuiaba',
+        'AM' => 'America/Manaus',
+        'RO' => 'America/Porto_Velho',
+        'RR' => 'America/Boa_Vista',
+        'AC' => 'America/Rio_Branco',
+        default => 'America/Sao_Paulo',
+    };
+}
+
+/**
+ * O relógio de uma loja: o fuso da cidade dela (restaurant_timezone(), no
+ * banco). Tudo que é hora de parede da loja -- faixa de agendamento, "hoje"
+ * da conciliação, hora carimbada no comprovante -- passa por aqui. O que é
+ * da plataforma (relatórios, acerto semanal) fica no de Brasília.
+ */
+function store_timezone(PDO $pdo, string $restaurantId): DateTimeZone
+{
+    static $cache = [];
+    if (!isset($cache[$restaurantId])) {
+        $stmt = $pdo->prepare('SELECT restaurant_timezone(:id)');
+        $stmt->execute(['id' => $restaurantId]);
+        $cache[$restaurantId] = new DateTimeZone((string) ($stmt->fetchColumn() ?: 'America/Sao_Paulo'));
+    }
+    return $cache[$restaurantId];
+}
+
+/**
  * Cidades atendidas com o número de lojas aprovadas de cada uma.
  * `$activeOnly` = o que o app mostra; o admin vê também as desligadas.
  */
 function service_cities(PDO $pdo, bool $activeOnly = true): array
 {
     $rows = $pdo->query(
-        'SELECT c.ibge_code AS ibge, c.name, c.uf, c.lat::float AS lat, c.lng::float AS lng,
+        'SELECT c.ibge_code AS ibge, c.name, c.uf, c.lat::float AS lat, c.lng::float AS lng, c.timezone,
                 array_to_json(c.neighborhoods) AS neighborhoods, c.active,
                 (SELECT count(*) FROM restaurants r
                   WHERE r.city_ibge_code = c.ibge_code AND r.approved_at IS NOT NULL)::int AS stores

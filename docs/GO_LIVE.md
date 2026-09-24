@@ -286,7 +286,9 @@ SMS da Twilio precisa estar funcionando antes do primeiro login**. Frete e taxas
 começam zerados e são ajustados no painel (10.5).
 
 **Depois, ligue a sua cidade** na aba **Cidades** do painel: código IBGE,
-nome, UF, o centro (latitude e longitude) e os bairros. Sem nenhuma cidade
+nome, UF, o centro (latitude e longitude), os bairros e o fuso (automático
+pela UF: MS, MT, AM, RO e RR ficam em UTC−4 e AC em UTC−5, e é esse relógio
+que abre e fecha as lojas da cidade). Sem nenhuma cidade
 ligada, o app abre sem cidade pra escolher e nenhuma loja consegue se
 cadastrar (a lista vem do banco, migração 036).
 

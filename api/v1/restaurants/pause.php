@@ -100,11 +100,12 @@ try {
 
         // Fechar por hoje precisa durar até o fim do dia mesmo que o job de
         // horário rode a cada minuto -- por isso o carimbo, e não só is_open.
+        // "Fim do dia" é a meia-noite NA CIDADE DA LOJA (migração 038).
         $pdo->prepare(
             "UPDATE restaurants
                 SET is_open = false,
-                    pause_until = (timezone('America/Sao_Paulo', now())::date + 1)::timestamp
-                      AT TIME ZONE 'America/Sao_Paulo'
+                    pause_until = (timezone(restaurant_timezone(:id), now())::date + 1)::timestamp
+                      AT TIME ZONE restaurant_timezone(:id)
               WHERE id = :id"
         )->execute(['id' => $restaurantId]);
     }

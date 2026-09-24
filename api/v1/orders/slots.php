@@ -31,14 +31,17 @@ if ($restaurant === false) {
 // aplicado no checkout -- ver SLOT_HORIZON_DAYS.
 $days = [];
 $slotsByDay = [];
+// "Hoje" é o dia no relógio da loja (fuso da cidade dela, migração 038).
 for ($i = 0; $i < SLOT_HORIZON_DAYS; $i++) {
-    $day = date('Y-m-d', strtotime("+{$i} days"));
+    $day = store_local_day($pdo, (string) $restaurant['id'], $i);
+    $date = new DateTimeImmutable($day);
+    $weekday = (int) $date->format('w');
     $slots = delivery_slots_for_day($pdo, $restaurant, $day);
     $days[] = [
         'day' => $day,
-        'weekday' => (int) date('w', strtotime($day)),
-        'label' => $i === 0 ? 'HOJE' : strtoupper(['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'][(int) date('w', strtotime($day))]),
-        'number' => (int) date('j', strtotime($day)),
+        'weekday' => $weekday,
+        'label' => $i === 0 ? 'HOJE' : ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'][$weekday],
+        'number' => (int) $date->format('j'),
         'has_slots' => $slots !== [],
     ];
     $slotsByDay[$day] = $slots;

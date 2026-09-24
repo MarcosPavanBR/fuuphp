@@ -57,18 +57,18 @@ jobs:
             sleep 2
           done
 
-      - name: Aplicar as 37 migracoes (up)
+      - name: Aplicar as 38 migracoes (up)
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
           bash db/migrate.sh up
 
-      - name: "Reverter tudo e aplicar de novo (down 37, up) -- prova de que o round-trip fecha"
+      - name: "Reverter tudo e aplicar de novo (down 38, up) -- prova de que o round-trip fecha"
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
         run: |
-          bash db/migrate.sh down 37
+          bash db/migrate.sh down 38
           bash db/migrate.sh up
 
       - name: "Senha do role app_rw (a API das suítes conecta com ele)"
@@ -331,6 +331,13 @@ jobs:
           JWT_SECRET: ci-test-secret
           MERCADOPAGO_MODE: fake
         run: bash tests/smoke_showcase.sh
+
+      - name: "Smoke test -- fuso por cidade: loja de MS no relógio de MS (migração 038)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_timezone.sh
 
       - name: "Papéis do banco: RLS por loja, livro só de inserção, app_rw sem DDL (go-live)"
         env:

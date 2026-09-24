@@ -119,7 +119,9 @@ if (isset($body['slot']) && is_array($body['slot'])) {
 
     // A faixa precisa ser uma das que a loja oferece NAQUELE dia -- aceitar
     // um range qualquer deixaria o cliente agendar pras 4h da manhã.
-    $day = date('Y-m-d', strtotime($slotStart));
+    // O dia da faixa no relógio da loja (fuso da cidade dela).
+    $day = (new DateTimeImmutable('@' . strtotime($slotStart)))
+        ->setTimezone(store_timezone($pdo, (string) $restaurant['id']))->format('Y-m-d');
     $offered = delivery_slots_for_day($pdo, $restaurant, $day);
     $match = null;
     foreach ($offered as $slot) {

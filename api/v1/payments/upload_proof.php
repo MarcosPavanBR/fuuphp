@@ -74,7 +74,7 @@ if ($payment['status'] !== 'in_process') {
 }
 
 // Marca d'água, hash e gravação: lib/payments/proof_images.php.
-$stored = proof_store($bytes, $mime, 'PEDIDO #' . $order['public_code']);
+$stored = proof_store($bytes, $mime, 'PEDIDO #' . $order['public_code'], '', store_timezone($pdo, (string) $order['restaurant_id']));
 $storageKey = $stored['storage_key'];
 $sha256 = $stored['sha256'];
 $phash = $stored['phash'];

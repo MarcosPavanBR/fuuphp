@@ -27,7 +27,7 @@ $hoursStmt->execute(['id' => $restaurantId]);
 $holidayStmt = $pdo->prepare(
     "SELECT id, day, closed, opens, closes, last_order, note
        FROM holiday_overrides
-      WHERE restaurant_id = :id AND day >= timezone('America/Sao_Paulo', now())::date
+      WHERE restaurant_id = :id AND day >= timezone(restaurant_timezone(:id), now())::date
       ORDER BY day"
 );
 $holidayStmt->execute(['id' => $restaurantId]);
@@ -39,7 +39,7 @@ $histStmt = $pdo->prepare(
     "SELECT h AS hour, COALESCE(o.orders_count, 0) AS orders_count
        FROM generate_series(0, 23) h
        LEFT JOIN (
-         SELECT EXTRACT(hour FROM timezone('America/Sao_Paulo', created_at))::int AS hour,
+         SELECT EXTRACT(hour FROM timezone(restaurant_timezone(:id), created_at))::int AS hour,
                 count(*) AS orders_count
            FROM orders
           WHERE restaurant_id = :id
@@ -68,13 +68,16 @@ for ($i = 0; $i < 23; $i++) {
 $capStmt = $pdo->prepare('SELECT slot_capacity FROM restaurants WHERE id = :id');
 $capStmt->execute(['id' => $restaurantId]);
 
+// O dia da semana de hoje no relógio da loja (fuso da cidade dela).
+$dowStmt = $pdo->prepare('SELECT EXTRACT(dow FROM timezone(restaurant_timezone(:id), now()))::int');
+$dowStmt->execute(['id' => $restaurantId]);
+$todayDow = (int) $dowStmt->fetchColumn();
+
 json_response(200, [
     'slot_capacity' => (int) $capStmt->fetchColumn(),
     'hours' => $hoursStmt->fetchAll(),
     'holidays' => $holidayStmt->fetchAll(),
     'histogram' => $histogram,
     'peak' => $best > 0 ? $peak : null,
-    'today_dow' => (int) $pdo->query(
-        "SELECT EXTRACT(dow FROM timezone('America/Sao_Paulo', now()))::int"
-    )->fetchColumn(),
+    'today_dow' => $todayDow,
 ]);

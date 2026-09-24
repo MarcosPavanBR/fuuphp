@@ -114,8 +114,8 @@ function pos_reconciliation(PDO $pdo, string $restaurantId, string $day): array
            LEFT JOIN couriers c ON c.id = o.courier_id
            LEFT JOIN users u ON u.id = c.user_id
           WHERE d.restaurant_id = :rid
-            AND t.created_at >= :day::date
-            AND t.created_at < :day::date + 1
+            -- O dia é o da loja: o fuso da cidade dela (migração 038).
+            AND (t.created_at AT TIME ZONE restaurant_timezone(d.restaurant_id))::date = :day::date
           ORDER BY t.created_at"
     );
     $stmt->execute(['rid' => $restaurantId, 'day' => $day]);

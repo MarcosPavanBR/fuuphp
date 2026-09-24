@@ -48,8 +48,8 @@ $costStmt = $pdo->prepare(
       WHERE restaurant_id = :id
         AND status NOT IN ('cart','pending_payment','rejected','cancelled')
         AND created_at >= now() - interval '28 days'
-        AND EXTRACT(hour FROM timezone('America/Sao_Paulo', created_at))
-            = EXTRACT(hour FROM timezone('America/Sao_Paulo', now()))"
+        AND EXTRACT(hour FROM timezone(restaurant_timezone(:id), created_at))
+            = EXTRACT(hour FROM timezone(restaurant_timezone(:id), now()))"
 );
 $costStmt->execute(['id' => $restaurantId]);
 $cost = $costStmt->fetch();
@@ -59,7 +59,7 @@ $today = $pdo->prepare(
     "SELECT shift, opens, closes, last_order, active
        FROM business_hours
       WHERE restaurant_id = :id
-        AND dow = EXTRACT(dow FROM timezone('America/Sao_Paulo', now()))::int
+        AND dow = EXTRACT(dow FROM timezone(restaurant_timezone(:id), now()))::int
       ORDER BY opens"
 );
 $today->execute(['id' => $restaurantId]);
@@ -67,7 +67,7 @@ $today->execute(['id' => $restaurantId]);
 $holidayStmt = $pdo->prepare(
     "SELECT day, closed, opens, closes, last_order, note
        FROM holiday_overrides
-      WHERE restaurant_id = :id AND day = timezone('America/Sao_Paulo', now())::date"
+      WHERE restaurant_id = :id AND day = timezone(restaurant_timezone(:id), now())::date"
 );
 $holidayStmt->execute(['id' => $restaurantId]);
 $holiday = $holidayStmt->fetch();
@@ -88,7 +88,9 @@ $todayPauseStmt = $pdo->prepare(
     "SELECT COALESCE(SUM(EXTRACT(epoch FROM (COALESCE(ended_at, now()) - started_at))), 0)::int
        FROM store_pauses
       WHERE restaurant_id = :id
-        AND started_at >= timezone('America/Sao_Paulo', now())::date"
+        -- Meia-noite de hoje NA CIDADE DA LOJA, como instante.
+        AND started_at >= (timezone(restaurant_timezone(:id), now())::date)::timestamp
+                          AT TIME ZONE restaurant_timezone(:id)"
 );
 $todayPauseStmt->execute(['id' => $restaurantId]);
 $pausedSecondsToday = (int) $todayPauseStmt->fetchColumn();

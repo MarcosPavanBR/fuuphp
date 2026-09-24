@@ -77,7 +77,7 @@ if (strtotime((string) $intent['expires_at']) < time()) {
 }
 
 [$bytes, $mime] = proof_read_upload('proof');
-$stored = proof_store($bytes, $mime, 'BAIXA #BX' . $intent['id'], 'settlements');
+$stored = proof_store($bytes, $mime, 'BAIXA #BX' . $intent['id'], 'settlements', store_timezone($pdo, (string) $intent['restaurant_id']));
 
 try {
     $insert = $pdo->prepare(

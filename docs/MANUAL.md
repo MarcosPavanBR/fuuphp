@@ -194,7 +194,7 @@ admin é criado no servidor com `bin/bootstrap_admin.php`
 | **Campanhas** (15.3) | cupons da plataforma (quem paga, teto, público, projeção antes de criar) e o **teto de cupom de cada loja** |
 | **Políticas** (10.5) | comissão, teto de espécie, prazos, frete e meios de pagamento. Mudar cria uma **versão nova**; pedido antigo continua com a regra do seu tempo |
 | **Banners** | o carrossel do topo da Home: imagem 1200 × 450, cidade (ou todas), loja pra onde o toque leva, início, último dia e ordem. Ligar, desligar, reordenar e apagar. A Home mostra até 8 no ar. É a vitrine que dá pra vender às lojas |
-| **Cidades** | as cidades onde o FUU opera: ligar, editar bairros, desligar. Só cidade ligada aparece no app e aceita cadastro de loja |
+| **Cidades** | as cidades onde o FUU opera: ligar, editar bairros e fuso, desligar. Só cidade ligada aparece no app e aceita cadastro de loja. O fuso (automático pela UF) é o relógio das lojas da cidade: abrir/fechar sozinha, agendamento, "fechar por hoje" |
 | **Aparelhos** | liberar troca de tablet/celular de loja e entregador, com motivo. Encerra as sessões do aparelho antigo |
 
 ### Rotina sugerida

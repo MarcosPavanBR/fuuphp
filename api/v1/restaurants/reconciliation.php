@@ -21,7 +21,8 @@ $day = isset($_GET['day']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $_GET
     ? (string) $_GET['day']
     // "16/09 · fechamento do dia anterior": a conferência olha pra ontem,
     // porque o extrato da adquirente do dia de hoje ainda não existe.
-    : date('Y-m-d', strtotime('yesterday'));
+    // "Ontem" no relógio da loja, que pode não ser o de Brasília.
+    : store_local_day($pdo, $restaurantId, -1);
 
 function reconciliation_payload(PDO $pdo, string $restaurantId, string $day): array
 {

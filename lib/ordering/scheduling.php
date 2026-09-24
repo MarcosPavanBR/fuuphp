@@ -24,6 +24,13 @@ const SLOT_FREE_CANCEL_MINUTES = 60;
 // a requisição direta passaria.
 const SLOT_HORIZON_DAYS = 4;
 
+/** O dia de hoje (AAAA-MM-DD) no relógio da loja, mais `$plusDays` dias. */
+function store_local_day(PDO $pdo, string $restaurantId, int $plusDays = 0): string
+{
+    return (new DateTimeImmutable('today', store_timezone($pdo, $restaurantId)))
+        ->modify("+{$plusDays} days")->format('Y-m-d');
+}
+
 /**
  * As faixas de um dia para uma loja, com vaga e ocupação reais.
  *
@@ -38,6 +45,13 @@ function delivery_slots_for_day(PDO $pdo, array $restaurant, string $day): array
     if ($capacity <= 0) {
         return [];
     }
+
+    // O dia e o horário declarado são da LOJA: o fuso da cidade dela
+    // (migração 038). `$day` é o dia de parede lá, e as faixas saem com o
+    // deslocamento de lá ("19:00-04:00" em Campo Grande).
+    $tz = store_timezone($pdo, (string) $restaurant['id']);
+    $at = static fn (string $local): int => (new DateTimeImmutable($local, $tz))->getTimestamp();
+    $iso = static fn (int $t): string => (new DateTimeImmutable('@' . $t))->setTimezone($tz)->format(DATE_ATOM);
 
     // Feriado manda no dia inteiro; senão vale o horário do dia da semana.
     $holidayStmt = $pdo->prepare(
@@ -54,7 +68,7 @@ function delivery_slots_for_day(PDO $pdo, array $restaurant, string $day): array
         }
         $windows[] = ['opens' => $holiday['opens'], 'closes' => $holiday['last_order'] ?? $holiday['closes']];
     } else {
-        $dow = (int) date('w', strtotime($day));
+        $dow = (int) (new DateTimeImmutable($day, $tz))->format('w');
         $hoursStmt = $pdo->prepare(
             'SELECT opens, closes, last_order FROM business_hours
               WHERE restaurant_id = :id AND dow = :dow AND active
@@ -71,16 +85,16 @@ function delivery_slots_for_day(PDO $pdo, array $restaurant, string $day): array
 
     $slots = [];
     foreach ($windows as $window) {
-        $start = strtotime("{$day} {$window['opens']}");
-        $end = strtotime("{$day} {$window['closes']}");
+        $start = $at("{$day} {$window['opens']}");
+        $end = $at("{$day} {$window['closes']}");
         // Turno que atravessa a meia-noite termina no dia seguinte.
         if ($end <= $start) {
             $end += 86400;
         }
         for ($t = $start; $t + SLOT_MINUTES * 60 <= $end; $t += SLOT_MINUTES * 60) {
             $slots[] = [
-                'start' => date('c', $t),
-                'end' => date('c', $t + SLOT_MINUTES * 60),
+                'start' => $iso($t),
+                'end' => $iso($t + SLOT_MINUTES * 60),
             ];
         }
     }
@@ -105,7 +119,7 @@ function delivery_slots_for_day(PDO $pdo, array $restaurant, string $day): array
     ]);
     $taken = [];
     foreach ($takenStmt->fetchAll() as $row) {
-        $taken[date('c', strtotime((string) $row['starts_at']))] = [
+        $taken[$iso((int) strtotime((string) $row['starts_at']))] = [
             'capacity' => (int) $row['capacity'],
             'taken' => (int) $row['taken'],
         ];
