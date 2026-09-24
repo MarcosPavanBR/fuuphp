@@ -10,7 +10,8 @@
   // link leva direto pra loja.
   //
   // Imagem larga, 1200 × 450 (8:3) de preferência: é a proporção em que a
-  // Home mostra. Datas no dia de Brasília; sem data de fim, fica no ar até
+  // Home mostra. Datas no dia da cidade do banner (Brasília quando é
+  // de todas); sem data de fim, fica no ar até
   // ser desligado.
   const SITUATION = {
     no_ar: { label: 'No ar', cls: 'live' },

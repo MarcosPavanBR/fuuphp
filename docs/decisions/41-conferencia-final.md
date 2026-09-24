@@ -31,9 +31,24 @@ código faz. Achou texto e número do mock prometendo o que o sistema não faz.
   (`scope='city'`) eram ignoradas. Agora entram praça → loja, e dentro de cada
   uma a mais nova vence. A praça é a cidade da loja (`city_ibge_code`), que
   não existia quando a [02](02-catalogo-pedido-checkout.md) foi escrita. Não
-  há tela que crie exceção ainda: hoje é só por SQL, como no teste.
+  havia tela que criasse exceção: veio logo abaixo.
 
-Testes: `smoke_address.sh` confere a estimativa (e a ausência dela sem
+## Depois, com o sim do Marcos
+
+- **Aba de exceções no admin** (`admin/policy_overrides.php`, painel embaixo
+  da política na aba Políticas). Cria exceção pra uma cidade ou uma loja:
+  frete (base, por km, raio), comissão e taxa de cancelamento -- só o que o
+  checkout lê do snapshot, com as mesmas faixas da política (comissão até
+  30%). Motivo obrigatório, último dia opcional (no relógio da cidade),
+  campo em branco segue a plataforma. Encerrar não apaga: fica o rastro de
+  por que um pedido antigo teve aquele número. Tudo no `audit_log`.
+- **Banner de cidade no relógio da cidade.** As datas do banner viram a
+  meia-noite da cidade dele (em MS, 1 h depois de Brasília); banner de todas
+  as cidades segue Brasília.
+
+Testes: `smoke_address.sh` confere a aba de exceções (só admin, faixas,
+campo fora da lista, motivo, precedência, encerrar); `smoke_timezone.sh`, o
+banner de MS na meia-noite de MS. `smoke_address.sh` confere também a estimativa (e a ausência dela sem
 distância) e a ordem das exceções.
 
 ## Fora, de propósito

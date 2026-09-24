@@ -29,7 +29,7 @@ dizia que loja fora de Brasília "pede uma coluna nova".
   abre. As faixas saem com `-04:00`, o "hoje" é o de MS e "fechar por hoje"
   vai até a meia-noite de MS.
 
-**Simplificado / fora:** banners e cupons de loja usam o dia de Brasília pro
-início e fim (uma hora de diferença na virada do dia, em MS). A tela mostra
-as horas no relógio do aparelho de quem olha, que numa cidade é o mesmo da
-loja.
+**Simplificado / fora:** ~~banners usam o dia de Brasília~~ **resolvido na
+[41](41-conferencia-final.md):** o banner de uma cidade começa e termina na
+meia-noite dela; o de todas as cidades segue Brasília. Cupom de loja não tem
+virada de dia: dura N dias a partir do instante em que foi criado.

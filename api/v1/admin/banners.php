@@ -12,8 +12,9 @@ require_once __DIR__ . '/guard.php';
 //       (no_ar | agendado | encerrado | desligado).
 // POST  multipart  {title, image, city_ibge_code?, restaurant_id?,
 //                   starts_on?, ends_on?, position?}  cria (201).
-//       Datas em AAAA-MM-DD, no dia de Brasília: começa às 0h de starts_on
-//       e termina no fim de ends_on (inclusive). Sem cidade = todas.
+//       Datas em AAAA-MM-DD, no relógio da cidade do banner (migração 038;
+//       sem cidade, Brasília): começa às 0h de starts_on e termina no fim de
+//       ends_on (inclusive). Sem cidade = todas.
 // POST  JSON  {id, action: toggle | delete}  liga/desliga ou apaga;
 //             {id, action: position, position}  muda a ordem.
 //
@@ -105,14 +106,20 @@ $isDate = static fn (string $d): bool => preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)
     && ($p = DateTimeImmutable::createFromFormat('!Y-m-d', $d)) !== false && $p->format('Y-m-d') === $d;
 
 $fields = [];
+// O relógio das datas: o da cidade do banner; banner de todas as cidades
+// segue Brasília, o relógio da plataforma.
+$tz = 'America/Sao_Paulo';
 if (mb_strlen($title) < 2 || mb_strlen($title) > 80) {
     $fields['title'] = 'de 2 a 80 caracteres (é o texto lido pelo leitor de tela)';
 }
 if ($city !== '') {
-    $cityStmt = $pdo->prepare('SELECT 1 FROM service_cities WHERE ibge_code = :c');
+    $cityStmt = $pdo->prepare('SELECT timezone FROM service_cities WHERE ibge_code = :c');
     $cityStmt->execute(['c' => $city]);
-    if ($cityStmt->fetchColumn() === false) {
+    $cityTz = $cityStmt->fetchColumn();
+    if ($cityTz === false) {
         $fields['city_ibge_code'] = 'cidade não cadastrada na aba Cidades';
+    } else {
+        $tz = (string) $cityTz;
     }
 }
 if ($restaurantId !== '') {
@@ -132,7 +139,7 @@ if ($endsOn !== '' && !$isDate($endsOn)) {
     $fields['ends_on'] = 'data inválida (AAAA-MM-DD)';
 } elseif ($endsOn !== '' && $startsOn !== '' && $endsOn < $startsOn) {
     $fields['ends_on'] = 'termina antes de começar';
-} elseif ($endsOn !== '' && $endsOn < date('Y-m-d')) {
+} elseif ($endsOn !== '' && $endsOn < (new DateTimeImmutable('now', new DateTimeZone($tz)))->format('Y-m-d')) {
     $fields['ends_on'] = 'já passou';
 }
 if ($position < 0 || $position > 999) {
@@ -145,19 +152,21 @@ if ($fields !== []) {
 // A imagem por último: só grava arquivo quando o resto já passou.
 $imageKey = public_image_from_upload('image', PROMO_BANNER_MAX_PX, PROMO_BANNER_SUBDIR);
 
-// A sessão do banco está no fuso de Brasília (lib/core/db.php): a data vira
-// a meia-noite daqui; o fim é a meia-noite do dia seguinte ao último dia.
+// A data vira a meia-noite NO RELÓGIO DA CIDADE ("AT TIME ZONE" de um
+// timestamp sem fuso dá o instante daquela hora de parede lá); o fim é a
+// meia-noite do dia seguinte ao último dia. Em MS, 1 h depois de Brasília.
 $stmt = $pdo->prepare(
     "INSERT INTO promo_banners (title, image_key, city_ibge_code, link_restaurant_id, starts_at, ends_at, position, created_by)
      VALUES (:title, :image, NULLIF(:city, ''), CAST(NULLIF(:store, '') AS uuid),
-             COALESCE(CAST(NULLIF(:starts, '') AS date)::timestamptz, now()),
-             CAST(NULLIF(:ends, '') AS date)::timestamptz + interval '1 day',
+             COALESCE(CAST(NULLIF(:starts, '') AS date)::timestamp AT TIME ZONE :tz, now()),
+             (CAST(NULLIF(:ends, '') AS date) + 1)::timestamp AT TIME ZONE :tz2,
              :position, :admin)
      RETURNING id"
 );
 $stmt->execute([
     'title' => $title, 'image' => $imageKey, 'city' => $city, 'store' => $restaurantId,
     'starts' => $startsOn, 'ends' => $endsOn, 'position' => $position, 'admin' => $adminId,
+    'tz' => $tz, 'tz2' => $tz,
 ]);
 $id = (int) $stmt->fetchColumn();
 banner_audit($pdo, $adminId, $id, 'created', null, [

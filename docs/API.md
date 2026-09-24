@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_api_catalog.php` a partir dos próprios arquivos de
 > `api/v1`. Não edite à mão: o CI confere (`--check`) e falha se estiver desatualizado.
 
-122 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
+123 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
 `{code, message, trace_id}` com o status HTTP certo (`lib/core/response.php`). As URLs são
 contrato público: mudar um caminho quebra app instalado.
 
@@ -35,6 +35,7 @@ contrato público: mudar um caminho quebra app instalado.
 | `/api/v1/admin/netting.php` | GET, POST | admin |  | Tela 9.7 — "Painel da plataforma: netting semanal e repasse". |
 | `/api/v1/admin/partner_devices.php` | POST | admin |  | Suporte: liberar a troca de aparelho de uma loja ou de um entregador. |
 | `/api/v1/admin/policy.php` | POST | admin |  | Tela 10.5 — "Painel admin: políticas (teto, prazo, comissão, métodos)". |
+| `/api/v1/admin/policy_overrides.php` | POST | admin |  | Exceções de política (policy_overrides), na aba Políticas do admin: um número diferente da política da plataforma só numa cidade ou só numa loja -- frete de lançamento numa cidade nova, comissão negociada com uma loja. Quem aplica é resolve_policy() (lib/ca… |
 | `/api/v1/admin/refunds.php` | GET, POST | admin |  | Tela 13.4 — "Admin: reembolso por método e quem paga". |
 | `/api/v1/admin/reports.php` | GET | admin |  | Tela 12.3 — "Os números que mudam decisão". |
 | `/api/v1/admin/restaurants.php` | POST | admin |  | Tela 12.1 — "Cadastro e aprovação de lojas". |

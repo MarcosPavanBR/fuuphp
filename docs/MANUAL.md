@@ -192,8 +192,8 @@ admin é criado no servidor com `bin/bootstrap_admin.php`
 | **Financeiro** (9.7) | o acerto semanal de lojas e entregadores, repasses e bloqueios por atraso |
 | **Relatórios** (12.3) | GMV, **ticket médio** (com o período anterior ao lado), pedidos por hora do dia e por dia da semana, as lojas que mais vendem, clientes que compraram, voltaram e compraram pela primeira vez, o mix de pagamento e o CSV contábil |
 | **Campanhas** (15.3) | cupons da plataforma (quem paga, teto, público, projeção antes de criar) e o **teto de cupom de cada loja** |
-| **Políticas** (10.5) | comissão, teto de espécie, prazos, frete e meios de pagamento. Mudar cria uma **versão nova**; pedido antigo continua com a regra do seu tempo |
-| **Banners** | o carrossel do topo da Home: imagem 1200 × 450, cidade (ou todas), loja pra onde o toque leva, início, último dia e ordem. Ligar, desligar, reordenar e apagar. A Home mostra até 8 no ar. É a vitrine que dá pra vender às lojas |
+| **Políticas** (10.5) | comissão, teto de espécie, prazos, frete e meios de pagamento. Mudar cria uma **versão nova**; pedido antigo continua com a regra do seu tempo. Embaixo, as **exceções**: frete, comissão ou taxa de cancelamento diferentes só numa cidade ou só numa loja, com motivo e último dia opcional. A da loja ganha da da cidade; encerrar não apaga |
+| **Banners** | o carrossel do topo da Home: imagem 1200 × 450, cidade (ou todas), loja pra onde o toque leva, início, último dia (no relógio da cidade do banner) e ordem. Ligar, desligar, reordenar e apagar. A Home mostra até 8 no ar. É a vitrine que dá pra vender às lojas |
 | **Cidades** | as cidades onde o FUU opera: ligar, editar bairros e fuso, desligar. Só cidade ligada aparece no app e aceita cadastro de loja. O fuso (automático pela UF) é o relógio das lojas da cidade: abrir/fechar sozinha, agendamento, "fechar por hoje" |
 | **Aparelhos** | liberar troca de tablet/celular de loja e entregador, com motivo. Encerra as sessões do aparelho antigo |
 

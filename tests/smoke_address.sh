@@ -71,7 +71,15 @@ NOGEO_ITEM=$(query "SELECT id FROM menu_items WHERE restaurant_id='${NOGEO_ID}'"
 
 DATABASE_URL="${API_DATABASE_URL:-$DATABASE_URL}" php -S "127.0.0.1:${PORT}" -t "$ROOT" >/tmp/smoke-address-server.log 2>&1 &
 SERVER_PID=$!
-trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+# Na saída, com ou sem falha: exceções de política do teste encerradas, pra
+# não vazar pros outros testes da mesma cidade.
+cleanup() {
+  kill "$SERVER_PID" 2>/dev/null || true
+  psql "$DATABASE_URL" -qc "UPDATE policy_overrides SET expires_at = now()
+    WHERE reason LIKE 'smoke: %' AND scope_id IN ('${CITY}','${RESTAURANT_ID}')
+      AND (expires_at IS NULL OR expires_at > now())" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
 for i in $(seq 1 20); do
   curl -s -o /dev/null "http://127.0.0.1:${PORT}/api/v1/restaurants/show.php?id=${RESTAURANT_ID}" && break
   sleep 0.2
@@ -197,19 +205,35 @@ echo "== tarifa negativa e raio zero são recusados =="
    -H "Authorization: Bearer $ADMIN_TOKEN" -d '{"delivery_max_km":0}' | jq -r '.code')" = "invalid_max_km" ] \
   || fail "aceitou raio zero (que seria 'não entregamos em lugar nenhum')"
 
-echo "== exceção da praça vale pra loja da cidade; a da loja ganha; a mais nova ganha =="
-# created_at explícito: a ordem não pode depender de duas linhas caírem no
-# mesmo instante. As exceções da praça são apagadas no fim, pra não vazar
-# pros outros testes da mesma cidade.
-psql_run <<SQL
-INSERT INTO policy_overrides (scope, scope_id, patch, reason, created_by, created_at) VALUES
-  ('city',       '${CITY}',          '{"delivery_base_fee": 9}', 'smoke: praça', '${ADMIN_USER_ID}', now() - interval '3 min'),
-  ('restaurant', '${RESTAURANT_ID}', '{"delivery_base_fee": 8}', 'smoke: loja, antiga', '${ADMIN_USER_ID}', now() - interval '2 min'),
-  ('restaurant', '${RESTAURANT_ID}', '{"delivery_base_fee": 6}', 'smoke: loja, nova', '${ADMIN_USER_ID}', now() - interval '1 min');
-SQL
+echo "== exceções pela aba Políticas: praça vale pra loja da cidade; a da loja ganha; a mais nova ganha =="
+# Exceção de praça só em cidade cadastrada. Desligada: não aparece no app
+# nem mexe na lista pública que outros testes conferem.
+psql_run -c "INSERT INTO service_cities (ibge_code, name, uf, lat, lng, active)
+             VALUES ('${CITY}', 'São Paulo', 'SP', -23.55, -46.63, false) ON CONFLICT (ibge_code) DO NOTHING"
+OV() { curl -s -w ' %{http_code}' -X POST "$BASE/admin/policy_overrides.php" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -d "$1"; }
 BASEFEE() { curl -s "$BASE/addresses/quote.php?lat=-23.5600&lng=-46.6333&restaurant_id=$1" "${AUTH[@]}" | jq -r '.tariff.base'; }
-R=$(BASEFEE "$RESTAURANT_ID"); [ "$R" = "6" ] || { psql_run -c "DELETE FROM policy_overrides WHERE reason LIKE 'smoke: %' AND scope_id IN ('${CITY}','${RESTAURANT_ID}')"; fail "a exceção mais nova da loja devia valer (6), veio $R"; }
-R=$(BASEFEE "$NOGEO_ID");      [ "$R" = "9" ] || { psql_run -c "DELETE FROM policy_overrides WHERE reason LIKE 'smoke: %' AND scope_id IN ('${CITY}','${RESTAURANT_ID}')"; fail "a exceção da praça não chegou na loja da cidade (9), veio $R"; }
-psql_run -c "DELETE FROM policy_overrides WHERE reason LIKE 'smoke: %' AND scope_id IN ('${CITY}','${RESTAURANT_ID}')"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/admin/policy_overrides.php" -H "Content-Type: application/json" \
+  "${AUTH[@]}" -d '{}')" = "403" ] || fail "cliente mexeu em exceção de política"
+R=$(OV '{"scope":"city","scope_id":"'"$CITY"'","patch":{"commission_bps":5000},"reason":"comissão alta demais"}')
+[ "$(echo "${R% *}" | jq -r '.fields["patch.commission_bps"]')" = "de 0 a 3000" ] || fail "comissão acima de 30% aceita: $R"
+R=$(OV '{"scope":"city","scope_id":"'"$CITY"'","patch":{"cash_ceiling":1},"reason":"campo que não pode"}')
+[ "${R##* }" = "422" ] || fail "exceção de campo fora da lista aceita: $R"
+R=$(OV '{"scope":"restaurant","scope_id":"'"$RESTAURANT_ID"'","patch":{"delivery_base_fee":6},"reason":"x"}')
+[ "$(echo "${R% *}" | jq -r '.fields.reason')" != "null" ] || fail "exceção sem motivo aceita: $R"
+R=$(OV '{"scope":"city","scope_id":"'"$CITY"'","patch":{"delivery_base_fee":9},"reason":"smoke: praça"}');       [ "${R##* }" = "201" ] || fail "criar exceção da praça: $R"; OV_CITY=$(echo "${R% *}" | jq -r '.id')
+R=$(OV '{"scope":"restaurant","scope_id":"'"$RESTAURANT_ID"'","patch":{"delivery_base_fee":8},"reason":"smoke: loja, antiga"}'); [ "${R##* }" = "201" ] || fail "criar exceção da loja: $R"
+R=$(OV '{"scope":"restaurant","scope_id":"'"$RESTAURANT_ID"'","patch":{"delivery_base_fee":6,"delivery_per_km":""},"reason":"smoke: loja, nova"}'); [ "${R##* }" = "201" ] || fail "criar exceção da loja: $R"
+[ "$(echo "${R% *}" | jq -c '.patch')" = '{"delivery_base_fee":6}' ] || fail "campo em branco entrou na exceção: $R"
+[ "$(query "SELECT count(*) FROM audit_log WHERE action='policy_override.created' AND actor_id='${ADMIN_USER_ID}'")" = "3" ] || fail "exceção sem audit_log"
+R=$(BASEFEE "$RESTAURANT_ID"); [ "$R" = "6" ] || fail "a exceção mais nova da loja devia valer (6), veio $R"
+R=$(BASEFEE "$NOGEO_ID");      [ "$R" = "9" ] || fail "a exceção da praça não chegou na loja da cidade (9), veio $R"
+LIST=$(curl -s "$BASE/admin/policy_overrides.php" -H "Authorization: Bearer $ADMIN_TOKEN")
+[ "$(echo "$LIST" | jq --arg c "$CITY" --arg r "$RESTAURANT_ID" '[.overrides[] | select(.live and (.scope_id == $c or .scope_id == $r))] | length')" = "3" ] \
+  || fail "lista de exceções: $(echo "$LIST" | jq -c '.overrides')"
+echo "== encerrar a da praça: a loja da cidade volta à política da plataforma =="
+R=$(OV '{"id":'"$OV_CITY"',"action":"end"}'); [ "${R##* }" = "200" ] || fail "encerrar exceção: $R"
+R=$(BASEFEE "$NOGEO_ID"); [ "$R" != "9" ] || fail "exceção encerrada continuou valendo"
+R=$(OV '{"id":'"$OV_CITY"',"action":"end"}'); [ "${R##* }" = "404" ] || fail "encerrou duas vezes: $R"
 
 echo "OK: endereço, área e frete no servidor (Fase 14.3) passou no smoke test"

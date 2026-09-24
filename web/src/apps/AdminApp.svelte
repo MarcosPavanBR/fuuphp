@@ -15,6 +15,7 @@
   import PartnerDeviceScreen from '../lib/screens/admin/PartnerDeviceScreen.svelte';
   import CitiesScreen from '../lib/screens/admin/CitiesScreen.svelte';
   import BannersScreen from '../lib/screens/admin/BannersScreen.svelte';
+  import PolicyOverridesPanel from '../lib/screens/admin/PolicyOverridesPanel.svelte';
 
   // Painel da plataforma (Fase 12 + tela 10.5). Quarto bundle, quarto
   // público: quem opera o negócio, não quem usa o app.
@@ -117,6 +118,8 @@
         <PartnerDeviceScreen />
       {:else}
         <PolicyScreen />
+        <!-- Exceções por cidade ou loja, por cima da política da plataforma. -->
+        <PolicyOverridesPanel />
       {/if}
     </main>
   </div>

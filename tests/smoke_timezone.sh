@@ -9,7 +9,8 @@
 #    estar aberto agora no relógio de MS -- só a de MS abre (em SP já é uma
 #    hora depois);
 #  - as faixas de agendamento saem com -04:00, e o "hoje" é o dia de MS;
-#  - "fechar por hoje" dura até a meia-noite de MS.
+#  - "fechar por hoje" dura até a meia-noite de MS;
+#  - banner da cidade de MS começa e termina na meia-noite de MS.
 set -euo pipefail
 
 : "${DATABASE_URL:?defina DATABASE_URL apontando para um banco já migrado}"
@@ -113,5 +114,18 @@ curl -s -X POST "$BASE/restaurants/pause.php" "${STAFF[@]}" -H "Content-Type: ap
   -d '{"action":"close_today","reason":"technical"}' >/dev/null
 [ "$(q "SELECT to_char(pause_until AT TIME ZONE '${MS_TZ}', 'YYYY-MM-DD HH24:MI') FROM restaurants WHERE id='${MS_STORE}'")" \
   = "$(TZ=${MS_TZ} date -d tomorrow +%F) 00:00" ] || fail "fechar por hoje não vai até a meia-noite de MS"
+
+echo "== banner da cidade de MS: as datas são dias de MS =="
+TMP="$(mktemp -d)"
+php -r '$i=imagecreatetruecolor(1600,600);imagefill($i,0,0,imagecolorallocate($i,200,40,30));imagepng($i,$argv[1]);' "$TMP/b.png"
+MS_TOMORROW=$(TZ=${MS_TZ} date -d tomorrow +%F)
+R=$(curl -s -w ' %{http_code}' -X POST "$BASE/admin/banners.php" "${ADMIN[@]}" -F "image=@$TMP/b.png;type=image/png" \
+  -F "title=Banner MS" -F "city_ibge_code=${MS_CITY}" -F "starts_on=${MS_TOMORROW}" -F "ends_on=${MS_TOMORROW}")
+[ "${R##* }" = "201" ] || fail "criar banner de MS: $R"
+BID=$(echo "${R% *}" | jq -r '.id')
+[ "$(q "SELECT to_char(starts_at AT TIME ZONE '${MS_TZ}', 'YYYY-MM-DD HH24:MI') || ' ' || to_char(ends_at AT TIME ZONE '${MS_TZ}', 'YYYY-MM-DD HH24:MI') FROM promo_banners WHERE id=${BID}")" \
+  = "${MS_TOMORROW} 00:00 $(TZ=${MS_TZ} date -d '2 days' +%F) 00:00" ] || fail "banner de MS fora da meia-noite de MS: $(q "SELECT starts_at, ends_at FROM promo_banners WHERE id=${BID}")"
+psql_run -c "DELETE FROM promo_banners WHERE id=${BID}"
+rm -rf "$TMP"
 
 echo "OK: fuso por cidade"
