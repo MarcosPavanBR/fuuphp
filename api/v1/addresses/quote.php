@@ -44,7 +44,7 @@ if (isset($_GET['address_id'])) {
 $restaurantId = $_GET['restaurant_id'] ?? null;
 
 if (is_string($restaurantId) && $restaurantId !== '') {
-    $restStmt = $pdo->prepare('SELECT id, name, lat, lng FROM restaurants WHERE id = :id');
+    $restStmt = $pdo->prepare('SELECT id, name, lat, lng, prep_minutes, prep_auto_bump FROM restaurants WHERE id = :id');
     $restStmt->execute(['id' => $restaurantId]);
     $restaurant = $restStmt->fetch();
     if ($restaurant === false) {
@@ -54,10 +54,18 @@ if (is_string($restaurantId) && $restaurantId !== '') {
     $policy = resolve_policy($pdo, (string) $restaurantId);
     $quote = delivery_quote($restaurant, $address, $policy);
 
+    // Tempo até chegar, pela mesma conta do card da Home (restaurant_facts):
+    // preparo efetivo (com a fila da cozinha) + viagem à velocidade média.
+    // Sem distância não há estimativa -- a tela não inventa uma.
+    $etaMinutes = $quote['distance_km'] === null ? null
+        : effective_prep_minutes($pdo, (string) $restaurantId, $restaurant)['effective']
+          + (int) ceil((float) $quote['distance_km'] / DELIVERY_AVG_KMH * 60);
+
     json_response(200, [
         'scope' => 'restaurant',
         'restaurant_name' => $restaurant['name'],
         'quote' => $quote,
+        'eta_minutes' => $etaMinutes,
         'tariff' => [
             'base' => $policy['delivery_base_fee'],
             'per_km' => $policy['delivery_per_km'],

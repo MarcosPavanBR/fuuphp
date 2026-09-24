@@ -102,6 +102,9 @@ QUOTE=$(curl -s "$BASE/addresses/quote.php?lat=-23.5600&lng=-46.6333&restaurant_
   || fail "distância medida fora do esperado: $QUOTE"
 [ "$(echo "$QUOTE" | jq -r '.quote.fee > 5 and .quote.fee < 6')" = "true" ] || fail "taxa não bate com a tarifa: $QUOTE"
 [ "$(echo "$QUOTE" | jq -r '.tariff.max_km')" = "5" ] || fail "raio da política não veio: $QUOTE"
+# Tempo até chegar = preparo da loja + viagem: com ~1 km, mais que o preparo
+# sozinho e bem menos de uma hora.
+[ "$(echo "$QUOTE" | jq -r '.eta_minutes > 0 and .eta_minutes < 60')" = "true" ] || fail "estimativa de chegada fora do esperado: $QUOTE"
 
 echo "== endereço fora do raio é recusado, com o motivo escrito =="
 FAR_ID=$(curl -s -X POST "$BASE/addresses/create.php" -H "Content-Type: application/json" "${AUTH[@]}" \
@@ -149,6 +152,7 @@ NOGEOQ=$(curl -s "$BASE/addresses/quote.php?address_id=${NEAR_ID}&restaurant_id=
 [ "$(echo "$NOGEOQ" | jq -r '.quote.fee')" = "4" ] || fail "sem distância, cobra só a base: $NOGEOQ"
 [ "$(echo "$NOGEOQ" | jq -r '.quote.in_area')" = "true" ] || fail "sem medir, não dá pra dizer que está fora: $NOGEOQ"
 [ "$(echo "$NOGEOQ" | jq -r '.quote.reason')" != "null" ] || fail "sem motivo escrito: $NOGEOQ"
+[ "$(echo "$NOGEOQ" | jq -r '.eta_minutes')" = "null" ] || fail "sem distância não há estimativa, e inventou uma: $NOGEOQ"
 
 echo "== endereço de outra pessoa não é cotável =="
 PHONE2="119$(( RANDOM % 90000000 + 10000000 ))"
@@ -192,5 +196,20 @@ echo "== tarifa negativa e raio zero são recusados =="
 [ "$(curl -s -X POST "$BASE/admin/policy.php" -H "Content-Type: application/json" \
    -H "Authorization: Bearer $ADMIN_TOKEN" -d '{"delivery_max_km":0}' | jq -r '.code')" = "invalid_max_km" ] \
   || fail "aceitou raio zero (que seria 'não entregamos em lugar nenhum')"
+
+echo "== exceção da praça vale pra loja da cidade; a da loja ganha; a mais nova ganha =="
+# created_at explícito: a ordem não pode depender de duas linhas caírem no
+# mesmo instante. As exceções da praça são apagadas no fim, pra não vazar
+# pros outros testes da mesma cidade.
+psql_run <<SQL
+INSERT INTO policy_overrides (scope, scope_id, patch, reason, created_by, created_at) VALUES
+  ('city',       '${CITY}',          '{"delivery_base_fee": 9}', 'smoke: praça', '${ADMIN_USER_ID}', now() - interval '3 min'),
+  ('restaurant', '${RESTAURANT_ID}', '{"delivery_base_fee": 8}', 'smoke: loja, antiga', '${ADMIN_USER_ID}', now() - interval '2 min'),
+  ('restaurant', '${RESTAURANT_ID}', '{"delivery_base_fee": 6}', 'smoke: loja, nova', '${ADMIN_USER_ID}', now() - interval '1 min');
+SQL
+BASEFEE() { curl -s "$BASE/addresses/quote.php?lat=-23.5600&lng=-46.6333&restaurant_id=$1" "${AUTH[@]}" | jq -r '.tariff.base'; }
+R=$(BASEFEE "$RESTAURANT_ID"); [ "$R" = "6" ] || { psql_run -c "DELETE FROM policy_overrides WHERE reason LIKE 'smoke: %' AND scope_id IN ('${CITY}','${RESTAURANT_ID}')"; fail "a exceção mais nova da loja devia valer (6), veio $R"; }
+R=$(BASEFEE "$NOGEO_ID");      [ "$R" = "9" ] || { psql_run -c "DELETE FROM policy_overrides WHERE reason LIKE 'smoke: %' AND scope_id IN ('${CITY}','${RESTAURANT_ID}')"; fail "a exceção da praça não chegou na loja da cidade (9), veio $R"; }
+psql_run -c "DELETE FROM policy_overrides WHERE reason LIKE 'smoke: %' AND scope_id IN ('${CITY}','${RESTAURANT_ID}')"
 
 echo "OK: endereço, área e frete no servidor (Fase 14.3) passou no smoke test"

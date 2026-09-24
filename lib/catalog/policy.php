@@ -6,10 +6,10 @@ declare(strict_types=1);
 // orders.policy_snapshot -- mudar a política depois não reescreve pedido já
 // feito.
 //
-// Simplificação assumida: overrides de policy_overrides com scope='city'
-// não são aplicados aqui (exigiriam cruzar city_ibge_code do endereço de
-// entrega, que este módulo ainda não resolve por geocodificação). Só
-// scope='restaurant' entra no merge. Fica registrado no README.
+// Exceções (policy_overrides): primeiro as da praça (scope='city', pela
+// cidade da loja -- restaurants.city_ibge_code), depois as da loja, que
+// ganham da praça. Dentro de cada escopo, a mais nova é aplicada por último
+// e vence. scope='courier' não entra aqui: não é política de checkout.
 // Formas "online": o dinheiro não passa pela mão do entregador. É o que
 // sobra pra loja em atraso de repasse ("Loja com repasse em atraso cai
 // automaticamente para somente online", tela 10.5).
@@ -51,13 +51,17 @@ function resolve_policy(PDO $pdo, string $restaurantId): array
         $enabledMethods = array_values(array_intersect($enabledMethods, ONLINE_PAYMENT_METHODS));
     }
 
+    // A ordem é a do merge: a última linha vence. Antes vinha "mais nova
+    // primeiro", e uma exceção antiga sobrescrevia a nova.
     $overrideStmt = $pdo->prepare(
-        "SELECT patch FROM policy_overrides
-         WHERE scope = 'restaurant' AND scope_id = :id
-           AND (expires_at IS NULL OR expires_at > now())
-         ORDER BY created_at DESC"
+        "SELECT o.patch FROM policy_overrides o
+          WHERE ((o.scope = 'restaurant' AND o.scope_id = :id)
+              OR (o.scope = 'city' AND o.scope_id =
+                    (SELECT city_ibge_code FROM restaurants WHERE id = :rid)))
+            AND (o.expires_at IS NULL OR o.expires_at > now())
+          ORDER BY (o.scope = 'restaurant'), o.created_at, o.id"
     );
-    $overrideStmt->execute(['id' => $restaurantId]);
+    $overrideStmt->execute(['id' => $restaurantId, 'rid' => $restaurantId]);
 
     $snapshot = [
         'policy_version' => (int) $policy['version'],

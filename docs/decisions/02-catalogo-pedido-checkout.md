@@ -11,7 +11,8 @@
   `lib/catalog/policy.php`.** Só `scope='restaurant'` é aplicado — um override por
   praça exigiria cruzar `city_ibge_code` do endereço de entrega contra a
   praça da loja, e essa resolução geográfica não existe neste módulo ainda.
-  Fica comentado no código.
+  Fica comentado no código. *(Resolvido na [41](41-conferencia-final.md): a praça é a cidade da
+  loja, e a exceção da praça entra antes da da loja.)*
 - **`POST /v1/orders/status` é uma porta só, por cima de `advance_order()`,**
   em vez de um endpoint por transição (`/accept`, `/reject`, `/ready`...).
   A legalidade de uma transição (de/para) é decidida inteiramente pelo

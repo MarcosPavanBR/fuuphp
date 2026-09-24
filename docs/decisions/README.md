@@ -48,3 +48,4 @@ pra ele (ex.: o mapa do acompanhamento em 06 → 16).
 - [38 — Revisão do código: fuso, cupom, gorjeta e cidades](38-revisao-do-codigo.md)
 - [39 — Vitrine da Home: banners, logo, categorias, favoritas e queridinhos](39-vitrine-da-home.md)
 - [40 — Fuso por cidade](40-fuso-por-cidade.md)
+- [41 — Conferência final: o que ainda era do mock](41-conferencia-final.md)

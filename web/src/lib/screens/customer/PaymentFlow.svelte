@@ -63,6 +63,8 @@
   // vale o total do próprio pedido -- que já inclui crédito de carteira e
   // cupom de frete grátis, aplicados lá.
   let deliveryFee = $state(0);
+  // Minutos até chegar, da mesma cotação (preparo + viagem); null = sem estimativa.
+  let etaMinutes = $state(null);
   let total = $derived(order ? Number(order.total) : Number(cart?.order?.total ?? 0) + deliveryFee);
 
   async function onAddressReady(id, label) {
@@ -76,10 +78,12 @@
         return;
       }
       deliveryFee = Number(data.quote?.fee ?? 0);
+      etaMinutes = data.eta_minutes ?? null;
     } catch {
       // sem cotação agora: o checkout calcula e cobra certo, e a tela do
       // pagamento mostra o total do pedido assim que ele existir
       deliveryFee = 0;
+      etaMinutes = null;
     }
     addressId = id;
     addressLabel = label ?? 'endereço selecionado';
@@ -249,7 +253,7 @@
     <QuickAddress {location} onReady={onAddressReady} />
   </div>
 {:else if step === 'select'}
-  <PaymentSelectorScreen {total} {addressLabel} {deliveryFee} {acceptedMethods} onContinue={onMethodContinue} {onBack} />
+  <PaymentSelectorScreen {total} {addressLabel} {deliveryFee} {etaMinutes} {slot} {acceptedMethods} onContinue={onMethodContinue} {onBack} />
 {:else if step === 'mp_card'}
   <CardPaymentScreen {total} onSubmit={onCardSubmit} onBack={backFromMethod} {busy} />
 {:else if step === 'pix_loading'}

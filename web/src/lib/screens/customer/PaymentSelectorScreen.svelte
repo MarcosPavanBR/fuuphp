@@ -13,7 +13,16 @@
   // não tem dinheiro hoje). O Pix automático não está no grid do mock: é
   // forma que a LOJA liga (tela 10.5, "RECOMENDADO"), então só aparece
   // quando ela ligou.
-  let { total, addressLabel, deliveryFee = null, acceptedMethods = null, onContinue, onBack } = $props();
+  let {
+    total,
+    addressLabel,
+    deliveryFee = null,
+    etaMinutes = null,
+    slot = null,
+    acceptedMethods = null,
+    onContinue,
+    onBack,
+  } = $props();
 
   function accepted(id) {
     return acceptedMethods === null || acceptedMethods.includes(id);
@@ -25,14 +34,21 @@
     return `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
   }
 
-  // Sem motor de logística real ainda (Fase 8/9), a janela de entrega é
-  // uma estimativa fixa no cliente -- registrado como simplificação.
-  function etaWindow() {
-    const start = new Date(Date.now() + 25 * 60000);
-    const end = new Date(Date.now() + 45 * 60000);
-    const fmt = (d) => d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    return `${fmt(start)} e ${fmt(end)}`;
-  }
+  // Quando chega. Agendado: a faixa escolhida (a hora vem com o fuso da
+  // loja, então lê-se o relógio direto do texto, sem converter pro do
+  // aparelho). Agora: preparo + viagem da cotação do endereço, numa janela
+  // de 10 min como no card da Home. Sem cotação, a linha não aparece -- antes
+  // era um "25 a 45 min" fixo, que valia pra loja nenhuma.
+  let etaLine = $derived.by(() => {
+    if (slot?.start && slot?.end) {
+      return `Agendado: chega entre ${String(slot.start).slice(11, 16)} e ${String(slot.end).slice(11, 16)}`;
+    }
+    if (etaMinutes == null) return null;
+    const low = Math.max(5, Math.round((etaMinutes - 5) / 5) * 5);
+    const fmt = (min) =>
+      new Date(Date.now() + min * 60000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return `Chega entre ${fmt(low)} e ${fmt(low + 10)}`;
+  });
 
   const METHODS = [
     { id: 'mp_card', title: 'Cartão no app', subtitle: 'Aprovação imediata', badge: 'RECOMENDADO', group: 'app' },
@@ -57,7 +73,7 @@
     {#if deliveryFee !== null}
       <p class="eta">{deliveryFee > 0 ? `Frete de ${money(deliveryFee)} incluído no total` : 'Frete grátis'}</p>
     {/if}
-    <p class="eta">Chega entre {etaWindow()}</p>
+    {#if etaLine}<p class="eta">{etaLine}</p>{/if}
   </div>
 
   <p class="section-label">PAGUE AGORA NO APP</p>
