@@ -73,4 +73,15 @@ foreach ($restaurants as &$r) {
 }
 unset($r);
 
-json_response(200, ['restaurants' => $restaurants]);
+// Os atalhos da Home: só as categorias que têm loja aprovada na cidade,
+// abertas ou não, na ordem de STORE_CATEGORIES. Sem isso, a Home ofereceria
+// atalho pra categoria vazia.
+$catStmt = $pdo->prepare(
+    'SELECT DISTINCT category FROM restaurants
+      WHERE city_ibge_code = :city AND approved_at IS NOT NULL AND category IS NOT NULL'
+);
+$catStmt->execute(['city' => $cityIbge]);
+$present = $catStmt->fetchAll(PDO::FETCH_COLUMN);
+$categories = array_values(array_filter(STORE_CATEGORIES, static fn (string $c): bool => in_array($c, $present, true)));
+
+json_response(200, ['restaurants' => $restaurants, 'categories' => $categories]);

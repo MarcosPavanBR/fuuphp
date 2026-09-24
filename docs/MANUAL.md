@@ -29,8 +29,11 @@ regras de negócio por trás de cada uma estão em [decisions/](decisions/README
   pedidos de código em 10 minutos também espera.
 
 ### Pedir
-1. **Início / Buscar** (2.1, 2.2): as lojas abertas na cidade, com nota,
-   tempo e frete reais, e a busca por prato ou loja.
+1. **Início / Buscar** (2.1, 2.2): os banners da plataforma, os
+   **Queridinhos** (os itens mais pedidos da cidade, de lojas abertas), os
+   atalhos de categoria (só os que têm loja na cidade, e "Favoritas") e as
+   lojas abertas, com logo, nota, tempo e frete reais. O **coração** guarda a
+   loja nas favoritas (precisa estar logado). A busca acha prato ou loja.
 2. **Loja** (3.1–3.3): o cardápio, as variações (tamanho, borda...) e o
    carrinho. Só dá pra ter carrinho em uma loja por vez.
 3. **Cupom**: é digitado no carrinho. Vale um uso por CPF e por conta, então o
@@ -106,7 +109,7 @@ o CNPJ dela. CPF não é aceito.
 | **Cozinha** (7.3, 11.1) | a fila de pedidos (KDS): aceitar, preparar, marcar pronto ou recusar com motivo. Comprovantes de Pix esperando conferência aparecem em destaque, com o prazo |
 | **Visão geral** | a fila de Pix, o resumo da cozinha e os números do dia |
 | **Caixa** (9.3–9.5) | dinheiro que os entregadores trouxeram: confirmar a baixa presencial ou conferir o comprovante de Pix da baixa; imprimir o recibo |
-| **Loja** (11.2) | pausar e retomar a loja (ex.: cozinha lotada) |
+| **Loja** (11.2) | a **vitrine no app** (logo e categoria em que a loja aparece na Home) e pausar/retomar a loja (ex.: cozinha lotada) |
 | **Cardápio** (11.3) | itens, preços, variações, foto e disponibilidade |
 | **Horário** (11.4) | dois turnos por dia, feriados e quantos pedidos agendados cabem por meia hora. Abrir e fechar é automático |
 | **Pagamentos** (10.4) | a chave Pix da loja (onde cai o Pix direto do cliente; a troca fica registrada), quais meios a loja aceita e o troco máximo |
@@ -190,6 +193,7 @@ admin é criado no servidor com `bin/bootstrap_admin.php`
 | **Relatórios** (12.3) | GMV, **ticket médio** (com o período anterior ao lado), pedidos por hora do dia e por dia da semana, as lojas que mais vendem, clientes que compraram, voltaram e compraram pela primeira vez, o mix de pagamento e o CSV contábil |
 | **Campanhas** (15.3) | cupons da plataforma (quem paga, teto, público, projeção antes de criar) e o **teto de cupom de cada loja** |
 | **Políticas** (10.5) | comissão, teto de espécie, prazos, frete e meios de pagamento. Mudar cria uma **versão nova**; pedido antigo continua com a regra do seu tempo |
+| **Banners** | o carrossel do topo da Home: imagem 1200 × 450, cidade (ou todas), loja pra onde o toque leva, início, último dia e ordem. Ligar, desligar, reordenar e apagar. A Home mostra até 8 no ar. É a vitrine que dá pra vender às lojas |
 | **Cidades** | as cidades onde o FUU opera: ligar, editar bairros, desligar. Só cidade ligada aparece no app e aceita cadastro de loja |
 | **Aparelhos** | liberar troca de tablet/celular de loja e entregador, com motivo. Encerra as sessões do aparelho antigo |
 

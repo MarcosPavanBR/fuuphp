@@ -1,5 +1,6 @@
 <script>
   import MenuPhoto from '../../components/MenuPhoto.svelte';
+  import StoreLogo from '../../components/StoreLogo.svelte';
   import { api } from '../../services/api.js';
   import { toastr } from '../../utils/toastr.js';
   import { cartState, loadCart } from '../../state/cart.svelte.js';
@@ -53,18 +54,20 @@
 </script>
 
 <div class="restaurant-page">
-  <div class="banner" aria-hidden="true">
+  <!-- Faixa da loja: a cor da marca em dose pequena e o logo por cima. -->
+  <div class="banner">
     <button type="button" class="back" onclick={onBack} aria-label="Voltar">
       <i class="bi bi-arrow-left"></i>
     </button>
-    banner do restaurante
   </div>
 
   {#if loading}
     <p class="empty">Carregando…</p>
   {:else if restaurant}
     <div class="header">
+      <div class="logo-slot"><StoreLogo logoKey={restaurant.logo_key} name={restaurant.name} size={72} /></div>
       <h1 class="fuu-display">{restaurant.name}</h1>
+      {#if restaurant.category}<p class="category">{restaurant.category}</p>{/if}
       <p class="meta">
         <span class={restaurant.is_open ? 'fuu-badge-confirmed' : 'fuu-badge-wait'}>
           {restaurant.is_open ? 'Aberto' : 'Fechado'}
@@ -122,13 +125,8 @@
     padding-bottom: 90px;
   }
   .banner {
-    height: 160px;
+    height: 96px;
     background: var(--fuu-red-tint);
-    color: var(--fuu-red-hover);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
     position: relative;
   }
   .back {
@@ -147,7 +145,21 @@
     color: var(--fuu-ink-5);
   }
   .header {
-    padding: 14px 20px 6px;
+    padding: 0 20px 6px;
+  }
+  /* O logo sobe metade pra dentro da faixa, com um anel de papel em volta. */
+  .logo-slot {
+    margin-top: -36px;
+    margin-bottom: 8px;
+    width: fit-content;
+    border-radius: 14px;
+    box-shadow: 0 0 0 3px var(--fuu-white);
+    background: var(--fuu-white);
+  }
+  .category {
+    font-size: 13px;
+    color: var(--fuu-ink-4);
+    margin: -2px 0 8px;
   }
   h1 {
     font-size: 20px;

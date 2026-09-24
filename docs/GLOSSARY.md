@@ -6,6 +6,7 @@ Os termos do FUUdelivery, na língua do negócio e no nome que têm no código.
 |---|---|---|
 | **Admin fundador** | o primeiro admin da plataforma, criado uma vez no servidor | `bin/bootstrap_admin.php` |
 | **Aparelho confiável** | o primeiro tablet/celular em que a loja ou o entregador entra; outro aparelho só com liberação do suporte | `partner_accounts.device_id`, `admin/partner_devices.php` |
+| **Banner** | a imagem do carrossel da Home, criada pela plataforma; pode levar a uma loja | `promo_banners`, `admin/banners.php`, `banners/list.php` |
 | **Baixa (de espécie)** | o entregador acerta com a loja o dinheiro que recebeu em mãos: presencial ou por Pix com comprovante | `cash_settlement_intents`, `settlement_proofs`, `ledger_cash_settled()` |
 | **Caixa do entregador** | quanto dinheiro em espécie o entregador tem em mãos (a devolver) | `courier_cash_balance()` |
 | **Cadastro de loja / loja em análise** | a loja se cadastra sozinha pelo painel; até a plataforma aprovar, monta o cardápio mas não vende | `restaurants/signup.php`, `restaurants.approved_at`, `require_store_accepting_orders()` |
@@ -23,6 +24,7 @@ Os termos do FUUdelivery, na língua do negócio e no nome que têm no código.
 | **Espécie** | dinheiro vivo (meio de pagamento `cash`) | `payment_method = 'cash'` |
 | **Estorno / reembolso** | devolver dinheiro ao cliente, pelo caminho do meio de pagamento | `refunds`, `refund_plan()`, `bin/execute_refunds.php` |
 | **Fake (modo)** | Mercado Pago e push simulados, pra rodar sem conta real; proibido em produção | `mp_mode()`, `push_mode()` |
+| **Favorita (loja)** | loja marcada com o coração pelo cliente; vira atalho na Home | `favorite_restaurants`, `profile/favorites.php` |
 | **Fidelidade / pontos** | 1 ponto por real de subtotal, trocado por cupom pessoal | `loyalty_entries`, `loyalty_rewards` |
 | **Homologação (staging)** | o ambiente igual à produção, mas com o Mercado Pago de teste | `APP_ENV=staging` |
 | **KDS** | a tela da cozinha: a fila de pedidos pra aceitar, preparar e marcar pronto | `KdsBoard.svelte` |
@@ -37,6 +39,7 @@ Os termos do FUUdelivery, na língua do negócio e no nome que têm no código.
 | **Política** | as regras de dinheiro da plataforma, versionadas: mudar cria versão nova | `platform_policies`, `resolve_policy()` |
 | **Recibo de baixa** | o papel assinado (HMAC) que comprova a baixa de espécie | `print_settlement_receipt()` |
 | **Repasse** | o pagamento semanal da plataforma à loja ou ao entregador | `payouts` |
+| **Queridinhos** | os itens mais pedidos (entregues) da cidade nos últimos 30 dias, de lojas abertas, até 2 por loja | `restaurants/popular_items.php` |
 | **RLS** | a regra do banco que esconde de uma loja os pedidos das outras | migração 009, `db_scope_to_restaurant()` |
 | **Saúde (health)** | a rota que o monitor externo consulta: banco e pg_cron respondendo | `api/v1/system/health.php`, `cron_healthy()` |
 | **Ticket médio** | o que o cliente paga, em média, por pedido pago no período (itens, frete e gorjeta, já com desconto) | `admin/reports.php` (`totals.average_ticket`) |

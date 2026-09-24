@@ -12,7 +12,7 @@
 //   - cardápio e listas públicas: rede primeiro com cópia no cache. Preço
 //     velho é pior que espera, então a rede sempre ganha quando existe --
 //     o cache é o plano B, e a tela avisa que está mostrando o que salvou.
-const VERSION = 'fuu-v5';
+const VERSION = 'fuu-v6';
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 
@@ -31,6 +31,12 @@ const CACHEABLE_API = [
   // Foto do item: URL por hash de conteúdo, nunca muda -- boa pra ver o
   // cardápio offline com as fotos.
   '/api/v1/restaurants/menu_photo.php',
+  // Vitrine da Home (migração 037): banners, queridinhos e logos. As imagens
+  // têm URL por hash de conteúdo, como a foto do item.
+  '/api/v1/banners/list.php',
+  '/api/v1/banners/image.php',
+  '/api/v1/restaurants/popular_items.php',
+  '/api/v1/restaurants/logo.php',
 ];
 
 self.addEventListener('install', (event) => {

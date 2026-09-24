@@ -46,3 +46,4 @@ pra ele (ex.: o mapa do acompanhamento em 06 → 16).
 - [36 — Cadastro de loja, chave Pix, saúde e pg_cron](36-cadastro-de-loja-e-saude.md)
 - [37 — Cidades atendidas e os números do dia a dia](37-cidades-e-numeros.md)
 - [38 — Revisão do código: fuso, cupom, gorjeta e cidades](38-revisao-do-codigo.md)
+- [39 — Vitrine da Home: banners, logo, categorias, favoritas e queridinhos](39-vitrine-da-home.md)

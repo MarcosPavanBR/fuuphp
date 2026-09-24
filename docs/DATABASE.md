@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_db_map.php` a partir do banco com todas as migrações
 > aplicadas. Não edite à mão: o CI confere (`--check`).
 
-60 tabelas em PostgreSQL 16. Regras que o esquema garante sozinho (e que o
+62 tabelas em PostgreSQL 16. Regras que o esquema garante sozinho (e que o
 código não precisa repetir): `orders.status` só muda por `advance_order()`; `ledger_entries`
 é só de inserção (sem UPDATE/DELETE); um pagamento aprovado por pedido
 (`payments_one_approved`). Contexto de cada regra: `docs/ARCHITECTURE.md`.
@@ -15,7 +15,7 @@ código não precisa repetir): `orders.status` só muda por `advance_order()`; `
 
 ## Índice
 
-[`acquirer_statements`](#acquirer_statements) [`addresses`](#addresses) [`audit_log`](#audit_log) [`business_hours`](#business_hours) [`card_transactions`](#card_transactions) [`cash_settlement_intents`](#cash_settlement_intents) [`consents`](#consents) [`coupon_redemptions`](#coupon_redemptions) [`coupons`](#coupons) [`courier_applications`](#courier_applications) [`courier_documents`](#courier_documents) [`courier_positions`](#courier_positions) [`courier_shifts`](#courier_shifts) [`couriers`](#couriers) [`delivery_attempts`](#delivery_attempts) [`delivery_incidents`](#delivery_incidents) [`delivery_proofs`](#delivery_proofs) [`delivery_slots`](#delivery_slots) [`dispatch_attempts`](#dispatch_attempts) [`disputes`](#disputes) [`fraud_signals`](#fraud_signals) [`holiday_overrides`](#holiday_overrides) [`idempotency_keys`](#idempotency_keys) [`item_variants`](#item_variants) [`ledger_entries`](#ledger_entries) [`loyalty_entries`](#loyalty_entries) [`loyalty_rewards`](#loyalty_rewards) [`menu_items`](#menu_items) [`notifications`](#notifications) [`offers`](#offers) [`order_events`](#order_events) [`order_items`](#order_items) [`order_messages`](#order_messages) [`orders`](#orders) [`otp_codes`](#otp_codes) [`outbox`](#outbox) [`partner_accounts`](#partner_accounts) [`partner_login_failures`](#partner_login_failures) [`payment_proofs`](#payment_proofs) [`payments`](#payments) [`payouts`](#payouts) [`platform_policies`](#platform_policies) [`policy_overrides`](#policy_overrides) [`pos_custody`](#pos_custody) [`pos_devices`](#pos_devices) [`print_log`](#print_log) [`push_subscriptions`](#push_subscriptions) [`refunds`](#refunds) [`restaurant_credentials`](#restaurant_credentials) [`restaurant_payment_settings`](#restaurant_payment_settings) [`restaurants`](#restaurants) [`reviews`](#reviews) [`saved_cards`](#saved_cards) [`service_cities`](#service_cities) [`sessions`](#sessions) [`settlement_proofs`](#settlement_proofs) [`store_pauses`](#store_pauses) [`tickets`](#tickets) [`users`](#users) [`wallet_credits`](#wallet_credits) 
+[`acquirer_statements`](#acquirer_statements) [`addresses`](#addresses) [`audit_log`](#audit_log) [`business_hours`](#business_hours) [`card_transactions`](#card_transactions) [`cash_settlement_intents`](#cash_settlement_intents) [`consents`](#consents) [`coupon_redemptions`](#coupon_redemptions) [`coupons`](#coupons) [`courier_applications`](#courier_applications) [`courier_documents`](#courier_documents) [`courier_positions`](#courier_positions) [`courier_shifts`](#courier_shifts) [`couriers`](#couriers) [`delivery_attempts`](#delivery_attempts) [`delivery_incidents`](#delivery_incidents) [`delivery_proofs`](#delivery_proofs) [`delivery_slots`](#delivery_slots) [`dispatch_attempts`](#dispatch_attempts) [`disputes`](#disputes) [`favorite_restaurants`](#favorite_restaurants) [`fraud_signals`](#fraud_signals) [`holiday_overrides`](#holiday_overrides) [`idempotency_keys`](#idempotency_keys) [`item_variants`](#item_variants) [`ledger_entries`](#ledger_entries) [`loyalty_entries`](#loyalty_entries) [`loyalty_rewards`](#loyalty_rewards) [`menu_items`](#menu_items) [`notifications`](#notifications) [`offers`](#offers) [`order_events`](#order_events) [`order_items`](#order_items) [`order_messages`](#order_messages) [`orders`](#orders) [`otp_codes`](#otp_codes) [`outbox`](#outbox) [`partner_accounts`](#partner_accounts) [`partner_login_failures`](#partner_login_failures) [`payment_proofs`](#payment_proofs) [`payments`](#payments) [`payouts`](#payouts) [`platform_policies`](#platform_policies) [`policy_overrides`](#policy_overrides) [`pos_custody`](#pos_custody) [`pos_devices`](#pos_devices) [`print_log`](#print_log) [`promo_banners`](#promo_banners) [`push_subscriptions`](#push_subscriptions) [`refunds`](#refunds) [`restaurant_credentials`](#restaurant_credentials) [`restaurant_payment_settings`](#restaurant_payment_settings) [`restaurants`](#restaurants) [`reviews`](#reviews) [`saved_cards`](#saved_cards) [`service_cities`](#service_cities) [`sessions`](#sessions) [`settlement_proofs`](#settlement_proofs) [`store_pauses`](#store_pauses) [`tickets`](#tickets) [`users`](#users) [`wallet_credits`](#wallet_credits) 
 
 ## acquirer_statements
 
@@ -334,6 +334,16 @@ Criada em `db/migrations/008_support.up.sql`. Da migração: disputes, fraud_sig
 | `created_at` | timestamp with time zone (padrão) |  |  |
 | `courier_id` | uuid | sim | `couriers.id` |
 | `restaurant_id` | uuid | sim | `restaurants.id` |
+
+## favorite_restaurants
+
+Criada em `db/migrations/037_showcase.up.sql`. Da migração: A vitrine da Home do cliente, no nível do concorrente (MaisDelivery): banners promocionais e loja favorita. (O logo da loja já tinha coluna, restaurants.logo_key, desde a migração 010; faltava subir.)
+
+| Coluna | Tipo | Nulo | Referência |
+|---|---|---|---|
+| `user_id` | uuid |  | `users.id` |
+| `restaurant_id` | uuid |  | `restaurants.id` |
+| `created_at` | timestamp with time zone (padrão) |  |  |
 
 ## fraud_signals
 
@@ -764,6 +774,24 @@ Criada em `db/migrations/028_print_log.up.sql`. Da migração: Impressão ESC/PO
 | `reprint` | boolean (padrão) |  |  |
 | `printed_by` | uuid | sim | `users.id` |
 | `printed_at` | timestamp with time zone (padrão) |  |  |
+
+## promo_banners
+
+Criada em `db/migrations/037_showcase.up.sql`. Da migração: A vitrine da Home do cliente, no nível do concorrente (MaisDelivery): banners promocionais e loja favorita. (O logo da loja já tinha coluna, restaurants.logo_key, desde a migração 010; faltava subir.)
+
+| Coluna | Tipo | Nulo | Referência |
+|---|---|---|---|
+| `id` | bigint (padrão) |  |  |
+| `title` | text |  |  |
+| `image_key` | text |  |  |
+| `city_ibge_code` | character | sim | `service_cities.ibge_code` |
+| `link_restaurant_id` | uuid | sim | `restaurants.id` |
+| `starts_at` | timestamp with time zone (padrão) |  |  |
+| `ends_at` | timestamp with time zone | sim |  |
+| `position` | integer (padrão) |  |  |
+| `active` | boolean (padrão) |  |  |
+| `created_by` | uuid | sim | `users.id` |
+| `created_at` | timestamp with time zone (padrão) |  |  |
 
 ## push_subscriptions
 

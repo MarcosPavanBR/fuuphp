@@ -17,6 +17,7 @@
   import OverviewScreen from '../lib/screens/panel/OverviewScreen.svelte';
   import CashDeskScreen from '../lib/screens/panel/CashDeskScreen.svelte';
   import PauseScreen from '../lib/screens/panel/PauseScreen.svelte';
+  import StoreProfilePanel from '../lib/screens/panel/StoreProfilePanel.svelte';
   import MenuScreen from '../lib/screens/panel/MenuScreen.svelte';
   import HoursScreen from '../lib/screens/panel/HoursScreen.svelte';
   import PaymentSettingsScreen from '../lib/screens/panel/PaymentSettingsScreen.svelte';
@@ -243,6 +244,8 @@
     {:else if tab === 'cash'}
       <CashDeskScreen {settlements} onDone={() => pull({ withStats: true })} />
     {:else if tab === 'store'}
+      <!-- Vitrine (logo e categoria) em cima: é o que o cliente vê da loja. -->
+      <StoreProfilePanel />
       <PauseScreen onChanged={() => pull({ withStats: true })} />
     {:else if tab === 'menu'}
       <MenuScreen />

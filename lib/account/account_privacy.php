@@ -68,6 +68,7 @@ function account_export(PDO $pdo, string $userId): array
             $me
         ),
         'notifications' => $all('SELECT kind, title, body, order_id, created_at, delivered_at FROM notifications WHERE user_id = :id ORDER BY created_at', $me),
+        'favorite_restaurants' => $all('SELECT r.name, f.created_at FROM favorite_restaurants f JOIN restaurants r ON r.id = f.restaurant_id WHERE f.user_id = :id ORDER BY f.created_at', $me),
     ];
 }
 
@@ -137,7 +138,7 @@ function account_anonymize(PDO $pdo, string $userId): void
             'DELETE FROM addresses a WHERE a.user_id = :id AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.address_id = a.id)'
         )->execute(['id' => $userId]);
 
-        foreach (['saved_cards', 'push_subscriptions', 'notifications', 'otp_codes', 'consents'] as $table) {
+        foreach (['saved_cards', 'push_subscriptions', 'notifications', 'otp_codes', 'consents', 'favorite_restaurants'] as $table) {
             $pdo->prepare("DELETE FROM {$table} WHERE user_id = :id")->execute(['id' => $userId]);
         }
         $pdo->prepare('UPDATE sessions SET revoked_at = now() WHERE user_id = :id AND revoked_at IS NULL')->execute(['id' => $userId]);

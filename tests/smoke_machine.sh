@@ -230,7 +230,7 @@ NONSU=$(curl -s -X POST "$BASE/couriers/pos.php" -H "Content-Type: application/j
 [ "$(echo "$NONSU" | jq -r '.notice')" = "Venda registrada SEM NSU. Informe o número antes do fim do turno — sem ele o dia da loja não fecha." ] \
   || fail "o aviso do NSU faltando não é o da tela: $NONSU"
 
-TODAY=$(date +%F)
+TODAY=$(TZ=America/Sao_Paulo date +%F)   # o dia do negócio é o de Brasília
 RECON=$(curl -s "$BASE/restaurants/reconciliation.php?day=${TODAY}" "${STAFF_AUTH[@]}")
 [ "$(echo "$RECON" | jq -r '.rows | length')" = "2" ] || fail "a conferência não achou as duas vendas: $RECON"
 [ "$(echo "$RECON" | jq -r '.to_resolve')" = "2" ] || fail "tudo devia estar a resolver antes do extrato: $RECON"
@@ -323,7 +323,7 @@ TAKE2=$(curl -s -X POST "$BASE/couriers/pos.php" -H "Content-Type: application/j
 
 echo "== 9.7: o acerto da semana sai do livro, não de conta refeita =="
 # Envelhece tudo pra semana passada e gera o fechamento dela.
-LAST_MON=$(date -d 'last monday -7 days' +%F 2>/dev/null || date -v-mon -v-7d +%F)
+LAST_MON=$(TZ=America/Sao_Paulo date -d 'last monday -7 days' +%F 2>/dev/null || date -v-mon -v-7d +%F)
 LAST_SUN=$(date -d "${LAST_MON} +6 days" +%F)
 psql_run <<SQL
 UPDATE orders SET created_at = '${LAST_MON}'::date + interval '12 hours'

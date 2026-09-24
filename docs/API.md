@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_api_catalog.php` a partir dos próprios arquivos de
 > `api/v1`. Não edite à mão: o CI confere (`--check`) e falha se estiver desatualizado.
 
-115 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
+122 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
 `{code, message, trace_id}` com o status HTTP certo (`lib/core/response.php`). As URLs são
 contrato público: mudar um caminho quebra app instalado.
 
@@ -24,6 +24,7 @@ contrato público: mudar um caminho quebra app instalado.
 
 | Rota | Métodos | Quem | Idem. | O que faz |
 |---|---|---|---|---|
+| `/api/v1/admin/banners.php` | POST | admin |  | Aba Banners do painel da plataforma: o carrossel da Home do cliente (migração 037). É a vitrine que a plataforma pode vender pras lojas. |
 | `/api/v1/admin/campaigns.php` | GET, POST | admin |  | Tela 15.3 — "Cupons e campanhas". |
 | `/api/v1/admin/cities.php` | POST | admin |  | Aba Cidades do painel da plataforma: onde o FUU opera (migração 036). Ligar uma cidade é o que faz ela aparecer no onboarding do cliente (1.2/1.3) e no cadastro de loja. |
 | `/api/v1/admin/couriers.php` | GET, POST | admin |  | Tela 15.2, lado de dentro: a fila de análise das candidaturas. |
@@ -49,6 +50,13 @@ contrato público: mudar um caminho quebra app instalado.
 | `/api/v1/auth/otp_verify.php` | POST | público |  | Tela 10.2 — confere o código OTP e devolve access token (15 min) e refresh token (30 dias, com rotação). Código tem prazo e limite de tentativas; conta bloqueada ou excluída (LGPD, migração 026) não entra. |
 | `/api/v1/auth/partner_login.php` | POST | público |  | Tela 10.7 / 8.1 — login de parceiro: loja com CNPJ + senha, entregador com CPF + código de acesso. Devolve o token com o papel e o vínculo (restaurant_id / courier_id) que os guardas de cada rota conferem. |
 | `/api/v1/auth/refresh.php` | POST | público |  | Troca um refresh token válido por um par novo (rotação: o antigo deixa de valer). Sessão revogada -- logout, conta excluída -- responde 401. |
+
+## banners
+
+| Rota | Métodos | Quem | Idem. | O que faz |
+|---|---|---|---|---|
+| `/api/v1/banners/image.php` | GET | público |  | Imagem de banner da Home. Pública, com cache de um ano: a chave é o hash do conteúdo (lib/catalog/public_images.php), então banner novo é URL nova. |
+| `/api/v1/banners/list.php` | GET | público |  | Carrossel da Home (tela 2.1): os banners no ar pra cidade escolhida. |
 
 ## Cartões salvos (6.2)
 
@@ -133,6 +141,7 @@ contrato público: mudar um caminho quebra app instalado.
 |---|---|---|---|---|
 | `/api/v1/profile/delete_account.php` | GET, POST | cliente |  | Tela 6.3 — "Excluir conta" (LGPD art. 18, VI). |
 | `/api/v1/profile/export.php` | GET | cliente |  | Tela 6.3 — "Baixar meus dados (LGPD)". Devolve um JSON com tudo que o sistema guarda sobre o cliente logado (lib/account/account_privacy.php decide o que entra e o que fica de fora), como anexo pra download. |
+| `/api/v1/profile/favorites.php` | POST | autenticado |  | Lojas favoritas do cliente: o coração no card da Home e o atalho "Favoritas" (migração 037). |
 | `/api/v1/profile/loyalty.php` | GET, POST | cliente |  | Tela 2.3 — Fidelidade. "Saldo calculado no banco (soma dos lançamentos), nunca no cliente." |
 | `/api/v1/profile/show.php` | GET | autenticado |  | Tela 2.5 — o perfil do cliente: dados da conta (CPF só mascarado) e os números do topo (pedidos, cupons; pontos ainda sem tabela). |
 | `/api/v1/profile/update.php` | POST | autenticado |  | Tela 10.3 — "Cadastro: mínimo necessário + LGPD por campo". O cadastro começa no OTP (que já cria o usuário com nome e telefone verificados) e termina aqui: CPF pra nota fiscal, e-mail, e os opcionais que só são gravados se a pessoa consentir. |
@@ -157,6 +166,7 @@ contrato público: mudar um caminho quebra app instalado.
 | `/api/v1/restaurants/hours.php` | GET | loja |  | Tela 11.4 — "Horário, feriados e último pedido". |
 | `/api/v1/restaurants/hours_save.php` | POST | loja |  | Tela 11.4 — "Salvar horário", com o "APLICAR PARA" do lado (só terça, seg a sex, todos os dias). |
 | `/api/v1/restaurants/list.php` | GET | público |  | Tela 2.1 — lojas aprovadas de uma cidade, abertas por padrão, com distância, nota, frete e tempo quando o app manda a posição (lat/lng). |
+| `/api/v1/restaurants/logo.php` | GET, POST | loja |  | Logo da loja: aparece no card da Home e da busca e no topo da loja. |
 | `/api/v1/restaurants/menu.php` | GET | público |  | Tela 3.1 — o cardápio público de uma loja, com variações; item esgotado vem marcado, não escondido. |
 | `/api/v1/restaurants/menu_admin.php` | GET | loja |  | Tela 11.3 — o cardápio pelos olhos da loja. |
 | `/api/v1/restaurants/menu_availability.php` | POST | loja |  | Tela 11.3 — "Esgotar é um toque na lista". |
@@ -168,6 +178,7 @@ contrato público: mudar um caminho quebra app instalado.
 | `/api/v1/restaurants/payment_settings.php` | GET, POST | loja |  | Tela 10.4 — "Painel da loja: configurar formas de pagamento". |
 | `/api/v1/restaurants/pending_proofs.php` | GET | autenticado |  | Tela 7.3 — fila de validação do painel da loja. Devolve, de uma vez, tudo que o modal de decisão precisa mostrar: o comprovante (referência), os dados do pedido e a "conferência automática" (hash, phash, horário, marca d'água) que o mock descreve -- "reduz… |
 | `/api/v1/restaurants/pix_key.php` | POST | loja |  | Chave Pix da loja (tela 10.4, aba Pagamentos): onde cai o "Pix direto pra loja" do cliente (4.3) e a baixa de espécie por Pix do entregador (9.5). |
+| `/api/v1/restaurants/popular_items.php` | GET | público |  | "Queridinhos" da Home (tela 2.1): os itens mais pedidos da cidade. |
 | `/api/v1/restaurants/pos_devices.php` | POST | loja |  | Tela 10.4, bloco "MAQUININHAS CADASTRADAS" — e a outra ponta da 10.6. |
 | `/api/v1/restaurants/prep_time.php` | POST | loja |  | Tela 11.2 — "Tempo de preparo informado ao cliente". |
 | `/api/v1/restaurants/print_queue.php` | GET, POST | loja |  | A impressora térmica da loja (ESC/POS): o que falta imprimir, e o registro do que saiu no papel. Quem imprime é o tablet do balcão, que está ligado na impressora por USB -- o servidor não alcança a rede da loja. |
@@ -179,6 +190,7 @@ contrato público: mudar um caminho quebra app instalado.
 | `/api/v1/restaurants/show.php` | GET | público |  | Tela 3.1 — os dados públicos de uma loja: horário, tempo de preparo em vigor e as formas de pagamento que ela aceita agora. |
 | `/api/v1/restaurants/signup.php` | POST | público |  | Cadastro de loja pela própria loja ("Quero vender no FUU", migração 033). |
 | `/api/v1/restaurants/stats.php` | GET | autenticado |  | Tela 7.3 — "VISÃO GERAL DE HOJE": faturado, pedidos, Pix validados, recusados. "Hoje" é o dia corrente no fuso do banco (now()::date), não as últimas 24h -- é o que um dono de loja entende por "hoje". |
+| `/api/v1/restaurants/store_profile.php` | POST | loja |  | A vitrine da própria loja, no painel (aba Loja): nome, categoria e logo. |
 
 ## Avaliação (5.5)
 

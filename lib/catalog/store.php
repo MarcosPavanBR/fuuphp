@@ -48,11 +48,20 @@ function effective_prep_minutes(PDO $pdo, string $restaurantId, ?array $store = 
 }
 
 /**
- * Categorias de loja, as mesmas dos atalhos da Home (tela 2.1) mais
- * "Restaurante" pra quem não cabe neles. O cadastro só aceita estas: a
- * categoria vira filtro, e texto livre quebraria o filtro.
+ * Categorias de loja, na ordem em que aparecem nos atalhos da Home (tela
+ * 2.1). O cadastro só aceita estas: a categoria vira filtro, e texto livre
+ * quebraria o filtro.
+ *
+ * As seis primeiras do mock (Lanches, Pizza, Restaurante, Mercado, Farmácia,
+ * Doces) continuam; as outras vieram da comparação com o concorrente, que
+ * vende também o comércio do bairro que não é comida (perfumaria, moda,
+ * pet shop...). A Home só mostra as que têm loja na cidade.
  */
-const STORE_CATEGORIES = ['Lanches', 'Pizza', 'Restaurante', 'Mercado', 'Farmácia', 'Doces'];
+const STORE_CATEGORIES = [
+    'Lanches', 'Hamburgueria', 'Pizza', 'Marmitas', 'Restaurante', 'Japonesa', 'Espetinhos e porções',
+    'Açaí e sorvetes', 'Doces', 'Padaria e café', 'Mercado', 'Bebidas', 'Farmácia', 'Pet shop',
+    'Beleza e perfumaria', 'Moda e presentes', 'Tabacaria', 'Outros',
+];
 
 /**
  * A loja pode receber pedido agora? Encerra com 404 se não existe e 409 se

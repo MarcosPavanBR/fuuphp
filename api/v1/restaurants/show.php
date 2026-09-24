@@ -14,7 +14,7 @@ if (!is_string($id) || $id === '') {
 }
 
 $pdo = db();
-$stmt = $pdo->prepare('SELECT id, name, cnpj, city_ibge_code, is_open, pause_until, approved_at, prep_minutes FROM restaurants WHERE id = :id');
+$stmt = $pdo->prepare('SELECT id, name, cnpj, city_ibge_code, category, logo_key, is_open, pause_until, approved_at, prep_minutes FROM restaurants WHERE id = :id');
 $stmt->execute(['id' => $id]);
 $restaurant = $stmt->fetch();
 

@@ -169,7 +169,7 @@ MANUAL=$(curl -s -X POST "$BASE/admin/refunds.php" -H "Content-Type: application
 echo "== 12.3: CSV contábil só pro admin, com ; e vírgula decimal =="
 [ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/admin/export.php?kind=ledger" "${STAFF_AUTH[@]}")" = "403" ] \
   || fail "a loja baixou o livro da plataforma"
-TODAY=$(date +%F)
+TODAY=$(TZ=America/Sao_Paulo date +%F)   # o dia do negócio é o de Brasília
 curl -s -D /tmp/smoke-money-h.txt "$BASE/admin/export.php?kind=orders&from=${TODAY}&to=${TODAY}" "${ADMIN_AUTH[@]}" >/tmp/smoke-money-orders.csv
 grep -qi 'content-type: text/csv' /tmp/smoke-money-h.txt || fail "export não respondeu CSV"
 head -c 3 /tmp/smoke-money-orders.csv | od -An -tx1 | grep -q 'ef bb bf' || fail "CSV sem BOM (o Excel troca os acentos)"
@@ -295,7 +295,7 @@ curl -s -X POST "$BASE/couriers/pos.php" -H "Content-Type: application/json" "${
   -d "{\"action\":\"sale\",\"order_id\":${O_POS},\"nsu\":\"${NSU_OWN}\",\"amount\":${TOTAL_POS}}" >/dev/null
 [ "$(query "SELECT COALESCE(SUM(amount),0) FROM ledger_entries WHERE account='courier_cash' AND party_id='${COURIER_ID}'")" = "$CASH_AFTER" ] \
   || fail "completar o NSU cobrou a dívida duas vezes"
-RECON=$(curl -s "$BASE/restaurants/reconciliation.php?day=$(date +%F)" "${STAFF_AUTH[@]}")
+RECON=$(curl -s "$BASE/restaurants/reconciliation.php?day=$(TZ=America/Sao_Paulo date +%F)" "${STAFF_AUTH[@]}")
 [ "$(echo "$RECON" | jq -r "[.rows[] | select(.order_id == ${O_POS})] | length")" = "0" ] \
   || fail "venda da máquina do entregador apareceu na conciliação da loja: $RECON"
 

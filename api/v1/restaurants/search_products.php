@@ -26,7 +26,7 @@ $pdo = db();
 // própria tela 2.2 cita no chip de tecnologia.
 $stmt = $pdo->prepare(
     "SELECT mi.id, mi.name, mi.price, mi.photo_key,
-            r.id AS restaurant_id, r.name AS restaurant_name
+            r.id AS restaurant_id, r.name AS restaurant_name, r.logo_key AS restaurant_logo_key
      FROM menu_items mi
      JOIN restaurants r ON r.id = mi.restaurant_id
      WHERE r.city_ibge_code = :city_ibge_code

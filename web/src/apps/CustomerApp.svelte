@@ -41,9 +41,12 @@
     }
   }
 
-  let location = $state(storedLocation());
-  let step = $state(location ? 'app' : 'splash');
-  let uf = $state(location?.uf ?? null);
+  // Lida uma vez na abertura: o estado inicial das telas e a conferência da
+  // cidade logo abaixo partem dela.
+  const initialLocation = storedLocation();
+  let location = $state(initialLocation);
+  let step = $state(initialLocation ? 'app' : 'splash');
+  let uf = $state(initialLocation?.uf ?? null);
   let tab = $state('home');
   let restaurantId = $state(null);
   let cartOpen = $state(false);
@@ -59,7 +62,7 @@
   // da lista antiga, fixa no app). Com a lista em mãos, cidade que saiu
   // manda o cliente escolher de novo; cidade que continua tem nome, centro e
   // bairros atualizados. Sem rede, fica o que está salvo.
-  if (location) {
+  if (initialLocation) {
     loadServiceStates()
       .then((states) => {
         const city = states.flatMap((st) => st.cities.map((c) => ({ ...c, uf: st.uf })))

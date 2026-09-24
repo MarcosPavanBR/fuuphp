@@ -142,7 +142,6 @@
           class="hour"
           class:peak={i === peakHour}
           role="listitem"
-          tabindex="0"
           aria-label={`${i}h: ${h.orders} pedidos, ${money(h.gmv)}`}
           title={`${i}h às ${i + 1}h · ${h.orders} pedidos · ${money(h.gmv)}`}
         >
@@ -423,10 +422,6 @@
     height: 100%;
     display: flex;
     align-items: flex-end;
-    outline-offset: 2px;
-  }
-  .hour:focus-visible {
-    outline: 2px solid var(--fuu-ink-1);
   }
   .bar {
     width: 100%;

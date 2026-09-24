@@ -14,6 +14,7 @@
   import NettingScreen from '../lib/screens/admin/NettingScreen.svelte';
   import PartnerDeviceScreen from '../lib/screens/admin/PartnerDeviceScreen.svelte';
   import CitiesScreen from '../lib/screens/admin/CitiesScreen.svelte';
+  import BannersScreen from '../lib/screens/admin/BannersScreen.svelte';
 
   // Painel da plataforma (Fase 12 + tela 10.5). Quarto bundle, quarto
   // público: quem opera o negócio, não quem usa o app.
@@ -77,6 +78,7 @@
         <button type="button" class:on={tab === 'campaigns'} onclick={() => (tab = 'campaigns')}>
           Campanhas
         </button>
+        <button type="button" class:on={tab === 'banners'} onclick={() => (tab = 'banners')}>Banners</button>
         <button type="button" class:on={tab === 'cities'} onclick={() => (tab = 'cities')}>Cidades</button>
         <button type="button" class:on={tab === 'policy'} onclick={() => (tab = 'policy')}>Políticas</button>
         <button type="button" class:on={tab === 'devices'} onclick={() => (tab = 'devices')}>Aparelhos</button>
@@ -104,6 +106,9 @@
         <ReportsScreen />
       {:else if tab === 'campaigns'}
         <CampaignsScreen />
+      {:else if tab === 'banners'}
+        <!-- O carrossel da Home do cliente: vitrine que dá pra vender às lojas. -->
+        <BannersScreen />
       {:else if tab === 'cities'}
         <!-- Onde o FUU opera: o que o onboarding e o cadastro de loja mostram. -->
         <CitiesScreen />

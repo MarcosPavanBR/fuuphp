@@ -141,6 +141,11 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
 - O tipo real é conferido pelo conteúdo (`finfo`), não pela extensão, e o
   tamanho tem limite: 10 MB pra comprovante, foto de ocorrência e documento de
   entregador, e 8 MB pra foto do cardápio.
+- **Imagens públicas** (foto do cardápio, logo da loja, banner): recodificadas
+  com GD em JPEG (sem EXIF, sem GPS de quem fotografou), nome pelo SHA-256 do
+  conteúdo, e a rota só aceita exatamente esse formato de chave
+  (`lib/catalog/public_images.php`). Logo só a equipe da própria loja sobe;
+  banner, só a plataforma.
 - Retenção (pg_cron, `purge_retention`):
   - comprovantes somem em 180 dias;
   - a posição e a foto das ocorrências são apagadas em 180 dias;

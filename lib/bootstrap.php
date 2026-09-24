@@ -39,6 +39,7 @@ require_once __DIR__ . '/catalog/policy.php';
 require_once __DIR__ . '/catalog/store.php';
 require_once __DIR__ . '/catalog/restaurant_facts.php';
 require_once __DIR__ . '/catalog/cities.php';
+require_once __DIR__ . '/catalog/public_images.php';
 
 // ── pedido: carrinho, cupom, agendamento, frete, máquina de estados ────
 require_once __DIR__ . '/ordering/orders.php';
