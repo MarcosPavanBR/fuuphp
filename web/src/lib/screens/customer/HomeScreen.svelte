@@ -87,8 +87,6 @@
     {/each}
   </div>
 
-  <div class="banner" aria-hidden="true">banner promocional</div>
-
   <div class="section-header">
     <p class="section-label">ABERTOS AGORA</p>
   </div>
@@ -183,17 +181,6 @@
     background: var(--fuu-red);
     border-color: var(--fuu-red);
     color: var(--fuu-white);
-  }
-  .banner {
-    height: 110px;
-    border-radius: var(--fuu-radius-card);
-    background: var(--fuu-red-tint);
-    color: var(--fuu-red-hover);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    margin-bottom: 16px;
   }
   .section-label {
     font-family: var(--fuu-font-mono);
