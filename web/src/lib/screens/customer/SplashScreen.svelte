@@ -1,20 +1,16 @@
 <script>
   import { fade } from 'svelte/transition';
-  import PhoneStatusBar from '../../components/PhoneStatusBar.svelte';
   import BrandMark from '../../components/BrandMark.svelte';
 
-  // Tela 1.1 — Splash. "Transição fade do Svelte; service worker aquece o
-  // cache enquanto a marca aparece." O service worker de verdade fica fora
-  // do escopo desta tela (é infraestrutura de PWA para um passo posterior);
-  // aqui o que é real é a transição e o avanço automático.
+  // Tela 1.1 — Splash: a marca com transição fade e avanço automático. O
+  // cache offline é do service worker (public/sw.js), não desta tela -- por
+  // isso o rodapé diz só "abrindo…", sem prometer o que ela não faz.
   let { onContinue } = $props();
 
   setTimeout(() => onContinue(), 1800);
 </script>
 
 <div class="splash" in:fade={{ duration: 300 }}>
-  <PhoneStatusBar />
-
   <div class="splash-body">
     <BrandMark size={88} />
     <div class="wordmark fuu-display">
@@ -25,7 +21,7 @@
 
   <div class="splash-footer">
     <div class="spinner-fuu" aria-hidden="true"></div>
-    <span>aquecendo cardápios para uso offline…</span>
+    <span>abrindo…</span>
   </div>
 </div>
 

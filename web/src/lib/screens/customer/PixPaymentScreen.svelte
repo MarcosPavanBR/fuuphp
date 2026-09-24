@@ -49,7 +49,11 @@
   <p class="restaurant-name">{restaurantName}</p>
   {#if restaurantCnpj}<p class="cnpj fuu-mono">CNPJ {restaurantCnpj}</p>{/if}
 
-  <div class="qr-box" aria-hidden="true"><i class="bi bi-qr-code"></i><span>QR Code gerado pelo backend (PHP)</span></div>
+  <!-- O mock tinha aqui uma caixa "QR Code gerado pelo backend (PHP)", mas
+       nenhum QR é desenhado: gerar a imagem pede uma biblioteca de QR, que só
+       entra com autorização do Marcos. Até lá, o caminho honesto é o copia e
+       cola, que é o que o cliente usa no próprio celular. -->
+  <p class="how">Copie o código abaixo e cole no app do seu banco, em <strong>Pix copia e cola</strong>.</p>
 
   <p class="amount fuu-mono">{money(amount)}</p>
   <p class="amount-note">Valor exato — divergência é recusada</p>
@@ -109,21 +113,13 @@
     font-size: 11.5px;
     color: var(--fuu-ink-5);
   }
-  .qr-box {
-    height: 180px;
-    border-radius: var(--fuu-radius-card);
+  .how {
+    font-size: 13.5px;
+    color: var(--fuu-ink-3);
     background: var(--fuu-line-5);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    color: var(--fuu-ink-5);
-    font-size: 11px;
-    margin-bottom: 14px;
-  }
-  .qr-box i {
-    font-size: 48px;
+    border-radius: var(--fuu-radius-card);
+    padding: 12px 14px;
+    margin: 0 0 14px;
   }
   .amount {
     text-align: center;

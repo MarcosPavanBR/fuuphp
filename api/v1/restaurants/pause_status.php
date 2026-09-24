@@ -127,7 +127,8 @@ json_response(200, [
     ],
     'pause' => $pause === false ? null : $pause,
     'paused_seconds_today' => $pausedSecondsToday,
-    // 7200 s: as 2 h do mock, escritas num lugar só.
+    // 7200 s: as 2 h do mock, escritas num lugar só. É referência pra loja,
+    // não penalidade: a ordem da Home não olha pausa.
     'ranking_limit_seconds' => 7200,
     'reasons' => [
         ['code' => 'busy_kitchen', 'label' => 'Cozinha cheia'],

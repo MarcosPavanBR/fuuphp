@@ -82,7 +82,7 @@
     <button
       type="button"
       class="tile disabled"
-      onclick={() => toastr.info('Cripto via BitPay é BETA no mock e ainda não existe neste backend.')}
+      onclick={() => toastr.info('Pagamento com cripto ainda não está disponível.')}
     >
       <span class="badge beta">BETA</span>
       <p class="title">Cripto via BitPay</p>

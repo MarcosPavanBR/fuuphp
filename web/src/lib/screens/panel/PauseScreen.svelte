@@ -267,8 +267,11 @@
       </div>
 
       <div class="warn">
-        <strong>Pausa longa derruba seu ranking</strong> na busca do app. Acima de {rankingLimit} min por
-        dia, a loja perde o selo de "Confiável".
+        <!-- O mock falava em ranking e selo de "Confiável"; nenhum dos dois existe
+             (a Home ordena por distância). Fica só o que é verdade: o limite de
+             referência e quanto a loja já pausou hoje. -->
+        <strong>Pausa longa faz o cliente pedir em outra loja.</strong> Tente ficar abaixo de {rankingLimit} min
+        pausada por dia.
         <span class="warn-today" class:over={pausedMinutesToday > rankingLimit}>
           Hoje: {pausedMinutesToday} min pausada.
         </span>

@@ -84,8 +84,8 @@
     }
   }
 
-  function notImplemented(what) {
-    toastr.info(`${what}: método configurado pela loja, não por usuário. Já funciona na Fase 4 (pagamento).`);
+  function explainMethod(what) {
+    toastr.info(`${what}: você escolhe na hora de pagar, se a loja aceitar. Não precisa cadastrar.`);
   }
 </script>
 
@@ -153,11 +153,11 @@
     </p>
 
     <p class="section-label other">OUTROS MÉTODOS</p>
-    <button type="button" class="other-method" onclick={() => notImplemented('Pix com comprovante')}>
+    <button type="button" class="other-method" onclick={() => explainMethod('Pix com comprovante')}>
       <span>Pix com comprovante</span>
       <i class="bi bi-chevron-right"></i>
     </button>
-    <button type="button" class="other-method" onclick={() => notImplemented('Dinheiro na entrega')}>
+    <button type="button" class="other-method" onclick={() => explainMethod('Dinheiro na entrega')}>
       <span>Dinheiro na entrega</span>
       <i class="bi bi-chevron-right"></i>
     </button>

@@ -323,7 +323,7 @@
     {/if}
   </div>
 
-  <p class="footer">FUUdelivery PWA 2.0.0<br />HTTP/3 · Cloudflare{swVersion ? ` · sw ${swVersion}` : ''}</p>
+  <p class="footer">FUUdelivery{swVersion ? ` · versão ${swVersion}` : ''}</p>
 </div>
 
 <style>

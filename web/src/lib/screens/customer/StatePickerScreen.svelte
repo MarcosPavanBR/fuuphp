@@ -1,5 +1,4 @@
 <script>
-  import PhoneStatusBar from '../../components/PhoneStatusBar.svelte';
   import { loadServiceStates } from '../../services/cities.js';
 
   // Tela 1.2 — Seleção de estado. Só os estados onde o FUU já opera (aba
@@ -40,7 +39,6 @@
 </script>
 
 <div class="state-selector">
-  <PhoneStatusBar />
 
   <div class="header">
     <p class="step">PASSO 1 DE 2</p>
@@ -104,8 +102,10 @@
     min-height: 100vh;
     background: var(--fuu-paper);
   }
+  /* Topo livre: o celular já desenha a própria barra de status; o respiro
+     cobre o entalhe (safe area) quando o PWA abre em tela cheia. */
   .header {
-    padding: 4px 20px 12px;
+    padding: calc(20px + env(safe-area-inset-top, 0px)) 20px 12px;
   }
   .step {
     font-family: var(--fuu-font-mono);

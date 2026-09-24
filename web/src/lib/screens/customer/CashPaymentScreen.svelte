@@ -16,7 +16,13 @@
     return `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
   }
 
-  const QUICK_AMOUNTS = [60, 70, 100];
+  // Atalhos de troco: as notas que a pessoa provavelmente tem, sempre acima
+  // do total -- a próxima dezena, a próxima de 50 e a próxima de 100 (sem
+  // repetir). Fixo em 60/70/100, como no mock, um pedido de R$ 120 só
+  // oferecia valor que dava erro.
+  let quickAmounts = $derived(
+    [...new Set([10, 50, 100].map((step) => Math.ceil((total + 0.01) / step) * step))].slice(0, 3)
+  );
 
   let changeOwed = $derived(needsChange && changeFor ? Math.max(0, changeFor - total) : null);
 
@@ -58,7 +64,7 @@
       bind:value={changeFor}
     />
     <div class="quick-row">
-      {#each QUICK_AMOUNTS as amount (amount)}
+      {#each quickAmounts as amount (amount)}
         <button type="button" class="quick-btn" onclick={() => (changeFor = amount)}>{money(amount)}</button>
       {/each}
     </div>
