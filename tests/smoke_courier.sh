@@ -89,9 +89,14 @@ RAUTH=(-H "Authorization: Bearer $RIVAL_TOKEN")
 # por bcrypt (migração 034), e o mesmo código continua entrando.
 [ "$(psql "$DATABASE_URL" -tAc "SELECT left(access_code_hash, 4) FROM partner_accounts WHERE kind='courier' AND login_code='${CPF}'")" = '$2y$' ] \
   || fail "código antigo não foi convertido pra bcrypt no login"
-curl -s -X POST "$BASE/auth/partner_login.php" -H "Content-Type: application/json" \
-  -d "{\"kind\":\"courier\",\"login_code\":\"${CPF}\",\"secret\":\"${ACCESS_CODE}\"}" | jq -e '.access_token' >/dev/null \
-  || fail "depois de virar bcrypt o código não entra mais"
+AGAIN=$(curl -s -X POST "$BASE/auth/partner_login.php" -H "Content-Type: application/json" \
+  -d "{\"kind\":\"courier\",\"login_code\":\"${CPF}\",\"secret\":\"${ACCESS_CODE}\"}")
+echo "$AGAIN" | jq -e '.access_token' >/dev/null || fail "depois de virar bcrypt o código não entra mais"
+# Renovação (migração 039): o entregador renovado continua sendo ele.
+RENEWED=$(curl -s -X POST "$BASE/auth/refresh.php" -H "Content-Type: application/json" \
+  -d "{\"refresh_token\":\"$(echo "$AGAIN" | jq -r '.refresh_token')\"}" | jq -er '.access_token') || fail "refresh do entregador falhou"
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/couriers/me.php" -H "Authorization: Bearer $RENEWED")" = "200" ] \
+  || fail "token renovado do entregador perdeu o courier_id"
 STAFF_TOKEN=$(curl -s -X POST "$BASE/auth/partner_login.php" -H "Content-Type: application/json" \
   -d "{\"kind\":\"restaurant\",\"login_code\":\"${CNPJ}\",\"secret\":\"senha123\"}" | jq -er '.access_token') || fail "login da loja falhou"
 SAUTH=(-H "Authorization: Bearer $STAFF_TOKEN")

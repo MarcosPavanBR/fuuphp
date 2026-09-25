@@ -2,7 +2,7 @@
 // localStorage, outro estado reativo. O mesmo aparelho pode ter as três sem
 // um login derrubar o outro -- e no caso dele isso importa mais, porque o
 // mock diz que "entregador troca de celular com frequência".
-import { api } from '../services/api.js';
+import { api, registerSession, setSessionTokens, endSession } from '../services/api.js';
 
 const TOKEN_KEY = 'fuu_courier_token';
 
@@ -14,16 +14,17 @@ function read() {
   }
 }
 
-function write(value) {
-  try {
-    if (value) localStorage.setItem(TOKEN_KEY, value);
-    else localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    // aba privada / storage bloqueado: a sessão só não sobrevive ao reload
-  }
-}
-
 let accessToken = $state(read());
+
+// Token de 15 min renovado sozinho (services/api.js); sessão morta zera o
+// estado e o app volta pro login.
+registerSession('courier', {
+  accessKey: TOKEN_KEY,
+  refreshKey: 'fuu_courier_refresh',
+  onChange: (token) => {
+    accessToken = token;
+  },
+});
 
 export function isCourierAuthenticated() {
   return accessToken !== null;
@@ -37,12 +38,10 @@ export async function courierLogin({ cpf, code, deviceId }) {
   const data = await api.post('/auth/partner_login.php', {
     body: { kind: 'courier', login_code: cpf, secret: code, device_id: deviceId },
   });
-  accessToken = data.access_token;
-  write(data.access_token);
+  setSessionTokens('courier', data);
   return data;
 }
 
 export function courierLogout() {
-  accessToken = null;
-  write(null);
+  endSession('courier');
 }

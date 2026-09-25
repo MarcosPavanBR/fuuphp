@@ -962,6 +962,7 @@ Criada em `db/migrations/001_identity.up.sql`. Access token de 15 min (fora do b
 | `revoked_at` | timestamp with time zone | sim |  |
 | `expires_at` | timestamp with time zone |  |  |
 | `created_at` | timestamp with time zone (padrão) |  |  |
+| `claims` | jsonb (padrão) |  |  |
 
 ## settlement_proofs
 

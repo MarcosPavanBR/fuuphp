@@ -20,6 +20,16 @@
   // Painel da plataforma (Fase 12 + tela 10.5). Quarto bundle, quarto
   // público: quem opera o negócio, não quem usa o app.
   let logged = $state(isAdminAuthenticated());
+
+  // A sessão renova sozinha (services/api.js). Se o servidor recusar a
+  // renovação (suporte liberou troca de aparelho, conta bloqueada, 30 dias
+  // sem uso), o módulo de sessão zera o token e a tela volta pro login.
+  $effect(() => {
+    if (logged && !isAdminAuthenticated()) {
+      logged = false;
+      toastr.warning('Sua sessão terminou. Entre de novo.');
+    }
+  });
   let tab = $state('stores');
   let stores = $state(null);
   let disputes = $state(null);

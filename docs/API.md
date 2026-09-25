@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_api_catalog.php` a partir dos próprios arquivos de
 > `api/v1`. Não edite à mão: o CI confere (`--check`) e falha se estiver desatualizado.
 
-123 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
+124 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
 `{code, message, trace_id}` com o status HTTP certo (`lib/core/response.php`). As URLs são
 contrato público: mudar um caminho quebra app instalado.
 
@@ -47,10 +47,11 @@ contrato público: mudar um caminho quebra app instalado.
 |---|---|---|---|---|
 | `/api/v1/auth/channels.php` | GET | público |  | Tela 10.1 — por quais canais o código de login pode chegar agora. |
 | `/api/v1/auth/consent.php` | POST | autenticado |  | Tela 10.3 — registra o aceite de um termo (termos, privacidade, marketing, localização) com versão e IP. Termos + privacidade marcam a conta como `lgpd_accepted_at`; marketing e localização ficam como consentimentos separados e revogáveis. |
+| `/api/v1/auth/logout.php` | POST | público |  | Sair: revoga no servidor a sessão do refresh token informado. Sem isso o "Sair" só apagava o token do aparelho, e o refresh continuaria valendo 30 dias pra quem tivesse copiado. A credencial é o próprio refresh token -- não pede access token, porque quem sa… |
 | `/api/v1/auth/otp_request.php` | POST | público |  | Tela 10.1/10.2 — pede o código de 6 dígitos (OTP) por telefone ou e-mail, pra entrar (`login`), criar conta (`signup`) ou confirmar um telefone (`phone_verify`). Em desenvolvimento o código volta em `dev_code`; em produção só vai pelo canal. |
 | `/api/v1/auth/otp_verify.php` | POST | público |  | Tela 10.2 — confere o código OTP e devolve access token (15 min) e refresh token (30 dias, com rotação). Código tem prazo e limite de tentativas; conta bloqueada ou excluída (LGPD, migração 026) não entra. |
 | `/api/v1/auth/partner_login.php` | POST | público |  | Tela 10.7 / 8.1 — login de parceiro: loja com CNPJ + senha, entregador com CPF + código de acesso. Devolve o token com o papel e o vínculo (restaurant_id / courier_id) que os guardas de cada rota conferem. |
-| `/api/v1/auth/refresh.php` | POST | público |  | Troca um refresh token válido por um par novo (rotação: o antigo deixa de valer). Sessão revogada -- logout, conta excluída -- responde 401. |
+| `/api/v1/auth/refresh.php` | POST | público |  | Troca um refresh token válido por um par novo (rotação: o antigo deixa de valer). Sessão revogada -- logout, conta excluída -- responde 401; conta bloqueada, 403. Os apps chamam isto sozinhos quando o access token de 15 min vence (web/src/lib/services/api.js). |
 
 ## banners
 

@@ -21,6 +21,16 @@
   // do projeto, no terceiro bundle. "Aplicativo separado, feito para ser
   // usado com uma mão, no sol, de moto parada."
   let logged = $state(isCourierAuthenticated());
+
+  // A sessão renova sozinha (services/api.js). Se o servidor recusar a
+  // renovação (suporte liberou troca de aparelho, conta bloqueada, 30 dias
+  // sem uso), o módulo de sessão zera o token e a tela volta pro login.
+  $effect(() => {
+    if (logged && !isCourierAuthenticated()) {
+      logged = false;
+      toastr.warning('Sua sessão terminou. Entre de novo.');
+    }
+  });
   // 15.2 — quem ainda não é entregador entra por aqui. É uma tela do mesmo
   // app porque é onde a pessoa procura: "quero entregar" não está no app de
   // pedir comida.

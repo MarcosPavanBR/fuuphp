@@ -111,6 +111,38 @@ echo "== tablet B entra e vira o confiável; o A agora é barrado =="
 store_login "tablet-B-${STAMP}" | jq -e '.access_token' >/dev/null || fail "tablet B não entrou depois da liberação"
 [ "$(store_login "tablet-A-${STAMP}" | jq -r '.code')" = "device_mismatch" ] || fail "tablet A voltou a entrar"
 
+echo "== renovação: o tablet da cozinha continua sendo a loja depois dos 15 min (migração 039) =="
+B=$(store_login "tablet-B-${STAMP}")
+B_REFRESH=$(echo "$B" | jq -er '.refresh_token') || fail "login do tablet B: $B"
+R=$(curl -s -X POST "$BASE/auth/refresh.php" -H "Content-Type: application/json" -d "{\"refresh_token\":\"${B_REFRESH}\"}")
+NEW_ACCESS=$(echo "$R" | jq -er '.access_token') || fail "refresh da loja falhou: $R"
+B_REFRESH=$(echo "$R" | jq -r '.refresh_token')
+# O payload do JWT vem sem padding; completa pra o base64 ler.
+pad() { local p; p=$(echo "$1" | cut -d. -f2 | tr '_-' '/+'); while [ $(( ${#p} % 4 )) -ne 0 ]; do p="$p="; done; echo "$p" | base64 -d; }
+[ "$(pad "$NEW_ACCESS" | jq -r '.restaurant_id')" = "$STORE" ] || fail "token renovado perdeu o restaurant_id: $(pad "$NEW_ACCESS")"
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/restaurants/orders.php?id=${STORE}" -H "Authorization: Bearer $NEW_ACCESS")" = "200" ] \
+  || fail "painel recusou o token renovado"
+
+echo "== sessão de antes da 039 (sem claims) reconstrói pelo vínculo da loja =="
+psql_run -c "UPDATE sessions SET claims = '{}' WHERE refresh_hash = encode(sha256('${B_REFRESH}'::bytea), 'hex')"
+R=$(curl -s -X POST "$BASE/auth/refresh.php" -H "Content-Type: application/json" -d "{\"refresh_token\":\"${B_REFRESH}\"}")
+[ "$(pad "$(echo "$R" | jq -r '.access_token')" | jq -r '.restaurant_id')" = "$STORE" ] || fail "sessão antiga não reconstruiu a loja: $R"
+B_REFRESH=$(echo "$R" | jq -r '.refresh_token')
+
+echo "== conta bloqueada não renova (403), e desbloqueada volta =="
+psql_run -c "UPDATE users SET blocked = true WHERE id = '${STAFF_ID}'"
+R=$(curl -s -w ' %{http_code}' -X POST "$BASE/auth/refresh.php" -H "Content-Type: application/json" -d "{\"refresh_token\":\"${B_REFRESH}\"}")
+psql_run -c "UPDATE users SET blocked = false WHERE id = '${STAFF_ID}'"
+[ "${R##* }" = "403" ] || fail "conta bloqueada renovou: $R"
+
+echo "== sair revoga o refresh no servidor =="
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/logout.php" -H "Content-Type: application/json" \
+  -d "{\"refresh_token\":\"${B_REFRESH}\"}")" = "204" ] || fail "logout não respondeu 204"
+R=$(curl -s -w ' %{http_code}' -X POST "$BASE/auth/refresh.php" -H "Content-Type: application/json" -d "{\"refresh_token\":\"${B_REFRESH}\"}")
+[ "${R##* }" = "401" ] || fail "refresh continuou valendo depois de sair: $R"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/logout.php" -H "Content-Type: application/json" -d '{}')" = "204" ] \
+  || fail "sair sem token deveria ser 204"
+
 echo "== auditoria guarda quem, o aparelho antigo e o motivo =="
 AUDIT=$(psql "$DATABASE_URL" -tAc "SELECT actor_id || '|' || (before->>'device_id') || '|' || (after->>'reason')
   FROM audit_log WHERE action = 'partner.device_released' AND target = 'partner_accounts:${ACCOUNT}'")

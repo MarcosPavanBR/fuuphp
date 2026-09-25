@@ -38,8 +38,8 @@ function issue_tokens_in_family(
     $expiresAt = (new DateTimeImmutable('now'))->modify('+' . REFRESH_TOKEN_TTL_SECONDS . ' seconds');
 
     $stmt = $pdo->prepare(
-        'INSERT INTO sessions (id, user_id, family_id, refresh_hash, device_label, ip, rotated_from, expires_at)
-         VALUES (:id, :user_id, :family_id, :refresh_hash, :device_label, :ip, :rotated_from, :expires_at)'
+        'INSERT INTO sessions (id, user_id, family_id, refresh_hash, device_label, ip, rotated_from, expires_at, claims)
+         VALUES (:id, :user_id, :family_id, :refresh_hash, :device_label, :ip, :rotated_from, :expires_at, :claims)'
     );
     $stmt->execute([
         'id' => $sessionId,
@@ -50,6 +50,9 @@ function issue_tokens_in_family(
         'ip' => $ip,
         'rotated_from' => $rotatedFrom,
         'expires_at' => $expiresAt->format(DATE_ATOM),
+        // Os claims extras ficam na sessão pra rotação devolver o MESMO
+        // token (migração 039): loja renovada continua sendo a loja.
+        'claims' => json_encode((object) $extraClaims),
     ]);
 
     return [

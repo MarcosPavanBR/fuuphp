@@ -21,7 +21,16 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
   - refresh vale 30 dias e gira a cada uso: o antigo morre, e o banco só
     guarda o hash dele;
   - refresh reaproveitado é sinal de roubo, e a família inteira de sessões
-    é revogada.
+    é revogada;
+  - os apps renovam sozinhos um minuto antes de vencer
+    (`web/src/lib/services/api.js`), uma renovação por vez, inclusive
+    entre abas, pra não disparar a detecção de reuso;
+  - a renovação devolve o mesmo token: `restaurant_id`/`courier_id` ficam
+    na sessão (migração 039) e são conferidos de novo contra
+    `partner_accounts`. Conta bloqueada não renova (403), então o bloqueio
+    vale em até 15 minutos;
+  - "Sair" revoga o refresh no servidor (`auth/logout.php`), não só no
+    aparelho.
 - **Loja e plataforma vêm do token, nunca do corpo da requisição.** Uma
   loja não consegue pausar, editar ou ler outra trocando um id no JSON.
 - **Admin não tem senha.** Entra pelo mesmo código do cliente, então quem

@@ -69,8 +69,20 @@
     });
     // EventSource reconecta sozinho quando a conexão cai -- é assim que o
     // limite de 25s do backend (documentado em orders/track.php) funciona
-    // como long-poll encadeado, sem perder evento nenhum. Não precisa de
-    // lógica de retry aqui.
+    // como long-poll encadeado, sem perder evento nenhum.
+    //
+    // Mas ele reconecta com a MESMA URL, e o token dela vence em 15 min: aí
+    // o servidor responde 401 e o navegador desiste de vez (CLOSED). Nesse
+    // caso a conexão é refeita aqui, com o token atual (a sessão renova
+    // sozinha em services/api.js).
+    const source = evtSource;
+    source.addEventListener('error', () => {
+      if (source.readyState !== EventSource.CLOSED || evtSource !== source) return;
+      evtSource = undefined;
+      setTimeout(() => {
+        if (!evtSource && !destroyed && !showCancel && !awaitingCourier && order) connect();
+      }, 2000);
+    });
   }
 
   async function reload() {
@@ -92,7 +104,9 @@
       })
       .catch(() => {});
   });
+  let destroyed = false;
   onDestroy(() => {
+    destroyed = true;
     evtSource?.close();
     clearInterval(clockInterval);
     clearInterval(dispatchInterval);

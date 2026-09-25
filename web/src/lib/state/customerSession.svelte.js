@@ -5,7 +5,7 @@
 // As telas da Fase 10 (AuthFlow -> LoginScreen, OtpScreen, SignupScreen)
 // usam estas funções; quem precisa de usuário logado (pedidos, perfil,
 // carrinho) monta o AuthFlow no lugar do conteúdo.
-import { api, getStoredToken, storeToken } from '../services/api.js';
+import { api, getStoredToken, registerSession, setSessionTokens, endSession } from '../services/api.js';
 
 let accessToken = $state(getStoredToken());
 let user = $state(null);
@@ -15,6 +15,18 @@ let user = $state(null);
 // o token chegou -- senão a aba troca o fluxo pela tela dela no meio do
 // caminho e o cadastro nunca acontece.
 let pendingSignup = $state(false);
+
+// Renovação automática do token de 15 min (services/api.js). A chave do
+// access continua a de sempre (fuu_access_token), que outras partes do app
+// leem direto; o refresh fica ao lado.
+registerSession('customer', {
+  accessKey: 'fuu_access_token',
+  refreshKey: 'fuu_refresh_token',
+  onChange: (token) => {
+    accessToken = token;
+    if (token === null) user = null;
+  },
+});
 
 export function isAuthenticated() {
   return accessToken !== null;
@@ -46,8 +58,7 @@ export async function verifyOtp({ phone, email, code, purpose }) {
   const data = await api.post('/auth/otp_verify.php', {
     body: { purpose, phone, email, code },
   });
-  accessToken = data.access_token;
-  storeToken(data.access_token);
+  setSessionTokens('customer', data);
   pendingSignup = purpose === 'signup';
   await loadProfile();
   return data;
@@ -61,8 +72,6 @@ export async function loadProfile() {
 }
 
 export function logout() {
-  accessToken = null;
-  user = null;
   pendingSignup = false;
-  storeToken(null);
+  endSession('customer');
 }

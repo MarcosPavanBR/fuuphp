@@ -1,4 +1,5 @@
 <script>
+  import { untrack } from 'svelte';
   import { api } from '../../services/api.js';
   import { toastr } from '../../utils/toastr.js';
   import { staffToken } from '../../state/staffSession.svelte.js';
@@ -64,9 +65,13 @@
     }
   }
 
+  // untrack: tick() lê e escreve `busy` (e lê `columns`) de forma síncrona.
+  // Sem isso o efeito passava a depender deles, rodava de novo a cada fim de
+  // requisição e o painel pedia a fila sem parar, uma atrás da outra, em vez
+  // de uma vez por POLL_MS.
   $effect(() => {
     reconnectPrinter().then((ok) => (connected = ok && printerConnected()));
-    tick();
+    untrack(tick);
     const t = setInterval(tick, POLL_MS);
     return () => clearInterval(t);
   });

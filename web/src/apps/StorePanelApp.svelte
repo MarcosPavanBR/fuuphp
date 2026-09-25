@@ -31,6 +31,16 @@
   // (painel.html), não dentro do app do cliente: são dois públicos e dois
   // bundles, e ninguém quer baixar o KDS pra pedir uma pizza.
   let logged = $state(isStaffAuthenticated());
+
+  // A sessão renova sozinha (services/api.js). Se o servidor recusar a
+  // renovação (suporte liberou troca de aparelho, conta bloqueada, 30 dias
+  // sem uso), o módulo de sessão zera o token e a tela volta pro login.
+  $effect(() => {
+    if (logged && !isStaffAuthenticated()) {
+      logged = false;
+      toastr.warning('Sua sessão terminou. Entre de novo.');
+    }
+  });
   // Fora do painel: login, ou o cadastro de loja nova (restaurants/signup.php).
   let signingUp = $state(false);
   let signedUpCnpj = $state('');

@@ -5,7 +5,7 @@
 //
 // lib/api.js aceita `token` explícito por chamada -- é assim que o painel
 // usa o token da loja sem mexer no getStoredToken() do cliente.
-import { api } from '../services/api.js';
+import { api, registerSession, setSessionTokens, endSession, tokenPayload } from '../services/api.js';
 
 const TOKEN_KEY = 'fuu_staff_token';
 const RESTAURANT_KEY = 'fuu_staff_restaurant';
@@ -32,6 +32,22 @@ let accessToken = $state(read(TOKEN_KEY));
 let restaurantId = $state(read(RESTAURANT_KEY));
 let restaurantName = $state(null);
 
+// O tablet da cozinha fica logado o turno inteiro: o token de 15 min é
+// renovado sozinho (services/api.js). Sessão morta (suporte liberou troca
+// de aparelho, conta bloqueada) zera o estado e o painel volta pro login.
+registerSession('staff', {
+  accessKey: TOKEN_KEY,
+  refreshKey: 'fuu_staff_refresh',
+  onChange: (token) => {
+    accessToken = token;
+    if (token === null) {
+      restaurantId = null;
+      restaurantName = null;
+      write(RESTAURANT_KEY, null);
+    }
+  },
+});
+
 export function isStaffAuthenticated() {
   return accessToken !== null;
 }
@@ -52,20 +68,14 @@ export async function staffLogin({ cnpj, secret, deviceId }) {
   const data = await api.post('/auth/partner_login.php', {
     body: { kind: 'restaurant', login_code: cnpj, secret, device_id: deviceId },
   });
-  accessToken = data.access_token;
-  write(TOKEN_KEY, data.access_token);
+  setSessionTokens('staff', data);
 
   // O restaurant_id vem dentro do JWT (claim extra de partner_login), não
   // no corpo -- decodifica só o payload, sem validar assinatura: quem
   // valida é o servidor a cada chamada; aqui é só pra saber que loja
   // mostrar no cabeçalho.
-  try {
-    const payload = JSON.parse(atob(data.access_token.split('.')[1]));
-    restaurantId = payload.restaurant_id ?? null;
-    write(RESTAURANT_KEY, restaurantId);
-  } catch {
-    restaurantId = null;
-  }
+  restaurantId = tokenPayload(data.access_token)?.restaurant_id ?? null;
+  write(RESTAURANT_KEY, restaurantId);
 
   await loadRestaurant();
   return data;
@@ -83,9 +93,5 @@ export async function loadRestaurant() {
 }
 
 export function staffLogout() {
-  accessToken = null;
-  restaurantId = null;
-  restaurantName = null;
-  write(TOKEN_KEY, null);
-  write(RESTAURANT_KEY, null);
+  endSession('staff');
 }

@@ -49,3 +49,4 @@ pra ele (ex.: o mapa do acompanhamento em 06 → 16).
 - [39 — Vitrine da Home: banners, logo, categorias, favoritas e queridinhos](39-vitrine-da-home.md)
 - [40 — Fuso por cidade](40-fuso-por-cidade.md)
 - [41 — Conferência final: o que ainda era do mock](41-conferencia-final.md)
+- [42 — Sessão que não cai aos 15 minutos](42-sessao-que-nao-cai.md)
