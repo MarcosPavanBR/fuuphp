@@ -76,7 +76,7 @@ for i in $(seq 1 20); do
   sleep 0.2
 done
 
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Dispatch\"}" | jq -er '.dev_code') || fail "otp falhou"
 ACCESS=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \
@@ -246,7 +246,7 @@ php "$ROOT/bin/auto_cancel_no_courier.php" >/dev/null
 [ "$(query "SELECT count(*) FROM refunds WHERE order_id=${O_AUTO}")" = "1" ] || fail "varredura duplicou o reembolso"
 
 echo "== pedido dos outros não tem tela de despacho =="
-PHONE2="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE2="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE2=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE2\",\"full_name\":\"Intruso Dispatch\"}" | jq -er '.dev_code')
 ACCESS2=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \

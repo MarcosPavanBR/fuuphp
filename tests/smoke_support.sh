@@ -28,8 +28,8 @@ RIVAL_STAFF_ID="$(gen_uuid)"
 ADMIN_ID="$(gen_uuid)"
 CNPJ="$(gen_cnpj)"
 RIVAL_CNPJ="$(gen_cnpj)"
-CUPOM="FUU$(( RANDOM % 900000 + 100000 ))"
-CUPOM_LOJA="LOJA$(( RANDOM % 900000 + 100000 ))"
+CUPOM="FUU$(( (RANDOM << 15 | RANDOM) % 900000 + 100000 ))"
+CUPOM_LOJA="LOJA$(( (RANDOM << 15 | RANDOM) % 900000 + 100000 ))"
 STAMP="$(date +%s%N)"
 
 echo "== semear duas lojas, um admin e dois cupons =="
@@ -77,7 +77,7 @@ for i in $(seq 1 20); do
 done
 
 echo "== cliente entra e monta carrinho =="
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Support Smoke\"}" | jq -er '.dev_code')
 ACCESS=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \
@@ -146,8 +146,8 @@ curl -s -X POST "$BASE/profile/update.php" -H "Content-Type: application/json" "
   || fail "trocando o CPF, a mesma conta usou o cupom de novo"
 
 echo "== público da campanha vale no resgate: 'primeiro pedido' barra quem já pediu =="
-CUPOM_NOVO="NOVO$(( RANDOM % 900000 + 100000 ))"
-CUPOM_FRETE="FRETE$(( RANDOM % 900000 + 100000 ))"
+CUPOM_NOVO="NOVO$(( (RANDOM << 15 | RANDOM) % 900000 + 100000 ))"
+CUPOM_FRETE="FRETE$(( (RANDOM << 15 | RANDOM) % 900000 + 100000 ))"
 psql_run <<SQL
 INSERT INTO coupons (code, kind, value, min_order, restaurant_id, audience, payer, budget_cap, starts_at, created_by) VALUES
   ('${CUPOM_NOVO}',  'fixed',         5.00, 0, NULL, 'first_order', 'platform', 1000.00, now() - interval '1 day', '${ADMIN_ID}'),
@@ -163,7 +163,7 @@ NOT_FIRST=$(curl -s -X POST "$BASE/cart/apply_coupon.php" -H "Content-Type: appl
   -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"code\":\"${CUPOM_NOVO}\"}")
 [ "$(echo "$NOT_FIRST" | jq -r '.code')" = "coupon_audience" ] || fail "cupom de primeiro pedido aceito pra quem já pediu: $NOT_FIRST"
 
-PHONE2="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE2="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE2=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE2\",\"full_name\":\"Cliente Novo\"}" | jq -er '.dev_code')
 AUTH2=(-H "Authorization: Bearer $(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \
@@ -182,7 +182,7 @@ ADDR2=$(curl -s -X POST "$BASE/addresses/create.php" -H "Content-Type: applicati
 FIRST_ORDER=$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: application/json" "${AUTH2[@]}" \
   -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR2},\"payment_method\":\"cash\",\"coupon_code\":\"${CUPOM_NOVO}\"}")
 echo "$FIRST_ORDER" | jq -e '.order.id' >/dev/null || fail "o primeiro pedido de verdade na casa foi recusado: $FIRST_ORDER"
-PHONE3="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE3="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE3=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE3\",\"full_name\":\"Conta Nova Mesma Casa\"}" | jq -er '.dev_code')
 AUTH3=(-H "Authorization: Bearer $(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \
@@ -201,7 +201,7 @@ REUSE=$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: applicatio
 [ "$(echo "$REUSE" | jq -r '.code')" = "coupon_address_used" ] || fail "primeiro pedido repetido na mesma casa passou: $REUSE"
 [ "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM fraud_signals f JOIN users u ON u.id = f.user_id WHERE f.kind = 'address_reuse' AND u.phone = '${PHONE3}'")" = "1" ] \
   || fail "a tentativa não virou sinal de fraude"
-ADMIN_PHONE_FS="119$(( RANDOM % 90000000 + 10000000 ))"
+ADMIN_PHONE_FS="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 psql_run -c "UPDATE users SET phone = '${ADMIN_PHONE_FS}' WHERE id = '${ADMIN_ID}'"
 ACODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" -d "{\"purpose\":\"login\",\"phone\":\"${ADMIN_PHONE_FS}\"}" | jq -er '.dev_code')
 ATOKEN=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" -d "{\"purpose\":\"login\",\"phone\":\"${ADMIN_PHONE_FS}\",\"code\":\"${ACODE}\"}" | jq -er '.access_token')

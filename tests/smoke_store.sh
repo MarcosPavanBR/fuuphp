@@ -69,7 +69,7 @@ TOKEN=$(curl -s -X POST "$BASE/auth/partner_login.php" -H "Content-Type: applica
   -d "{\"kind\":\"restaurant\",\"login_code\":\"${CNPJ}\",\"secret\":\"senha123\"}" | jq -er '.access_token') || fail "login da loja falhou"
 AUTH=(-H "Authorization: Bearer $TOKEN")
 
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Store\"}" | jq -er '.dev_code')
 CUSTOMER=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \

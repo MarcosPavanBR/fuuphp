@@ -28,7 +28,7 @@ RESTAURANT_ID="$(gen_uuid)"; STAFF_USER_ID="$(gen_uuid)"; ADMIN_USER_ID="$(gen_u
 COURIER_ID="$(gen_uuid)"; COURIER_USER_ID="$(gen_uuid)"
 CNPJ="$(php "$ROOT/tests/support/random_cnpj.php")"; CPF="$(php "$ROOT/tests/support/random_cpf.php")"
 ACCESS_CODE="424242"; STAMP="$(date +%s%N)"
-ADMIN_PHONE="1197$(( RANDOM % 9000000 + 1000000 ))"
+ADMIN_PHONE="1197$(( (RANDOM << 15 | RANDOM) % 9000000 + 1000000 ))"
 NSU_OWN=$(( $(date +%s) % 900000 + 100000 ))
 
 echo "== semear loja, entregador, admin e política SEM maquininha própria =="
@@ -72,7 +72,7 @@ for i in $(seq 1 20); do
   sleep 0.2
 done
 
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Dinheiro\"}" | jq -er '.dev_code')
 ACCESS=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \

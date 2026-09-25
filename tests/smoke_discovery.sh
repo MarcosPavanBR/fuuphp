@@ -108,7 +108,7 @@ SHORT_CODE=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/restaurants/search_pr
 [ "$SHORT_CODE" = "422" ] || fail "busca curta não foi barrada (veio $SHORT_CODE)"
 
 echo "== perfil autenticado devolve estatísticas reais =="
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Perfil Smoke\"}" | jq -er '.dev_code')
 ACCESS=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \

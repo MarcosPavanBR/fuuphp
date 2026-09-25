@@ -31,7 +31,7 @@ set +e; php "$ROOT/bin/bootstrap_admin.php" >/dev/null 2>&1; CODE=$?; set -e
 [ "$(psql "$FRESH" -tAc "SELECT count(*) FROM users")" = "0" ] || fail "criou algo sem argumentos"
 
 echo "== primeira execução: admin + política v1 com os padrões =="
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 php "$ROOT/bin/bootstrap_admin.php" --name="Fundador Teste" --phone="$PHONE" >/tmp/smoke-boot.log || fail "bootstrap falhou: $(cat /tmp/smoke-boot.log)"
 [ "$(psql "$FRESH" -tAc "SELECT role FROM users WHERE phone='${PHONE}'")" = "admin" ] || fail "admin não criado"
 [ "$(psql "$FRESH" -tAc "SELECT version || '|' || commission_bps || '|' || cash_ceiling || '|' || array_length(enabled_methods, 1) FROM platform_policies")" = "1|800|300.00|5" ] \

@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_api_catalog.php` a partir dos próprios arquivos de
 > `api/v1`. Não edite à mão: o CI confere (`--check`) e falha se estiver desatualizado.
 
-127 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
+126 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
 `{code, message, trace_id}` com o status HTTP certo (`lib/core/response.php`). As URLs são
 contrato público: mudar um caminho quebra app instalado.
 
@@ -114,9 +114,8 @@ contrato público: mudar um caminho quebra app instalado.
 | Rota | Métodos | Quem | Idem. | O que faz |
 |---|---|---|---|---|
 | `/api/v1/orders/cancel_quote.php` | GET | autenticado |  | Tela 13.1 — "Taxa e valor do estorno na mesma tela, antes de confirmar — nada de descobrir depois." |
-| `/api/v1/orders/checkout.php` | POST | cliente |  | Converte o carrinho incremental (status='cart', montado por api/v1/cart/*.php, Fase 3) num pedido aguardando pagamento -- o passo que faltava entre "Ir para pagamento" (CartDrawer.svelte) e a Fase 4 (seleção de método). Diferente de orders/create.php (check… |
+| `/api/v1/orders/checkout.php` | POST | cliente |  | Converte o carrinho incremental (status='cart', montado por api/v1/cart/*.php, Fase 3) num pedido aguardando pagamento -- o passo que faltava entre "Ir para pagamento" (CartDrawer.svelte) e a Fase 4 (seleção de método). É o ÚNICO jeito de fechar pedido (o c… |
 | `/api/v1/orders/courier_location.php` | GET | autenticado |  | Tela 5.3 — o mapa da entrega: "1,4 km · 8 min", "Jonas está levando · Honda Biz · placa QQP-1B34". |
-| `/api/v1/orders/create.php` | POST | autenticado |  | Checkout em um passo (lista de itens no corpo), anterior ao carrinho incremental: cria o pedido já em 'pending_payment'. O app usa cart/* + orders/checkout.php; esta rota fica pra integrações e testes. |
 | `/api/v1/orders/dispatch_action.php` | POST | cliente |  | Tela 15.1 — as saídas concretas. Uma rota, três ações, porque são três respostas à MESMA pergunta ("ninguém aceitou a corrida, e agora?") e compartilham as mesmas pré-condições. |
 | `/api/v1/orders/dispatch_status.php` | GET | autenticado |  | Tela 15.1 — "Sem entregador disponível". |
 | `/api/v1/orders/list.php` | GET | cliente |  | Tela 2.4 — os pedidos do cliente logado (sem carrinhos), mais novos primeiro, com loja, total, forma de pagamento e quantidade de itens. |

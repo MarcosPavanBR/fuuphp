@@ -26,7 +26,7 @@ BAD_STORE="$(gen_uuid)"
 COURIER_ID="$(gen_uuid)"
 COURIER_USER="$(gen_uuid)"
 LIVE_STORE="$(gen_uuid)"
-ADMIN_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+ADMIN_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 STAMP="$(date +%s%N)"
 
 echo "== semear admin, duas lojas esperando análise e uma ocorrência de caixa =="
@@ -73,7 +73,7 @@ ADMIN_TOKEN=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: appl
 AAUTH=(-H "Authorization: Bearer $ADMIN_TOKEN")
 
 echo "== cliente comum não entra no painel da plataforma =="
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 C=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Qualquer\"}" | jq -er '.dev_code')
 CUSTOMER=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \

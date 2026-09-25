@@ -60,7 +60,7 @@ MAIL="twilio-$(date +%s%N)@test.com"
 R=$(post "$BASE/auth/otp_request.php" "{\"purpose\":\"signup\",\"email\":\"$MAIL\",\"full_name\":\"Sem Email\"}")
 [ "$(echo "$R" | jq -r '.code')" = "channel_unavailable" ] || fail "e-mail não foi recusado: $R"
 [ "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM users WHERE email='$MAIL'")" = "0" ] || fail "criou conta pra canal indisponível"
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 R=$(post "$BASE/auth/otp_request.php" "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Twilio\",\"channel\":\"whatsapp\"}")
 [ "$(echo "$R" | jq -r '.code')" = "channel_unavailable" ] || fail "WhatsApp sem remetente não foi recusado: $R"
 [ -s "$FAKE_TWILIO_LOG" ] && fail "chegou pedido na Twilio pra canal recusado"
@@ -102,7 +102,7 @@ echo ok > "$FAKE_TWILIO_MODE"
 
 echo "== com remetente de WhatsApp aprovado, WhatsApp vai como whatsapp:+55... =="
 [ "$(curl -s "$WA_BASE/auth/channels.php" | jq -c '.channels')" = '["sms","whatsapp"]' ] || fail "WhatsApp não apareceu nos canais"
-PHONE2="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE2="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 R=$(post "$WA_BASE/auth/otp_request.php" "{\"purpose\":\"signup\",\"phone\":\"$PHONE2\",\"full_name\":\"Cliente Zap\",\"channel\":\"whatsapp\"}")
 echo "$R" | jq -e '.dev_code' >/dev/null || fail "WhatsApp falhou: $R"
 REQ=$(last_request)

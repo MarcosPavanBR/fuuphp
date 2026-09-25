@@ -63,7 +63,7 @@ for i in $(seq 1 20); do
   sleep 0.2
 done
 
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Cancel Smoke\"}" | jq -er '.dev_code') || fail "otp falhou"
 ACCESS=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \
@@ -186,7 +186,7 @@ AGAIN=$(cancel "$O_POS" "de novo")
 
 # 404 e não 403 de propósito: a resposta não conta nem que o pedido existe.
 echo "== pedido de outra pessoa não é cancelável nem consultável =="
-PHONE2="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE2="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE2=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE2\",\"full_name\":\"Intruso Cancel\"}" | jq -er '.dev_code')
 ACCESS2=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \

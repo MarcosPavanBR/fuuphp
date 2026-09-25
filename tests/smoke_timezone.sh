@@ -32,10 +32,10 @@ gen_cnpj() { php "$ROOT/tests/support/random_cnpj.php"; }
 
 STAMP="$(date +%s%N)"
 # Prefixo da UF certo (50 = MS, 35 = SP), números que nenhum município usa.
-MS_CITY="5097$(( RANDOM % 900 + 100 ))"
-SP_CITY="3597$(( RANDOM % 900 + 100 ))"
-ADMIN_ID="$(gen_uuid)"; ADMIN_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
-CUST_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+MS_CITY="5097$(( (RANDOM << 15 | RANDOM) % 900 + 100 ))"
+SP_CITY="3597$(( (RANDOM << 15 | RANDOM) % 900 + 100 ))"
+ADMIN_ID="$(gen_uuid)"; ADMIN_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
+CUST_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 STAFF_ID="$(gen_uuid)"
 MS_STORE="$(gen_uuid)"; SP_STORE="$(gen_uuid)"; MS_CNPJ="$(gen_cnpj)"
 

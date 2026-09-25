@@ -24,7 +24,7 @@ done
 
 fail() { echo "FALHOU: $1" >&2; cat /tmp/smoke-identity-server.log >&2; exit 1; }
 
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 
 echo "== signup + otp_request =="
 REQ=$(curl -s -X POST "$BASE/otp_request.php" -H "Content-Type: application/json" \
@@ -73,7 +73,7 @@ FUTURE=$(curl -s -X POST "$PROFILE_BASE/update.php" -H "Content-Type: applicatio
 [ "$(echo "$FUTURE" | jq -r '.code')" = "invalid_birth_date" ] || fail "data futura não foi barrada: $FUTURE"
 
 echo "== CPF de outra conta dá 409, não 500 =="
-PHONE2="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE2="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE2=$(curl -s -X POST "$BASE/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE2\",\"full_name\":\"Outro Smoke\"}" | jq -er '.dev_code')
 ACCESS2=$(curl -s -X POST "$BASE/otp_verify.php" -H "Content-Type: application/json" \

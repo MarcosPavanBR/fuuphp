@@ -68,7 +68,7 @@ MENU=$(curl -s "$BASE/restaurants/menu.php?id=${RESTAURANT_ID}")
 [ "$(echo "$MENU" | jq '.items | length')" = "1" ] || fail "cardápio não veio como esperado: $MENU"
 
 echo "== signup do cliente =="
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 REQ=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Smoke\"}")
 CODE=$(echo "$REQ" | jq -er '.dev_code') || fail "otp_request falhou: $REQ"
@@ -81,22 +81,30 @@ ADDR=$(curl -s -X POST "$BASE/addresses/create.php" -H "Content-Type: applicatio
   -d '{"street":"Rua Smoke","city":"São Paulo","city_ibge_code":"3550308","state":"SP","postal_code":"01001000","lat":-23.5,"lng":-46.6,"is_default":true}')
 ADDR_ID=$(echo "$ADDR" | jq -er '.id') || fail "endereço não criou: $ADDR"
 
-echo "== checkout abaixo do mínimo precisa dar below_minimum_order =="
-BELOW=$(curl -s -X POST "$BASE/orders/create.php" -H "Content-Type: application/json" -H "Authorization: Bearer $ACCESS" \
-  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR_ID},\"payment_method\":\"cash\",\"change_for\":5,\"items\":[{\"menu_item_id\":${ITEM_ID},\"quantity\":1}]}")
-# um item já passa do mínimo (R$45 > R$20) -- então testa é o troco menor que o subtotal:
+echo "== carrinho: 2 itens com variação (o preço vem do servidor) =="
+CART=$(curl -s -X POST "$BASE/cart/add_item.php" -H "Content-Type: application/json" -H "Authorization: Bearer $ACCESS" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"menu_item_id\":${ITEM_ID},\"quantity\":2,\"variant_ids\":[${VARIANT_ID}]}")
+[ "$(echo "$CART" | jq -r '.order.subtotal')" = "102.00" ] || fail "subtotal do carrinho errado (esperava 102.00, 2x(45+6)): $CART"
+
+echo "== troco menor que o subtotal é barrado no checkout =="
+BELOW=$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: application/json" -H "Authorization: Bearer $ACCESS" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR_ID},\"payment_method\":\"cash\",\"change_for\":5}")
 [ "$(echo "$BELOW" | jq -r '.code')" = "invalid_change_for" ] || fail "troco menor que subtotal não foi barrado: $BELOW"
 
-echo "== checkout válido, com variação (preço tem que somar certo) =="
-ORDER=$(curl -s -X POST "$BASE/orders/create.php" -H "Content-Type: application/json" -H "Authorization: Bearer $ACCESS" \
-  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR_ID},\"payment_method\":\"mp_card\",\"items\":[{\"menu_item_id\":${ITEM_ID},\"quantity\":2,\"variant_ids\":[${VARIANT_ID}]}]}")
+echo "== checkout válido (o caminho do app: cart/* + orders/checkout.php) =="
+ORDER=$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: application/json" -H "Authorization: Bearer $ACCESS" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR_ID},\"payment_method\":\"mp_card\"}")
 ORDER_ID=$(echo "$ORDER" | jq -er '.order.id') || fail "checkout não criou pedido: $ORDER"
 [ "$(echo "$ORDER" | jq -r '.order.status')" = "pending_payment" ] || fail "pedido não avançou pra pending_payment: $ORDER"
 [ "$(echo "$ORDER" | jq -r '.order.subtotal')" = "102.00" ] || fail "subtotal errado (esperava 102.00, 2x(45+6)): $ORDER"
-# O frete não vem mais do corpo (14.3): sai da tarifa da política semeada
-# acima (base R$ 8,00, sem valor por km).
+# O frete não vem do corpo (14.3): sai da tarifa da política semeada acima
+# (base R$ 8,00, sem valor por km).
 [ "$(echo "$ORDER" | jq -r '.order.delivery_fee')" = "8.00" ] || fail "frete não veio da política: $ORDER"
 [ "$(echo "$ORDER" | jq -r '.order.total')" = "110.00" ] || fail "total errado (esperava 110.00 = 102+8 frete): $ORDER"
+
+echo "== o checkout paralelo antigo (orders/create.php) não existe mais (ARQ-01) =="
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/orders/create.php" -H "Authorization: Bearer $ACCESS")" = "404" ] \
+  || fail "orders/create.php ainda responde"
 
 echo "== login de loja =="
 STAFF=$(curl -s -X POST "$BASE/auth/partner_login.php" -H "Content-Type: application/json" \

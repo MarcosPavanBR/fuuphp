@@ -39,7 +39,7 @@ CPF="$(gen_cpf)"
 CPF2="$(gen_cpf)"
 ACCESS_CODE="313131"
 STAMP="$(date +%s%N)"
-ADMIN_PHONE="1197$(( RANDOM % 9000000 + 1000000 ))"
+ADMIN_PHONE="1197$(( (RANDOM << 15 | RANDOM) % 9000000 + 1000000 ))"
 # NSU é UNIQUE por adquirente no banco: fixos, colidiriam com a execução
 # anterior no mesmo banco. Seis dígitos derivados do carimbo desta execução.
 NSU_BASE=$(( $(date +%s) % 900000 + 100000 ))
@@ -92,7 +92,7 @@ for i in $(seq 1 20); do
   sleep 0.2
 done
 
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Maquininha\"}" | jq -er '.dev_code') || fail "otp falhou"
 ACCESS=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \

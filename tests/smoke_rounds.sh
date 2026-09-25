@@ -97,7 +97,7 @@ curl -s -X POST "$BASE/couriers/position.php" -H "Content-Type: application/json
 [ "$(query "SELECT count(*) FROM courier_positions WHERE courier_id IN ('${CID[near]}','${CID[far]}')")" = "2" ] \
   || fail "posições não foram gravadas"
 
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Rodadas\"}" | jq -er '.dev_code')
 ACCESS=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \

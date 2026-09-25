@@ -27,7 +27,7 @@ ADMIN_ID="$(gen_uuid)"
 STAFF_ID="$(gen_uuid)"
 STORE="$(gen_uuid)"
 CNPJ="$(php "$ROOT/tests/support/random_cnpj.php")"
-ADMIN_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+ADMIN_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 STAMP="$(date +%s%N)"
 
 echo "== semear admin e uma loja com login de balcão =="
@@ -79,7 +79,7 @@ SHORT=$(curl -s "$BASE/admin/partner_devices.php?q=ab" "${AAUTH[@]}")
 [ "$(echo "$SHORT" | jq -r '.code')" = "query_too_short" ] || fail "busca curta aceita: $SHORT"
 
 echo "== cliente comum não libera; id malformado e motivo vazio são recusados =="
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 C=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Curioso\"}" | jq -er '.dev_code')
 CUSTOMER=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \

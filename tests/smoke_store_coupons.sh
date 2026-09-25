@@ -32,9 +32,9 @@ gen_cpf() { php "$ROOT/tests/support/random_cpf.php"; }
 STORE="$(gen_uuid)"; RIVAL="$(gen_uuid)"
 STAFF="$(gen_uuid)"; RIVAL_STAFF="$(gen_uuid)"; ADMIN_ID="$(gen_uuid)"
 CNPJ="$(gen_cnpj)"; RIVAL_CNPJ="$(gen_cnpj)"
-ADMIN_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+ADMIN_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 STAMP="$(date +%s%N)"
-N=$(( RANDOM % 900000 + 100000 ))
+N=$(( (RANDOM << 15 | RANDOM) % 900000 + 100000 ))
 C1="VOLTA${N}"; C2="SEXTA${N}"; C3="FRETE${N}"; PLAT="PLAT${N}"
 
 echo "== semear duas lojas, admin e um cupom da loja criado pela plataforma =="
@@ -135,7 +135,7 @@ R=$(off "${SAUTH[@]}" -d "{\"action\":\"deactivate\",\"coupon_id\":${C1_ID}}")
 
 echo "== cliente usa o cupom da loja: vale só nela e sai do repasse dela =="
 R=$(coupon "$C3" 150 30 fixed 12); [ "$(echo "$R" | jq -r '.coupon.code')" = "$C3" ] || fail "terceiro cupom: $R"
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 OC=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Cupom Loja\"}" | jq -er '.dev_code')
 AUTH=(-H "Authorization: Bearer $(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \

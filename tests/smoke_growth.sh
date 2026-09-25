@@ -29,7 +29,7 @@ RESTAURANT_ID="$(gen_uuid)"
 STAFF_USER_ID="$(gen_uuid)"
 ADMIN_USER_ID="$(gen_uuid)"
 CNPJ="$(gen_cnpj)"
-ADMIN_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+ADMIN_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 STAMP="$(date +%s%N)"
 
 echo "== semear admin e loja =="
@@ -83,7 +83,7 @@ AADMIN=(-H "Authorization: Bearer $ADMIN_TOKEN")
 # ─────────────────────────── 15.2 ───────────────────────────
 CPF="$(gen_cpf)"
 OTHER_CPF="$(gen_cpf)"
-CAND_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+CAND_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CAND_TOKEN=$(login_otp "$CAND_PHONE" "Jonas Candidato")
 CAUTH=(-H "Authorization: Bearer $CAND_TOKEN")
 curl -s -X POST "$BASE/profile/update.php" -H "Content-Type: application/json" "${CAUTH[@]}" \
@@ -218,7 +218,7 @@ DUP=$(curl -s -X POST "$BASE/admin/campaigns.php" -H "Content-Type: application/
 [ "$(echo "$DUP" | jq -r '.code')" = "code_taken" ] || fail "criou duas campanhas com o mesmo código: $DUP"
 
 echo "== o desconto deixa no livro quem pagou, metade de cada =="
-BUYER_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+BUYER_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 BUYER=$(login_otp "$BUYER_PHONE" "Cliente Cupom")
 BAUTH=(-H "Authorization: Bearer $BUYER")
 curl -s -X POST "$BASE/profile/update.php" -H "Content-Type: application/json" "${BAUTH[@]}" \
@@ -248,7 +248,7 @@ LIST=$(curl -s "$BASE/admin/campaigns.php" "${AADMIN[@]}")
 [ "$(echo "$LIST" | jq -r '.paid_so_far.platform >= 5')" = "true" ] || fail "painel não soma o que saiu do nosso bolso: $LIST"
 
 echo "== e ninguém mais consegue usar =="
-BUYER2=$(login_otp "119$(( RANDOM % 90000000 + 10000000 ))" "Cliente Tardio")
+BUYER2=$(login_otp "119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))" "Cliente Tardio")
 B2=(-H "Authorization: Bearer $BUYER2")
 curl -s -X POST "$BASE/profile/update.php" -H "Content-Type: application/json" "${B2[@]}" \
   -d "{\"cpf\":\"$(gen_cpf)\"}" >/dev/null

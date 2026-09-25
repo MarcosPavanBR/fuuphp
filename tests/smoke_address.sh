@@ -28,7 +28,7 @@ STAFF_USER_ID="$(gen_uuid)"
 ADMIN_USER_ID="$(gen_uuid)"
 CNPJ="$(gen_cnpj)"
 NOGEO_CNPJ="$(gen_cnpj)"
-ADMIN_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+ADMIN_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 STAMP="$(date +%s%N)"
 
 # Tarifa do teste: R$ 4,00 de base + R$ 1,50/km, raio de 5 km. Os números são
@@ -85,7 +85,7 @@ for i in $(seq 1 20); do
   sleep 0.2
 done
 
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Endereço\"}" | jq -er '.dev_code')
 ACCESS=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \
@@ -163,7 +163,7 @@ NOGEOQ=$(curl -s "$BASE/addresses/quote.php?address_id=${NEAR_ID}&restaurant_id=
 [ "$(echo "$NOGEOQ" | jq -r '.eta_minutes')" = "null" ] || fail "sem distância não há estimativa, e inventou uma: $NOGEOQ"
 
 echo "== endereço de outra pessoa não é cotável =="
-PHONE2="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE2="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE2=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE2\",\"full_name\":\"Intruso Endereço\"}" | jq -er '.dev_code')
 ACCESS2=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \

@@ -28,13 +28,13 @@ gen_uuid() { php -r 'echo bin2hex(random_bytes(16));' | sed -E 's/(.{8})(.{4})(.
 gen_cnpj() { php "$ROOT/tests/support/random_cnpj.php"; }
 
 ADMIN_ID="$(gen_uuid)"
-ADMIN_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
-CUSTOMER_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+ADMIN_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
+CUSTOMER_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 STAMP="$(date +%s%N)"
 # Códigos de 7 dígitos com o prefixo certo da UF (35 = SP, 31 = MG) mas que
 # nenhum município usa (x99xxx), pra não esbarrar nas cidades das outras suítes.
-CITY="3599$(( RANDOM % 900 + 100 ))"
-OTHER="3199$(( RANDOM % 900 + 100 ))"
+CITY="3599$(( (RANDOM << 15 | RANDOM) % 900 + 100 ))"
+OTHER="3199$(( (RANDOM << 15 | RANDOM) % 900 + 100 ))"
 
 psql_run <<SQL
 INSERT INTO users (id, role, full_name, phone, email)

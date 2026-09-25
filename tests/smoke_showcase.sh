@@ -38,10 +38,10 @@ png() { php -r '$i=imagecreatetruecolor((int)$argv[2],(int)$argv[3]);imagefill($
 
 STAMP="$(date +%s%N)"
 # Códigos com o prefixo da UF certo e que nenhum município usa (x98xxx).
-CITY="3598$(( RANDOM % 900 + 100 ))"
-OTHER_CITY="3198$(( RANDOM % 900 + 100 ))"
-ADMIN_ID="$(gen_uuid)"; ADMIN_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
-CUST_ID="$(gen_uuid)"; CUST_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+CITY="3598$(( (RANDOM << 15 | RANDOM) % 900 + 100 ))"
+OTHER_CITY="3198$(( (RANDOM << 15 | RANDOM) % 900 + 100 ))"
+ADMIN_ID="$(gen_uuid)"; ADMIN_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
+CUST_ID="$(gen_uuid)"; CUST_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 STAFF_ID="$(gen_uuid)"
 A="$(gen_uuid)"; B="$(gen_uuid)"; C="$(gen_uuid)"; D="$(gen_uuid)"; E="$(gen_uuid)"
 A_CNPJ="$(gen_cnpj)"

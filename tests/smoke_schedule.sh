@@ -65,7 +65,7 @@ for i in $(seq 1 20); do
 done
 
 new_customer() { # -> "TOKEN ADDR"
-  local phone="119$(( RANDOM % 90000000 + 10000000 ))"
+  local phone="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
   local code token addr
   code=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
     -d "{\"purpose\":\"signup\",\"phone\":\"$phone\",\"full_name\":\"Cliente Agenda\"}" | jq -er '.dev_code')

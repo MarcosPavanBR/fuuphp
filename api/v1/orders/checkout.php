@@ -7,10 +7,10 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 // Converte o carrinho incremental (status='cart', montado por api/v1/cart/*.php,
 // Fase 3) num pedido aguardando pagamento -- o passo que faltava entre
 // "Ir para pagamento" (CartDrawer.svelte) e a Fase 4 (seleção de método).
-// Diferente de orders/create.php (checkout de um só passo, que cria um
-// pedido novo a partir de uma lista de itens no corpo da requisição), este
-// endpoint reaproveita o pedido em status='cart' que o cliente já vinha
-// montando -- não cria um segundo pedido nem duplica itens.
+// É o ÚNICO jeito de fechar pedido (o checkout de um passo, orders/create.php,
+// foi removido na auditoria ARQ-01): reaproveita o pedido em status='cart'
+// que o cliente já vinha montando -- não cria um segundo pedido nem
+// duplica itens.
 
 require_method('POST');
 $claims = require_auth();

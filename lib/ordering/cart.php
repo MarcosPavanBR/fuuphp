@@ -4,9 +4,11 @@ declare(strict_types=1);
 // Carrinho é um pedido em status='cart' (Especificação, Fase 3: "Carrinho
 // vive num store Svelte e é espelhado no PostgreSQL como pedido em
 // status = 'cart', então sobrevive a troca de aparelho"). Este arquivo é
-// o que orders/create.php (checkout de um só passo) e api/v1/cart/*.php
-// (adicionar item por item, como a tela 3.1/3.2 realmente funciona) têm
-// em comum: preço de uma linha nunca confia no que o cliente mandou.
+// o que api/v1/cart/*.php (adicionar item por item, como a tela 3.1/3.2
+// funciona) usa: preço de uma linha nunca confia no que o cliente mandou.
+// (O checkout de um passo só, orders/create.php, foi removido: era um
+// segundo caminho sem cupom nem carteira que o app não usava -- auditoria
+// ARQ-01.)
 
 /**
  * Valida e precifica UMA linha de pedido (item + variações) contra o

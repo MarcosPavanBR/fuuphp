@@ -53,8 +53,8 @@ for i in $(seq 1 20); do
 done
 
 echo "== signup, endereço, carrinho, checkout e pagamento (dinheiro) =="
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
-OTHER_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
+OTHER_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Tracking Smoke\"}" | jq -er '.dev_code') || fail "otp_request falhou"
 ACCESS=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \

@@ -30,7 +30,7 @@ gen_uuid() { php -r 'echo bin2hex(random_bytes(16));' | sed -E 's/(.{8})(.{4})(.
 gen_cnpj() { php "$ROOT/tests/support/random_cnpj.php"; }
 
 ADMIN_ID="$(gen_uuid)"
-ADMIN_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+ADMIN_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 STAMP="$(date +%s%N)"
 CNPJ="$(gen_cnpj)"
 EMAIL="dono-${STAMP}@loja.test"
@@ -93,7 +93,7 @@ psql_run -c "UPDATE restaurants SET is_open = true WHERE id='${STORE}'" \
 ITEM=$(q "SELECT id FROM menu_items WHERE restaurant_id='${STORE}'")
 curl -s "$BASE/restaurants/list.php?city_ibge_code=${CITY}" | jq -e ".restaurants[] | select(.id == \"${STORE}\")" >/dev/null \
   && fail "loja em análise apareceu na lista"
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 C=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Curioso\"}" | jq -er '.dev_code')
 CAUTH=(-H "Authorization: Bearer $(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \

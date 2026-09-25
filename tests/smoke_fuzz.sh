@@ -29,8 +29,8 @@ gen_cnpj() { php "$ROOT/tests/support/random_cnpj.php"; }
 STAMP="$(date +%s%N)"
 ADMIN_ID="$(gen_uuid)"; STAFF_ID="$(gen_uuid)"; STORE="$(gen_uuid)"; CNPJ="$(gen_cnpj)"
 COURIER_USER="$(gen_uuid)"; COURIER_ID="$(gen_uuid)"
-ADMIN_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
-CUST_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+ADMIN_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
+CUST_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CPF="$(php -r '$n=[];for($i=0;$i<9;$i++)$n[]=random_int(0,9);for($t=9;$t<11;$t++){$s=0;for($i=0;$i<$t;$i++)$s+=$n[$i]*(($t+1)-$i);$n[]=((10*$s)%11)%10;}echo implode("",$n);')"
 
 psql_run <<SQL

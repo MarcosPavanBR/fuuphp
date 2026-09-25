@@ -55,7 +55,7 @@ for i in $(seq 1 20); do
   sleep 0.2
 done
 
-PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Titular Dos Dados\"}" | jq -er '.dev_code')
 LOGIN=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \
@@ -106,7 +106,7 @@ RECEIPT=$(curl -s "$BASE/orders/receipt.php?id=${ORDER_ID}" "${AUTH[@]}")
 [ "$(echo "$RECEIPT" | jq -r '.store.cnpj')" = "${CNPJ}" ] || fail "recibo sem o CNPJ da loja: $RECEIPT"
 [ "$(echo "$RECEIPT" | jq -r '.items | length')" = "2" ] || fail "recibo sem os itens"
 [ "$(echo "$RECEIPT" | jq -r '.fiscal_notice | contains("nota fiscal")')" = "true" ] || fail "recibo não avisa que não é nota fiscal"
-OTHER_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+OTHER_PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 OC=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$OTHER_PHONE\",\"full_name\":\"Outra Pessoa\"}" | jq -er '.dev_code')
 OTHER=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \
