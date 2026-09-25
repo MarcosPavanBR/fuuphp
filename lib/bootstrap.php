@@ -20,6 +20,7 @@ date_default_timezone_set('America/Sao_Paulo');
 
 // ── core: ambiente, banco, HTTP, segurança ─────────────────────────────
 require_once __DIR__ . '/core/env.php';
+require_once __DIR__ . '/core/money.php';
 // FUU_ENV_FILE aponta outro arquivo (ex.: /etc/fuuphp/staging.env, ou
 // /dev/null nos testes da trava de produção); o padrão é o .env da raiz.
 load_env(getenv('FUU_ENV_FILE') ?: APP_ROOT . '/.env');

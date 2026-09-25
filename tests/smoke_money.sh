@@ -31,6 +31,16 @@ ACCESS_CODE="424242"; STAMP="$(date +%s%N)"
 ADMIN_PHONE="1197$(( (RANDOM << 15 | RANDOM) % 9000000 + 1000000 ))"
 NSU_OWN=$(( $(date +%s) % 900000 + 100000 ))
 
+echo "== dinheiro em centavos (lib/core/money.php, COE-02): meio centavo, negativo, texto do banco, soma longa =="
+OUT=$(php -r '
+require $argv[1];
+$ok = money_cents("2.675") === 268 && money_cents(2.675) === 268 && money_cents("1.005") === 101
+   && money_cents("-0.05") === -5 && money_cents("12") === 1200 && money_cents("12.3") === 1230 && money_cents(null) === 0
+   && money_str(123456) === "1234.56" && money_str(-5) === "-0.05" && money_str(7) === "0.07"
+   && money_sum(array_fill(0, 10000, "0.10")) === 1000.0 && money_sum(["0.1", "0.2"]) === 0.3;
+echo $ok ? "ok" : "falhou";' "$ROOT/lib/core/money.php")
+[ "$OUT" = "ok" ] || fail "helpers de dinheiro erraram a conta"
+
 echo "== semear loja, entregador, admin e política SEM maquininha própria =="
 psql_run <<SQL
 INSERT INTO users (id, role, full_name, phone, email) VALUES

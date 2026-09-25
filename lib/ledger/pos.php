@@ -123,7 +123,6 @@ function pos_reconciliation(PDO $pdo, string $restaurantId, string $day): array
 
     $reconciled = 0;
     $toResolve = 0;
-    $total = 0.0;
     foreach ($rows as &$row) {
         $row['difference'] = $row['amount_statement'] === null
             ? null
@@ -138,7 +137,6 @@ function pos_reconciliation(PDO $pdo, string $restaurantId, string $day): array
         } else {
             $toResolve++;
         }
-        $total += (float) $row['amount_app'];
     }
     unset($row);
 
@@ -147,7 +145,7 @@ function pos_reconciliation(PDO $pdo, string $restaurantId, string $day): array
         'rows' => $rows,
         'reconciled' => $reconciled,
         'to_resolve' => $toResolve,
-        'total' => round($total, 2),
+        'total' => money_sum(array_column($rows, 'amount_app')),
         // "Divergência de valor ou NSU faltando trava o fechamento do dia."
         // O fechamento é a afirmação "este dia está conferido"; enquanto
         // houver linha aberta, ela é falsa.

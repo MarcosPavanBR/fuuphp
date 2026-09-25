@@ -175,21 +175,14 @@ function netting_courier_batch(PDO $pdo, string $start, string $end): array
     $stmt->execute(['start' => $start, 'end' => $end]);
     $rows = $stmt->fetchAll();
 
-    $gross = 0.0;
-    $withheld = 0.0;
-    $net = 0.0;
-    foreach ($rows as $row) {
-        $gross += (float) $row['gross'];
-        $withheld += (float) $row['withheld'];
-        $net += (float) $row['net'];
-    }
-
+    // Somas em centavos (money_sum): float somado linha a linha acumula
+    // resto de binário.
     return [
         'rows' => $rows,
         'count' => count($rows),
-        'gross' => round($gross, 2),
-        'withheld' => round($withheld, 2),
-        'net' => round($net, 2),
+        'gross' => money_sum(array_column($rows, 'gross')),
+        'withheld' => money_sum(array_column($rows, 'withheld')),
+        'net' => money_sum(array_column($rows, 'net')),
     ];
 }
 

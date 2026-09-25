@@ -292,7 +292,9 @@ function ledger_add(
     )->execute([
         'account' => $account,
         'party_id' => $partyId,
-        'amount' => $amount,
+        // Sempre com duas casas exatas: todo dinheiro do livro entra por
+        // aqui (lib/core/money.php, auditoria COE-02).
+        'amount' => money_str(money_cents($amount)),
         'origin' => $origin,
         'origin_id' => $originId,
         'order_id' => $orderId,
