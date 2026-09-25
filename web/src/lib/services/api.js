@@ -1,5 +1,7 @@
 // Cliente HTTP fino para a API PHP. Sem lib nova: fetch nativo.
-export const BASE = import.meta.env.VITE_API_BASE ?? '/api/v1';
+// `?.`: fora do Vite (os testes em web/tests rodam no Node) não existe
+// import.meta.env; no build o Vite troca pelo valor, como antes.
+export const BASE = import.meta.env?.VITE_API_BASE ?? '/api/v1';
 
 const TOKEN_KEY = 'fuu_access_token';
 

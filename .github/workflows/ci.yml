@@ -389,6 +389,15 @@ jobs:
           npm ci
           npm run build
 
+      # Testes do front sem navegador (node:test, nada instalado a mais): a
+      # renovação da sessão, que passou despercebida até a auditoria.
+      - name: "Front: testes da sessão (npm test)"
+        working-directory: web
+        run: npm test
+
+      - name: "Contrato front x back: toda rota que o front chama existe"
+        run: php bin/check_front_routes.php
+
       # Falha grave conhecida numa dependência do front que vai pro usuário
       # (as de desenvolvimento, só de build, ficam de fora) segura o merge.
       - name: "Dependências do front sem vulnerabilidade alta (npm audit)"
