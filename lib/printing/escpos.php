@@ -26,6 +26,15 @@ function escpos_wrap(string $text, int $width): array
 {
     $lines = [];
     foreach (explode("\n", $text) as $paragraph) {
+        // Recuo no começo ("   + borda", "   OBS: ...") vale pra todas as
+        // linhas do parágrafo: é ele que mostra que a opção é do item de cima.
+        $indent = str_repeat(' ', min(strspn($paragraph, ' '), intdiv($width, 2)));
+        if ($indent !== '') {
+            foreach (escpos_wrap(ltrim($paragraph, ' '), $width - strlen($indent)) as $line) {
+                $lines[] = $indent . $line;
+            }
+            continue;
+        }
         $current = '';
         foreach (preg_split('/\s+/', trim($paragraph)) ?: [] as $word) {
             while (mb_strlen($word) > $width) {

@@ -354,6 +354,14 @@ TICKET_TEXT=$(echo "$TICKET" | jq -r '.job.text')
 echo "$TICKET_TEXT" | grep -q "COBRAR NA ENTREGA · DINHEIRO" || fail "comanda sem a forma de pagamento: $TICKET_TEXT"
 echo "$TICKET_TEXT" | grep -q "TROCO PARA R\$ 100,00" || fail "comanda sem o troco: $TICKET_TEXT"
 echo "$TICKET_TEXT" | grep -q "LEVAR R\$ 33,00 DE TROCO" || fail "comanda sem o troco a levar (100 − 67): $TICKET_TEXT"
+# Topo do papel que vai no saco (no formato do papel do MaisDelivery): marca,
+# cliente com primeiro e último nome (o nome inteiro não sai), cliente novo
+# e o endereço.
+echo "$TICKET_TEXT" | grep -q "FUUdelivery" || fail "comanda sem a marca: $TICKET_TEXT"
+echo "$TICKET_TEXT" | grep -q "Cliente: Cliente Smoke" || fail "comanda sem o nome curto do cliente: $TICKET_TEXT"
+echo "$TICKET_TEXT" | grep -q "Cliente Courier Smoke" && fail "o nome inteiro do cliente saiu no papel"
+echo "$TICKET_TEXT" | grep -q "Cliente novo: SIM" || fail "primeiro pedido na loja não saiu como cliente novo: $TICKET_TEXT"
+echo "$TICKET_TEXT" | grep -q "Endereço: " || fail "comanda sem o endereço: $TICKET_TEXT"
 DELIVERY_CODE=$(psql "$DATABASE_URL" -tAc "SELECT delivery_code FROM orders WHERE id=${ORDER_ID}")
 echo "$TICKET_TEXT" | grep -q "$DELIVERY_CODE" && fail "o código de entrega do cliente saiu impresso"
 WIDEST=$(echo "$TICKET_TEXT" | php -r '$m = 0; foreach (file("php://stdin") as $l) { $m = max($m, mb_strlen(rtrim($l, "\n"))); } echo $m;')

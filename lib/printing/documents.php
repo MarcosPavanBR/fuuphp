@@ -42,7 +42,29 @@ function print_money(float $v): string
 }
 
 /**
+ * Nome no papel: primeiro e último ("Marcos Pava"). Basta pro entregador
+ * achar a pessoa na porta, sem o nome inteiro num papel que fica no balcão,
+ * no saco e na lixeira.
+ */
+function print_customer_name(?string $fullName): string
+{
+    $parts = preg_split('/\s+/', trim((string) $fullName)) ?: [];
+    $parts = array_values(array_filter($parts, static fn (string $p): bool => $p !== ''));
+    if ($parts === []) {
+        return 'Cliente';
+    }
+    $first = mb_convert_case($parts[0], MB_CASE_TITLE);
+
+    return count($parts) === 1 ? $first : $first . ' ' . mb_convert_case(end($parts), MB_CASE_TITLE);
+}
+
+/**
  * A comanda de um pedido. Devolve null se o pedido não existe.
+ *
+ * Um papel só serve a cozinha e vai grampeado no saco pro entregador e pro
+ * cliente, então segue a ordem que o balcão já conhece (a do papel do
+ * MaisDelivery que o Marcos mandou): quem é e pra onde vai no topo, depois
+ * os itens, o dinheiro e, no fim, como cobrar.
  *
  * @return ?array{title:string, items:list<array>}
  */
@@ -50,10 +72,17 @@ function print_order_ticket(PDO $pdo, int $orderId): ?array
 {
     $stmt = $pdo->prepare(
         "SELECT o.*, r.name AS store_name, u.full_name AS customer_name,
-                a.street, a.number, a.complement, a.neighborhood, a.reference,
+                a.street, a.number, a.complement, a.neighborhood, a.reference, a.city,
                 to_char(o.created_at AT TIME ZONE restaurant_timezone(o.restaurant_id), 'DD/MM/YYYY HH24:MI') AS created_local,
                 to_char(lower(o.scheduled_for) AT TIME ZONE restaurant_timezone(o.restaurant_id), 'DD/MM HH24:MI') AS slot_start,
-                to_char(upper(o.scheduled_for) AT TIME ZONE restaurant_timezone(o.restaurant_id), 'HH24:MI') AS slot_end
+                to_char(upper(o.scheduled_for) AT TIME ZONE restaurant_timezone(o.restaurant_id), 'HH24:MI') AS slot_end,
+                -- Cliente novo NA LOJA: nenhum pedido feito (pago ou em
+                -- dinheiro/maquininha) antes deste -- o mesmo critério do
+                -- cupom de primeiro pedido (lib/ordering/coupons.php).
+                NOT EXISTS (SELECT 1 FROM orders p
+                             WHERE p.user_id = o.user_id AND p.restaurant_id = o.restaurant_id
+                               AND p.id <> o.id AND p.created_at < o.created_at
+                               AND p.status NOT IN ('cart', 'pending_payment')) AS first_at_store
            FROM orders o
            JOIN restaurants r ON r.id = o.restaurant_id
            JOIN users u ON u.id = o.user_id
@@ -66,19 +95,36 @@ function print_order_ticket(PDO $pdo, int $orderId): ?array
         return null;
     }
 
+    // ── quem, onde, quando ──────────────────────────────────────────────
     $lines = [
-        ['text' => (string) $o['store_name'], 'align' => 'center', 'bold' => true],
+        ['text' => 'FUUdelivery', 'align' => 'center', 'bold' => true],
         ['text' => 'PEDIDO #' . $o['public_code'], 'align' => 'center', 'big' => true, 'bold' => true],
         ['text' => (string) $o['created_local'], 'align' => 'center'],
+        ['rule' => true],
+        ['text' => mb_strtoupper((string) $o['store_name']), 'bold' => true],
+        ['text' => 'Cliente: ' . print_customer_name($o['customer_name'])],
+        // Loja capricha no primeiro pedido (brinde, bilhete): é o aviso que
+        // o balcão procura no papel.
+        ['text' => 'Cliente novo: ' . ($o['first_at_store'] === true ? 'SIM' : 'Não'), 'bold' => $o['first_at_store'] === true],
     ];
     if ($o['pickup_by_customer'] === true) {
-        $lines[] = ['text' => 'RETIRADA NO BALCÃO', 'align' => 'center', 'bold' => true];
+        $lines[] = ['text' => 'RETIRADA NO BALCÃO', 'bold' => true];
+    } elseif ($o['street'] !== null) {
+        // Endereço em negrito, inteiro, com complemento e referência entre
+        // parênteses: é o que o entregador lê no saco, na rua.
+        $address = 'Endereço: ' . $o['street'] . ($o['number'] ? ', ' . $o['number'] : '')
+            . ($o['complement'] ? ' (' . $o['complement'] . ')' : '')
+            . ($o['reference'] ? ' (' . $o['reference'] . ')' : '')
+            . ($o['neighborhood'] ? ' - ' . $o['neighborhood'] : '')
+            . ($o['city'] ? ', ' . $o['city'] : '');
+        $lines[] = ['text' => $address, 'bold' => true];
     }
     if ($o['slot_start'] !== null) {
-        $lines[] = ['text' => "AGENDADO {$o['slot_start']}–{$o['slot_end']}", 'align' => 'center', 'bold' => true];
+        $lines[] = ['text' => "AGENDADO {$o['slot_start']}–{$o['slot_end']}", 'bold' => true];
     }
     $lines[] = ['rule' => true];
 
+    // ── o que vai no saco ───────────────────────────────────────────────
     foreach (fetch_order_items($pdo, $orderId) as $item) {
         $lines[] = ['pair' => [$item['quantity'] . '× ' . $item['name_snapshot'], print_money((float) $item['line_total'])], 'bold' => true];
         $variants = is_string($item['variants_snapshot']) ? (json_decode($item['variants_snapshot'], true) ?: []) : [];
@@ -90,23 +136,30 @@ function print_order_ticket(PDO $pdo, int $orderId): ?array
         }
     }
 
+    // ── dinheiro ────────────────────────────────────────────────────────
     $lines[] = ['rule' => true];
-    $lines[] = ['pair' => ['Subtotal', print_money((float) $o['subtotal'])]];
+    $lines[] = ['pair' => ['Subtotal (+)', print_money((float) $o['subtotal'])]];
     if ((float) $o['delivery_fee'] > 0) {
-        $lines[] = ['pair' => ['Entrega', print_money((float) $o['delivery_fee'])]];
+        $lines[] = ['pair' => ['Taxa de entrega (+)', print_money((float) $o['delivery_fee'])]];
     }
     if ((float) $o['surge_fee'] > 0) {
-        $lines[] = ['pair' => ['Entrega turbinada', print_money((float) $o['surge_fee'])]];
+        $lines[] = ['pair' => ['Entrega turbinada (+)', print_money((float) $o['surge_fee'])]];
     }
     if ((float) $o['tip'] > 0) {
-        $lines[] = ['pair' => ['Gorjeta', print_money((float) $o['tip'])]];
+        $lines[] = ['pair' => ['Gorjeta (+)', print_money((float) $o['tip'])]];
     }
     if ((float) $o['discount'] > 0) {
-        $lines[] = ['pair' => ['Desconto', '-' . print_money((float) $o['discount'])]];
+        $lines[] = ['pair' => ['Desconto (-)', '-' . print_money((float) $o['discount'])]];
     }
     $lines[] = ['pair' => ['TOTAL', print_money((float) $o['total'])], 'bold' => true];
+
+    // ── como cobrar ─────────────────────────────────────────────────────
     $lines[] = ['rule' => true];
-    $lines[] = ['text' => PRINT_METHOD_LABEL[$o['payment_method']] ?? (string) $o['payment_method'], 'bold' => true];
+    // Maquininha sempre tem crédito/débito (CHECK machine_needs_kind): a
+    // linha própria dela, abaixo, já diz tudo.
+    if ($o['payment_method'] !== 'pos_machine' || $o['machine_kind'] === null) {
+        $lines[] = ['text' => PRINT_METHOD_LABEL[$o['payment_method']] ?? (string) $o['payment_method'], 'bold' => true];
+    }
 
     if ($o['payment_method'] === 'cash') {
         if ($o['change_for'] !== null && (float) $o['change_for'] > (float) $o['total']) {
@@ -118,20 +171,15 @@ function print_order_ticket(PDO $pdo, int $orderId): ?array
         }
     }
     if ($o['payment_method'] === 'pos_machine' && $o['machine_kind'] !== null) {
-        $lines[] = ['text' => 'LEVAR MAQUININHA · ' . ($o['machine_kind'] === 'credit' ? 'CRÉDITO' : 'DÉBITO'), 'bold' => true];
+        // "Cobrar no cartão de crédito": a linha que o entregador precisa
+        // ler antes de sair, pra levar a maquininha certa.
+        $lines[] = ['text' => 'COBRAR NO CARTÃO DE ' . ($o['machine_kind'] === 'credit' ? 'CRÉDITO' : 'DÉBITO'), 'bold' => true];
+        $lines[] = ['text' => 'Na entrega · levar a maquininha'];
     }
 
-    if ($o['pickup_by_customer'] !== true && $o['street'] !== null) {
-        $lines[] = ['rule' => true];
-        $lines[] = ['text' => strtok((string) $o['customer_name'], ' ') ?: 'Cliente', 'bold' => true];
-        $address = $o['street'] . ($o['number'] ? ', ' . $o['number'] : '')
-            . ($o['complement'] ? ' · ' . $o['complement'] : '')
-            . ($o['neighborhood'] ? ' · ' . $o['neighborhood'] : '');
-        $lines[] = ['text' => $address];
-        if ($o['reference']) {
-            $lines[] = ['text' => 'Ref.: ' . $o['reference']];
-        }
-    }
+    // A marca no papel que chega na mão do cliente.
+    $lines[] = ['rule' => true];
+    $lines[] = ['text' => 'Pediu, fuu, chegou.', 'align' => 'center'];
     $lines[] = ['feed' => 1];
 
     return ['title' => 'Comanda #' . $o['public_code'], 'items' => $lines];
