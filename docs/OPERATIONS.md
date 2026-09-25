@@ -24,7 +24,7 @@ requisição por vez: com o acompanhamento aberto (SSE), use
 |---|---|---|
 | `DATABASE_URL` | conexão PostgreSQL | obrigatória |
 | `JWT_SECRET` | assina os tokens de acesso | obrigatória |
-| `APP_ENV` | `development`/`testing` devolvem o código OTP na resposta; `staging`/`production` ligam a trava de produção | `development` |
+| `APP_ENV` | `development`/`testing` devolvem o código OTP na resposta; `staging`/`production` ligam a trava de produção. **Ausente ou com outro valor vale `production`** e a trava recusa subir dizendo por quê (falha fechado) | `production` |
 | `FUU_ENV_FILE` | caminho do arquivo de variáveis (na VPS: `/etc/fuuphp/fuuphp.env`) | `.env` da raiz |
 | `ALLOWED_ORIGIN` | CORS do front em dev; vazio em produção (mesmo domínio) | `http://localhost:5173` |
 | `MERCADOPAGO_ACCESS_TOKEN` | conta real do Mercado Pago | vazio = modo fake |

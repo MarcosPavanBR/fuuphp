@@ -37,12 +37,23 @@ const PRODUCTION_SETTINGS = [
     'PROOF_STORAGE_DIR', 'MENU_PHOTO_DIR', 'COURIER_DOC_DIR', 'PUBLIC_ORIGIN',
 ];
 
+// Os quatro ambientes que existem. Qualquer outro valor não é um deles.
+const KNOWN_ENVS = ['development', 'testing', 'staging', 'production'];
+
 /**
  * O ambiente (APP_ENV): development, testing, staging ou production.
+ *
+ * Falha fechado: sem APP_ENV, ou com um valor que não é um dos quatro
+ * ("prod", "dev", "Produção"), vale production -- a trava confere tudo e
+ * recusa subir dizendo por quê. Antes o padrão era development, e um .env
+ * de produção que perdesse a linha (ou a digitasse errado) passava a
+ * devolver o código de login na resposta e a aceitar webhook sem assinatura.
  */
 function app_env(): string
 {
-    return (string) env('APP_ENV', 'development');
+    $env = strtolower(trim((string) env('APP_ENV', '')));
+
+    return in_array($env, KNOWN_ENVS, true) ? $env : 'production';
 }
 
 /**
@@ -65,6 +76,15 @@ function production_problems(): array
     }
     $problems = [];
     $env = app_env();
+
+    // Sem APP_ENV (ou com valor inventado) caiu em production pelo padrão:
+    // quem configurou precisa dizer, com todas as letras, onde está.
+    $declared = strtolower(trim((string) env('APP_ENV', '')));
+    if (!in_array($declared, KNOWN_ENVS, true)) {
+        $problems[] = $declared === ''
+            ? 'APP_ENV ausente: vale production por segurança (declare development, testing, staging ou production)'
+            : "APP_ENV '{$declared}' não existe: vale production por segurança (use development, testing, staging ou production)";
+    }
 
     // O modelo de produção (deploy/env/fuuphp.env.example) marca o que falta
     // preencher com <...>. Um marcador que sobrou não é vazio -- passaria nas

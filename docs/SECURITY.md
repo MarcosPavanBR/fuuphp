@@ -168,6 +168,11 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
   vazio ou com o marcador `<...>` do modelo. Isso vale pra Mercado Pago, push,
   Twilio, JWT fraco, CORS ausente e pastas. O `deploy/deploy.sh` roda a mesma
   checagem antes de trocar a versão.
+- **`APP_ENV` falha fechado:** ausente ou com valor que não é
+  development/testing/staging/production ("prod", "dev") vale production, e a
+  trava recusa subir dizendo que falta declarar. Antes o padrão era
+  development: um `.env` que perdesse a linha devolveria o código de login na
+  resposta e aceitaria webhook sem assinatura.
 - **Segredos** só em `/etc/fuuphp/fuuphp.env` (dono `fuuphp`, 600), fora do
   git e da raiz servida. O PHP-FPM usa `clear_env` e `open_basedir`.
 - **Nginx** (`deploy/nginx/fuuphp.conf`):
@@ -179,6 +184,9 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
   - `Permissions-Policy`: só localização; câmera, microfone e pagamento do
     navegador desligados;
   - `server_tokens off`: a versão do Nginx não aparece;
+  - o acompanhamento ao vivo (`orders/track.php`, SSE) leva o access token
+    na URL, porque o EventSource não manda cabeçalho; o `access_log` usa o
+    formato `fuu_combined`, que nessa rota grava só o caminho, sem o token;
   - limite por IP real no login, no OTP e no cadastro de loja (30/min, rajada
     de 20), segunda trava depois do Cloudflare. `refresh.php` fica de fora:
     com CGNAT, muitos clientes saem pelo mesmo IP.
@@ -200,6 +208,15 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
   `db` ou `cron`, sem detalhe interno.
 - **Erros** viram `{code, message, trace_id}` sem stack trace. O detalhe fica
   no log do servidor, achado pelo `trace_id`.
+
+## CI (cadeia de suprimentos)
+
+- O `GITHUB_TOKEN` do workflow só lê o repositório (`permissions: contents:
+  read`).
+- As ações de terceiros estão fixadas por SHA de commit (a tag fica no
+  comentário), não pela tag, que pode ser movida por quem controla a ação.
+- `npm audit --omit=dev --audit-level=high` roda em todo push; job com
+  limite de 30 minutos.
 
 ## LGPD
 

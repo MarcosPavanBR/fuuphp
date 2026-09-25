@@ -1,7 +1,7 @@
 name: ci
 
 # ADR-002 (Especificacao FUUDelivery, Parte I): migracoes versionadas rodam
-# no CI, nunca no cPanel. Este workflow aplica as trinta e cinco migracoes do zero,
+# no CI, nunca no cPanel. Este workflow aplica todas as migracoes do zero,
 # reverte tudo e aplica de novo contra um PostgreSQL 16 real com pg_cron, e
 # depois roda o smoke test de cada modulo PHP sobre esse banco migrado.
 
@@ -27,15 +27,24 @@ on:
       - "deploy/**"
       - ".github/workflows/ci.yml"
 
+# O token do GITHUB_TOKEN só lê o repositório: o CI não publica, não comenta
+# e não escreve nada -- se um passo (ou uma ação de terceiro) for
+# comprometido, não tem o que estragar.
+permissions:
+  contents: read
+
 jobs:
   apply:
     runs-on: ubuntu-latest
+    # Uma suíte presa (servidor que não sobe, psql esperando) não segura o
+    # runner por 6 horas.
+    timeout-minutes: 30
     # Como em produção: a API das suítes conecta como app_rw (sem ser dona das
     # tabelas, sujeita à RLS); o semeio dos testes usa o dono (DATABASE_URL).
     env:
       API_DATABASE_URL: postgres://app_rw:app-rw-ci@localhost:5432/fuudelivery
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Build imagem Postgres 16 + pg_cron
         run: docker build -t fuudelivery-db ./db
@@ -87,7 +96,7 @@ jobs:
           test "$count" -ge 40
 
       - name: Instalar PHP 8.4 + pdo_pgsql
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: "8.4"
           extensions: pdo_pgsql, pgsql, gd, fileinfo, curl
@@ -363,7 +372,7 @@ jobs:
           sudo nginx -t -c "$D/nginx.conf"
 
       - name: Instalar Node 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: "npm"
@@ -374,3 +383,9 @@ jobs:
         run: |
           npm ci
           npm run build
+
+      # Falha grave conhecida numa dependência do front que vai pro usuário
+      # (as de desenvolvimento, só de build, ficam de fora) segura o merge.
+      - name: "Dependências do front sem vulnerabilidade alta (npm audit)"
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=high

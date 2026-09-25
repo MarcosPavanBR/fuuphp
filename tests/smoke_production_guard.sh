@@ -40,6 +40,19 @@ for reason in "JWT_SECRET" "Mercado Pago não está em modo live" "MERCADOPAGO_W
 done
 echo "$OUT" | grep -q "SUBIU" && fail "o código seguiu depois da trava"
 
+echo "== APP_ENV ausente ou inventado vale production (falha fechado), dizendo por quê =="
+set +e
+OUT=$("${base_env[@]}" php -r "$boot" "$ROOT/lib/bootstrap.php" 2>&1); CODE=$?
+[ "$CODE" = "1" ] || fail "sem APP_ENV subiu como desenvolvimento: $OUT"
+echo "$OUT" | grep -q "APP_ENV ausente" || fail "sem APP_ENV, o motivo não aparece: $OUT"
+OUT=$("${base_env[@]}" APP_ENV=prod php -r "$boot" "$ROOT/lib/bootstrap.php" 2>&1); CODE=$?
+[ "$CODE" = "1" ] || fail "APP_ENV=prod subiu: $OUT"
+echo "$OUT" | grep -q "APP_ENV 'prod' não existe" || fail "APP_ENV errado sem motivo: $OUT"
+set -e
+check_dev_default='define("FUU_SKIP_PRODUCTION_GUARD", 1); require $argv[1]; echo in_array(app_env(), OTP_DEV_ENVS, true) ? "mostra" : "esconde";'
+[ "$("${base_env[@]}" php -r "$check_dev_default" "$ROOT/lib/bootstrap.php")" = "esconde" ] || fail "sem APP_ENV o código de login voltaria na resposta"
+[ "$("${base_env[@]}" APP_ENV=Development php -r "$check_dev_default" "$ROOT/lib/bootstrap.php")" = "mostra" ] || fail "maiúscula no APP_ENV não foi aceita"
+
 echo "== HTTP: 503 sem detalhe nenhum pro cliente =="
 "${base_env[@]}" APP_ENV=production php -S "127.0.0.1:${PORT}" -t "$ROOT" >/tmp/smoke-guard-server.log 2>&1 &
 SERVER_PID=$!
