@@ -64,11 +64,12 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
           bash db/migrate.sh up
 
-      - name: "Reverter tudo e aplicar de novo (down 38, up) -- prova de que o round-trip fecha"
+      - name: "Reverter tudo e aplicar de novo (down N, up) -- prova de que o round-trip fecha"
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
         run: |
-          bash db/migrate.sh down 38
+          # N = quantas migrações existem: número fixo aqui quebrava a cada migração nova.
+          bash db/migrate.sh down "$(ls db/migrations/*.up.sql | wc -l)"
           bash db/migrate.sh up
 
       - name: "Senha do role app_rw (a API das suítes conecta com ele)"
