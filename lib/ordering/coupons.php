@@ -193,8 +193,18 @@ function coupon_projection(PDO $pdo, string $kind, float $value, float $budgetCa
     $ticket = $ticketStmt->fetchColumn();
     $ticket = $ticket === null || $ticket === false ? null : round((float) $ticket, 2);
 
-    $policy = $pdo->query('SELECT commission_bps FROM platform_policies ORDER BY version DESC LIMIT 1')->fetchColumn();
-    $commissionBps = $policy === false ? 0 : (int) $policy;
+    // Cupom de uma loja: a comissão dela, com exceção negociada (aba
+    // Políticas) se houver. Cupom da plataforma: a comissão da plataforma.
+    if ($restaurantId !== null) {
+        try {
+            $commissionBps = (int) resolve_policy($pdo, $restaurantId)['commission_bps'];
+        } catch (RuntimeException) {
+            $commissionBps = 0;
+        }
+    } else {
+        $policy = $pdo->query('SELECT commission_bps FROM platform_policies ORDER BY version DESC LIMIT 1')->fetchColumn();
+        $commissionBps = $policy === false ? 0 : (int) $policy;
+    }
 
     // Desconto médio por resgate: fixo é o próprio valor; percentual e frete
     // grátis dependem do pedido, então usam o ticket médio como base.

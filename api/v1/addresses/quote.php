@@ -81,7 +81,13 @@ if (!is_string($address['city_ibge_code']) || $address['city_ibge_code'] === '')
     error_response(422, 'city_required', 'Informe city_ibge_code pra saber se o endereço é atendido.', fields: ['city_ibge_code' => 'obrigatório']);
 }
 
+// A tarifa mostrada é a da cidade: a da plataforma com as exceções da praça
+// (aba Políticas). O raio de cada loja vem de resolve_policy(), que soma a
+// exceção da própria loja -- a mesma conta que o checkout vai fazer.
 $policy = $pdo->query('SELECT * FROM platform_policies ORDER BY version DESC LIMIT 1')->fetch();
+if ($policy !== false) {
+    $policy = array_merge($policy, city_policy_patch($pdo, (string) $address['city_ibge_code']));
+}
 $maxKm = $policy === false || $policy['delivery_max_km'] === null ? null : (float) $policy['delivery_max_km'];
 
 $storeStmt = $pdo->prepare(
@@ -108,7 +114,14 @@ foreach ($stores as $store) {
     if ($nearest === null || $km < $nearest['distance_km']) {
         $nearest = ['name' => $store['name'], 'distance_km' => round($km, 1)];
     }
-    if ($maxKm === null || $km <= $maxKm) {
+    $storeMaxKm = $maxKm;
+    try {
+        $storePolicy = resolve_policy($pdo, (string) $store['id']);
+        $storeMaxKm = $storePolicy['delivery_max_km'] === null ? null : (float) $storePolicy['delivery_max_km'];
+    } catch (RuntimeException) {
+        // sem política cadastrada: fica o raio da cidade
+    }
+    if ($storeMaxKm === null || $km <= $storeMaxKm) {
         $covering++;
     }
 }

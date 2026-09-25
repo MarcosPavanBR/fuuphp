@@ -39,6 +39,25 @@
   );
   let labelOf = $derived(Object.fromEntries((data?.fields ?? []).map((f) => [f.key, f.label])));
 
+  // Como o número aparece na lista: dinheiro em R$, comissão em %, raio em km.
+  const SHOW = {
+    delivery_base_fee: (v) => `frete base ${money(v)}`,
+    delivery_per_km: (v) => `frete ${money(v)}/km`,
+    delivery_max_km: (v) => `raio ${String(v).replace('.', ',')} km`,
+    commission_bps: (v) => `comissão ${(Number(v) / 100).toFixed(2).replace('.', ',')}%`,
+    cancel_fee: (v) => `taxa de cancelamento ${money(v)}`,
+  };
+
+  function money(v) {
+    return `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
+  }
+
+  function describe(patch) {
+    return Object.entries(patch ?? {})
+      .map(([k, v]) => (SHOW[k] ? SHOW[k](v) : `${labelOf[k] ?? k}: ${v}`))
+      .join(' · ');
+  }
+
   function day(raw) {
     const d = parsePgTimestamp(raw);
     return d ? d.toLocaleDateString('pt-BR') : '';
@@ -132,11 +151,7 @@
         <div class="ov" class:off={!o.live}>
           <div class="info">
             <strong>{o.scope === 'city' ? 'Cidade' : 'Loja'}: {o.target_name ?? o.scope_id}</strong>
-            <span class="fuu-mono">
-              {Object.entries(o.patch ?? {})
-                .map(([k, v]) => `${labelOf[k] ?? k}: ${v}`)
-                .join(' · ')}
-            </span>
+            <span class="fuu-mono">{describe(o.patch)}</span>
             <span>
               {o.reason} · {o.created_by_name ?? 'admin'}, {day(o.created_at)}
               {#if o.expires_at}· {o.live ? 'até' : 'encerrada em'} {day(o.expires_at)}{/if}

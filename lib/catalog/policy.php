@@ -96,6 +96,31 @@ function resolve_policy(PDO $pdo, string $restaurantId): array
 }
 
 /**
+ * As exceções em vigor de uma praça (scope='city'), já mescladas na ordem
+ * de resolve_policy() (a mais nova vence). É a política "da cidade" quando
+ * ainda não há loja escolhida -- "esse endereço é atendido?" (quote.php).
+ */
+function city_policy_patch(PDO $pdo, string $cityIbge): array
+{
+    $stmt = $pdo->prepare(
+        "SELECT patch FROM policy_overrides
+          WHERE scope = 'city' AND scope_id = :city
+            AND (expires_at IS NULL OR expires_at > now())
+          ORDER BY created_at, id"
+    );
+    $stmt->execute(['city' => $cityIbge]);
+    $merged = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $patch = json_decode((string) $row['patch'], true);
+        if (is_array($patch)) {
+            $merged = array_merge($merged, $patch);
+        }
+    }
+
+    return $merged;
+}
+
+/**
  * Array de texto do PostgreSQL ("{cash,mp_card}") como lista PHP.
  */
 function pg_text_array_to_php(string $pgArray): array

@@ -228,6 +228,8 @@ R=$(OV '{"scope":"restaurant","scope_id":"'"$RESTAURANT_ID"'","patch":{"delivery
 [ "$(query "SELECT count(*) FROM audit_log WHERE action='policy_override.created' AND actor_id='${ADMIN_USER_ID}'")" = "3" ] || fail "exceção sem audit_log"
 R=$(BASEFEE "$RESTAURANT_ID"); [ "$R" = "6" ] || fail "a exceção mais nova da loja devia valer (6), veio $R"
 R=$(BASEFEE "$NOGEO_ID");      [ "$R" = "9" ] || fail "a exceção da praça não chegou na loja da cidade (9), veio $R"
+R=$(curl -s "$BASE/addresses/quote.php?lat=-23.5600&lng=-46.6333&city_ibge_code=${CITY}" "${AUTH[@]}" | jq -r '.tariff.base')
+[ "$R" = "9" ] || fail "\"esse endereço é atendido?\" mostrou a tarifa sem a exceção da cidade (9): $R"
 LIST=$(curl -s "$BASE/admin/policy_overrides.php" -H "Authorization: Bearer $ADMIN_TOKEN")
 [ "$(echo "$LIST" | jq --arg c "$CITY" --arg r "$RESTAURANT_ID" '[.overrides[] | select(.live and (.scope_id == $c or .scope_id == $r))] | length')" = "3" ] \
   || fail "lista de exceções: $(echo "$LIST" | jq -c '.overrides')"
