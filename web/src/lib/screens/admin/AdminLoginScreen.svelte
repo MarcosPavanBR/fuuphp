@@ -9,6 +9,9 @@
   let step = $state('phone');
   let phone = $state('');
   let code = $state('');
+  // Segundo fator (SEG-04): só aparece quando o servidor pede (totp_required).
+  let needsTotp = $state(false);
+  let totp = $state('');
   let busy = $state(false);
 
   let digits = $derived(phone.replace(/\D/g, ''));
@@ -27,13 +30,19 @@
   }
 
   async function confirm() {
-    if (code.length !== 6 || busy) return;
+    if (code.length !== 6 || busy || (needsTotp && totp.length !== 6)) return;
     busy = true;
     try {
-      await adminVerify({ phone: digits, code });
+      await adminVerify({ phone: digits, code, totp: needsTotp ? totp : undefined });
       onLoggedIn();
     } catch (e) {
-      toastr.error(e.message ?? 'Código inválido.');
+      if (e.code === 'totp_required') {
+        needsTotp = true;
+        toastr.info('Falta o código do app autenticador.');
+      } else {
+        if (e.code === 'totp_invalid') totp = '';
+        toastr.error(e.message ?? 'Código inválido.');
+      }
     } finally {
       busy = false;
     }
@@ -69,6 +78,22 @@
         bind:value={code}
         onkeydown={(e) => e.key === 'Enter' && confirm()}
       />
+      {#if needsTotp}
+        <p class="sub">Código de 6 dígitos do app autenticador (Google Authenticator, 2FAS…).</p>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          type="text"
+          inputmode="numeric"
+          maxlength="6"
+          autocomplete="one-time-code"
+          class="code fuu-mono totp"
+          placeholder="000000"
+          aria-label="Código do app autenticador"
+          autofocus
+          bind:value={totp}
+          onkeydown={(e) => e.key === 'Enter' && confirm()}
+        />
+      {/if}
       <button type="button" class="btn-fuu-primary w-100" disabled={busy} onclick={confirm}>
         {busy ? 'Entrando…' : 'Entrar'}
       </button>

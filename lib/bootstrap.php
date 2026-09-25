@@ -32,6 +32,7 @@ require_once __DIR__ . '/core/uuid.php';
 require_once __DIR__ . '/core/jwt.php';
 require_once __DIR__ . '/core/sessions.php';
 require_once __DIR__ . '/core/otp.php';
+require_once __DIR__ . '/core/totp.php';
 require_once __DIR__ . '/core/auth_guard.php';
 require_once __DIR__ . '/core/idempotency.php';
 require_once __DIR__ . '/core/production_guard.php';

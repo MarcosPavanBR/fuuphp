@@ -33,9 +33,32 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
     aparelho.
 - **Loja e plataforma vêm do token, nunca do corpo da requisição.** Uma
   loja não consegue pausar, editar ou ler outra trocando um id no JSON.
-- **Admin não tem senha.** Entra pelo mesmo código do cliente, então quem
-  controla o celular do admin controla o painel. O admin fundador é criado
-  por `bin/bootstrap_admin.php`, uma vez.
+- **Admin não tem senha.** Entra pelo mesmo código do cliente e, com o
+  segundo fator ligado, também pelo código de um app autenticador (seção
+  abaixo). O admin fundador é criado por `bin/bootstrap_admin.php`, uma vez.
+
+## Segundo fator do admin (autenticador)
+
+`lib/core/totp.php`, `api/v1/admin/totp.php`, `api/v1/auth/otp_verify.php`,
+migração 042
+
+- Código de 6 dígitos que muda a cada 30 segundos (TOTP, RFC 6238), o mesmo
+  do Google Authenticator, Authy ou 1Password. Implementado em PHP puro, sem
+  biblioteca: conferido contra os vetores da própria RFC.
+- Liga no painel, aba Aparelhos: o painel mostra o segredo, o admin cadastra
+  no app e confirma com o primeiro código. Só depois de confirmado o login
+  passa a pedir os dois.
+- Com o fator ligado, o SMS sozinho não entra (401 `totp_required`). O código
+  do SMS não é gasto enquanto falta o do app. Cada código de app errado conta
+  nas mesmas 5 tentativas do SMS.
+- Código já usado não vale de novo, nem em dois logins ao mesmo tempo: o
+  banco guarda o último passo aceito e só aceita um mais novo.
+- O segredo fica em `admin_totp`, fora do alcance do papel só-leitura
+  (`app_ro`). Ligar, confirmar e desligar vão pro `audit_log`.
+- Desligar pede um código válido do app. Não existe rota pra um admin
+  desligar o fator de outro; perdeu o celular do app, a recuperação é no
+  servidor ([OPERATIONS.md](OPERATIONS.md#admin-perdeu-o-app-autenticador)).
+- Teste: `smoke_admin.sh`.
 
 ## Código de login (OTP)
 
@@ -242,8 +265,9 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
 
 ## Limites conhecidos
 
-- **A sessão do painel da plataforma** tem a força do celular do admin (login
-  por SMS, sem segundo fator).
+- **O segundo fator do admin é opcional.** Admin que não liga o autenticador
+  entra só com o SMS, e o painel tem a força do chip dele. Ligue em todo
+  admin antes de abrir.
 - **O código de acesso do entregador** tem só 6 dígitos. O limite de tentativas
   fecha o ataque pela API e o bcrypt encarece quebrar um vazamento do banco,
   mas 10⁶ combinações seguem poucas: se o banco vazar, troque os códigos.

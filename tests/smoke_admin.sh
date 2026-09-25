@@ -205,4 +205,30 @@ boom
   || fail "o erro que voltou não reabriu"
 rm -f "$BOOM"
 
+echo "== segundo fator do admin (SEG-04): SMS sozinho não entra; código do app, uma vez só =="
+totp_at() {  # totp_at SEGREDO DESLOCAMENTO(intervalos de 30 s)
+  php -r 'require $argv[1]; echo totp_code($argv[2], intdiv(time(), 30) + (int) $argv[3]);' "$ROOT/lib/core/totp.php" "$1" "$2"
+}
+START=$(curl -s -X POST "$BASE/admin/totp.php" "${AAUTH[@]}" -H "Content-Type: application/json" -d '{"action":"start"}')
+SECRET=$(echo "$START" | jq -er '.secret') || fail "start do segundo fator: $START"
+echo "$START" | jq -er '.uri' | grep -q "^otpauth://totp/FUUdelivery" || fail "otpauth errado: $START"
+[ "$(psql "$DATABASE_URL" -tAc "SELECT has_table_privilege('app_ro', 'admin_totp', 'SELECT')")" = "f" ] || fail "relatório (app_ro) enxerga o segredo"
+[ "$(curl -s -X POST "$BASE/admin/totp.php" "${AAUTH[@]}" -H "Content-Type: application/json" \
+  -d '{"action":"confirm","code":"000000"}' | jq -r '.code')" = "totp_invalid" ] || fail "confirmou com código errado"
+[ "$(curl -s -X POST "$BASE/admin/totp.php" "${AAUTH[@]}" -H "Content-Type: application/json" \
+  -d "{\"action\":\"confirm\",\"code\":\"$(totp_at "$SECRET" 0)\"}" | jq -r '.enabled')" = "true" ] || fail "não ligou o segundo fator"
+SMS=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" -d "{\"purpose\":\"login\",\"phone\":\"${ADMIN_PHONE}\"}" | jq -er '.dev_code')
+VERIFY() { curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" -d "{\"purpose\":\"login\",\"phone\":\"${ADMIN_PHONE}\",\"code\":\"${SMS}\"$1}"; }
+[ "$(VERIFY '' | jq -r '.code')" = "totp_required" ] || fail "admin com segundo fator entrou só com o SMS"
+[ "$(VERIFY ',"totp":"000000"' | jq -r '.code')" = "totp_invalid" ] || fail "código errado do app aceito"
+# O intervalo atual foi gasto no confirmar; o seguinte vale (tolerância de 30 s).
+NEXT=$(totp_at "$SECRET" 1)
+VERIFY ",\"totp\":\"${NEXT}\"" | jq -e '.access_token' >/dev/null || fail "SMS + código certo do app não entrou"
+SMS=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" -d "{\"purpose\":\"login\",\"phone\":\"${ADMIN_PHONE}\"}" | jq -er '.dev_code')
+[ "$(VERIFY ",\"totp\":\"${NEXT}\"" | jq -r '.code')" = "totp_invalid" ] || fail "o mesmo código do app valeu duas vezes"
+psql_run -c "UPDATE admin_totp SET last_step = NULL"
+[ "$(curl -s -X POST "$BASE/admin/totp.php" "${AAUTH[@]}" -H "Content-Type: application/json" \
+  -d "{\"action\":\"disable\",\"code\":\"$(totp_at "$SECRET" 0)\"}" | jq -r '.enabled')" = "false" ] || fail "não desligou"
+[ "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM audit_log WHERE action LIKE 'admin_totp.%'")" -ge 3 ] || fail "segundo fator sem audit_log"
+
 echo "OK: painel da plataforma (Fase 12 + 10.5) passou no smoke test"

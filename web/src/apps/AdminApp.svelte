@@ -15,6 +15,7 @@
   import IncidentQueue from '../lib/screens/admin/IncidentQueue.svelte';
   import NettingScreen from '../lib/screens/admin/NettingScreen.svelte';
   import PartnerDeviceScreen from '../lib/screens/admin/PartnerDeviceScreen.svelte';
+  import AdminTotpPanel from '../lib/screens/admin/AdminTotpPanel.svelte';
   import CitiesScreen from '../lib/screens/admin/CitiesScreen.svelte';
   import BannersScreen from '../lib/screens/admin/BannersScreen.svelte';
   import PolicyOverridesPanel from '../lib/screens/admin/PolicyOverridesPanel.svelte';
@@ -132,6 +133,8 @@
       {:else if tab === 'devices'}
         <!-- Suporte: liberar a troca de tablet/celular de loja e entregador. -->
         <PartnerDeviceScreen />
+        <!-- O segundo fator do próprio admin (SEG-04). -->
+        <AdminTotpPanel />
       {:else}
         <PolicyScreen />
         <!-- Exceções por cidade ou loja, por cima da política da plataforma. -->

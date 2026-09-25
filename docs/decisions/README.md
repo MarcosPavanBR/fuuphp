@@ -52,3 +52,4 @@ pra ele (ex.: o mapa do acompanhamento em 06 → 16).
 - [42 — Sessão que não cai aos 15 minutos](42-sessao-que-nao-cai.md)
 - [43 — Comanda no formato que o balcão já conhece](43-comanda-no-formato-do-balcao.md)
 - [44 — Lote rápido da auditoria (SEG-01, SEG-03, INFRA-03)](44-lote-rapido-da-auditoria.md)
+- [45 — Correções da auditoria 360°](45-correcoes-da-auditoria.md)

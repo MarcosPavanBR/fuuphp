@@ -65,6 +65,39 @@ if (!hash_equals((string) $otp['code_hash'], hash_otp($code))) {
     error_response(401, 'otp_invalid', 'Código incorreto.', detail: 'tentativas restantes: ' . (OTP_MAX_ATTEMPTS - (int) $otp['attempts'] - 1));
 }
 
+// Segundo fator do admin (migração 042, SEG-04): com ele confirmado, o SMS
+// sozinho não entra. O código SMS certo NÃO é consumido enquanto falta o do
+// autenticador -- o app pergunta e manda os dois de novo -- e cada código de
+// autenticador errado conta no mesmo limite de tentativas do SMS.
+if ($user['role'] === 'admin') {
+    $totpStmt = $pdo->prepare('SELECT secret, last_step FROM admin_totp WHERE user_id = :u AND confirmed_at IS NOT NULL');
+    $totpStmt->execute(['u' => $user['id']]);
+    $totp = $totpStmt->fetch();
+    if ($totp !== false) {
+        $totpCode = isset($body['totp']) && is_scalar($body['totp']) ? only_digits((string) $body['totp']) : '';
+        if ($totpCode === '') {
+            error_response(401, 'totp_required', 'Digite também o código do app autenticador.');
+        }
+        $step = totp_verify((string) $totp['secret'], $totpCode, $totp['last_step'] === null ? null : (int) $totp['last_step']);
+        if ($step === null) {
+            $pdo->prepare('UPDATE otp_codes SET attempts = attempts + 1 WHERE id = :id')->execute(['id' => $otp['id']]);
+            error_response(401, 'totp_invalid', 'Código do autenticador incorreto.');
+        }
+        // Marca o passo usado só se ninguém usou esse (ou um mais novo) antes:
+        // dois logins simultâneos com o mesmo código, um entra e o outro não.
+        $mark = $pdo->prepare(
+            'UPDATE admin_totp SET last_step = :s
+              WHERE user_id = :u AND (last_step IS NULL OR last_step < :s)
+              RETURNING 1'
+        );
+        $mark->execute(['s' => $step, 'u' => $user['id']]);
+        if ($mark->fetchColumn() === false) {
+            $pdo->prepare('UPDATE otp_codes SET attempts = attempts + 1 WHERE id = :id')->execute(['id' => $otp['id']]);
+            error_response(401, 'totp_invalid', 'Código do autenticador incorreto.');
+        }
+    }
+}
+
 $pdo->prepare('UPDATE otp_codes SET consumed_at = now() WHERE id = :id')->execute(['id' => $otp['id']]);
 
 $tokens = issue_tokens(

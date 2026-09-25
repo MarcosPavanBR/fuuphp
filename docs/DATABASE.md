@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_db_map.php` a partir do banco com todas as migrações
 > aplicadas. Não edite à mão: o CI confere (`--check`).
 
-64 tabelas em PostgreSQL 16. Regras que o esquema garante sozinho (e que o
+65 tabelas em PostgreSQL 16. Regras que o esquema garante sozinho (e que o
 código não precisa repetir): `orders.status` só muda por `advance_order()`; `ledger_entries`
 é só de inserção (sem UPDATE/DELETE); um pagamento aprovado por pedido
 (`payments_one_approved`). Contexto de cada regra: `docs/ARCHITECTURE.md`.
@@ -15,7 +15,7 @@ código não precisa repetir): `orders.status` só muda por `advance_order()`; `
 
 ## Índice
 
-[`acquirer_statements`](#acquirer_statements) [`addresses`](#addresses) [`app_errors`](#app_errors) [`audit_log`](#audit_log) [`business_hours`](#business_hours) [`card_transactions`](#card_transactions) [`cash_settlement_intents`](#cash_settlement_intents) [`consents`](#consents) [`coupon_redemptions`](#coupon_redemptions) [`coupons`](#coupons) [`courier_applications`](#courier_applications) [`courier_documents`](#courier_documents) [`courier_positions`](#courier_positions) [`courier_shifts`](#courier_shifts) [`couriers`](#couriers) [`delivery_attempts`](#delivery_attempts) [`delivery_incidents`](#delivery_incidents) [`delivery_proofs`](#delivery_proofs) [`delivery_slots`](#delivery_slots) [`dispatch_attempts`](#dispatch_attempts) [`disputes`](#disputes) [`favorite_restaurants`](#favorite_restaurants) [`fraud_signals`](#fraud_signals) [`holiday_overrides`](#holiday_overrides) [`idempotency_keys`](#idempotency_keys) [`item_variants`](#item_variants) [`ledger_entries`](#ledger_entries) [`loyalty_entries`](#loyalty_entries) [`loyalty_rewards`](#loyalty_rewards) [`menu_items`](#menu_items) [`notifications`](#notifications) [`offers`](#offers) [`order_events`](#order_events) [`order_items`](#order_items) [`order_messages`](#order_messages) [`orders`](#orders) [`otp_codes`](#otp_codes) [`outbox`](#outbox) [`partner_accounts`](#partner_accounts) [`partner_login_failures`](#partner_login_failures) [`payment_proofs`](#payment_proofs) [`payments`](#payments) [`payouts`](#payouts) [`platform_policies`](#platform_policies) [`policy_overrides`](#policy_overrides) [`pos_custody`](#pos_custody) [`pos_devices`](#pos_devices) [`print_log`](#print_log) [`promo_banners`](#promo_banners) [`push_subscriptions`](#push_subscriptions) [`refunds`](#refunds) [`restaurant_credentials`](#restaurant_credentials) [`restaurant_payment_settings`](#restaurant_payment_settings) [`restaurants`](#restaurants) [`reviews`](#reviews) [`saved_cards`](#saved_cards) [`service_cities`](#service_cities) [`sessions`](#sessions) [`settlement_proofs`](#settlement_proofs) [`store_pauses`](#store_pauses) [`system_status`](#system_status) [`tickets`](#tickets) [`users`](#users) [`wallet_credits`](#wallet_credits) 
+[`acquirer_statements`](#acquirer_statements) [`addresses`](#addresses) [`admin_totp`](#admin_totp) [`app_errors`](#app_errors) [`audit_log`](#audit_log) [`business_hours`](#business_hours) [`card_transactions`](#card_transactions) [`cash_settlement_intents`](#cash_settlement_intents) [`consents`](#consents) [`coupon_redemptions`](#coupon_redemptions) [`coupons`](#coupons) [`courier_applications`](#courier_applications) [`courier_documents`](#courier_documents) [`courier_positions`](#courier_positions) [`courier_shifts`](#courier_shifts) [`couriers`](#couriers) [`delivery_attempts`](#delivery_attempts) [`delivery_incidents`](#delivery_incidents) [`delivery_proofs`](#delivery_proofs) [`delivery_slots`](#delivery_slots) [`dispatch_attempts`](#dispatch_attempts) [`disputes`](#disputes) [`favorite_restaurants`](#favorite_restaurants) [`fraud_signals`](#fraud_signals) [`holiday_overrides`](#holiday_overrides) [`idempotency_keys`](#idempotency_keys) [`item_variants`](#item_variants) [`ledger_entries`](#ledger_entries) [`loyalty_entries`](#loyalty_entries) [`loyalty_rewards`](#loyalty_rewards) [`menu_items`](#menu_items) [`notifications`](#notifications) [`offers`](#offers) [`order_events`](#order_events) [`order_items`](#order_items) [`order_messages`](#order_messages) [`orders`](#orders) [`otp_codes`](#otp_codes) [`outbox`](#outbox) [`partner_accounts`](#partner_accounts) [`partner_login_failures`](#partner_login_failures) [`payment_proofs`](#payment_proofs) [`payments`](#payments) [`payouts`](#payouts) [`platform_policies`](#platform_policies) [`policy_overrides`](#policy_overrides) [`pos_custody`](#pos_custody) [`pos_devices`](#pos_devices) [`print_log`](#print_log) [`promo_banners`](#promo_banners) [`push_subscriptions`](#push_subscriptions) [`refunds`](#refunds) [`restaurant_credentials`](#restaurant_credentials) [`restaurant_payment_settings`](#restaurant_payment_settings) [`restaurants`](#restaurants) [`reviews`](#reviews) [`saved_cards`](#saved_cards) [`service_cities`](#service_cities) [`sessions`](#sessions) [`settlement_proofs`](#settlement_proofs) [`store_pauses`](#store_pauses) [`system_status`](#system_status) [`tickets`](#tickets) [`users`](#users) [`wallet_credits`](#wallet_credits) 
 
 ## acquirer_statements
 
@@ -57,6 +57,18 @@ Criada em `db/migrations/002_catalog.up.sql`. Da migração: restaurants, restau
 | `is_default` | boolean (padrão) |  |  |
 | `created_at` | timestamp with time zone (padrão) |  |  |
 | `reference` | text | sim |  |
+
+## admin_totp
+
+Criada em `db/migrations/042_admin_totp.up.sql`. Da migração: Segundo fator do admin (auditoria SEG-04). O admin entra com o código por SMS, e quem clonasse o chip do dono virava admin. Com isto ligado, além do SMS vai o código de 6 dígitos de um app autenticador (Google Authent…
+
+| Coluna | Tipo | Nulo | Referência |
+|---|---|---|---|
+| `user_id` | uuid |  | `users.id` |
+| `secret` | text |  |  |
+| `confirmed_at` | timestamp with time zone | sim |  |
+| `last_step` | bigint | sim |  |
+| `created_at` | timestamp with time zone (padrão) |  |  |
 
 ## app_errors
 

@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_api_catalog.php` a partir dos próprios arquivos de
 > `api/v1`. Não edite à mão: o CI confere (`--check`) e falha se estiver desatualizado.
 
-127 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
+128 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
 `{code, message, trace_id}` com o status HTTP certo (`lib/core/response.php`). As URLs são
 contrato público: mudar um caminho quebra app instalado.
 
@@ -42,6 +42,7 @@ contrato público: mudar um caminho quebra app instalado.
 | `/api/v1/admin/restaurants.php` | POST | admin |  | Tela 12.1 — "Cadastro e aprovação de lojas". |
 | `/api/v1/admin/store_coupon_limits.php` | POST | admin |  | Tela 15.3 — "cupom de loja ela cria sozinha no painel, dentro do teto que você liberar aqui". Este é o "aqui": o teto de cupom de cada loja. |
 | `/api/v1/admin/system_health.php` | POST | admin |  | Saúde do sistema pro admin (aba Relatórios; auditoria INFRA-02): os erros que a API e os scripts registraram (lib/core/app_errors.php, agrupados) e o resultado do backup (deploy/backup/backup.sh -> system_status). |
+| `/api/v1/admin/totp.php` | POST | admin |  | Segundo fator do PRÓPRIO admin (migração 042, auditoria SEG-04): o código de um app autenticador, além do SMS. Opcional, mas recomendado a todo admin -- quem clona o chip do dono não entra só com o SMS. |
 
 ## Acesso: OTP, parceiros, sessão (Fase 10)
 

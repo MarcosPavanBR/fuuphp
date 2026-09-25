@@ -37,8 +37,13 @@ export async function adminRequestCode(phone) {
   return api.post('/auth/otp_request.php', { body: { purpose: 'login', phone } });
 }
 
-export async function adminVerify({ phone, code }) {
-  const data = await api.post('/auth/otp_verify.php', { body: { purpose: 'login', phone, code } });
+// `totp`: o código do app autenticador, quando o admin ligou o segundo fator
+// (admin/totp.php). Sem ele, o servidor responde 401 totp_required e a tela
+// pergunta -- o código do SMS continua valendo pra segunda tentativa.
+export async function adminVerify({ phone, code, totp }) {
+  const data = await api.post('/auth/otp_verify.php', {
+    body: { purpose: 'login', phone, code, ...(totp ? { totp } : {}) },
+  });
   // O papel vem no token; quem barra de verdade é o servidor a cada chamada
   // (require_admin). Esta checagem é só pra não deixar alguém logado numa
   // tela que vai dar 403 em tudo.

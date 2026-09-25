@@ -97,6 +97,25 @@ de um deploy.
 - `php bin/generate_db_map.php` — atualiza `docs/DATABASE.md` depois de
   migrar.
 
+### Admin perdeu o app autenticador
+
+Sem o app, o admin com segundo fator não entra (o SMS sozinho não basta).
+A recuperação é no servidor, com o papel dono do banco, depois de confirmar
+por outro canal que é mesmo o admin quem pede:
+
+```sql
+-- confira quem é antes de apagar
+SELECT u.id, u.full_name, u.phone, t.confirmed_at
+  FROM admin_totp t JOIN users u ON u.id = t.user_id;
+DELETE FROM admin_totp WHERE user_id = '<id do admin>';
+-- o log exige um autor: fica o próprio admin, com quem fez no "after"
+INSERT INTO audit_log (actor_id, action, target, after)
+VALUES ('<id do admin>', 'admin_totp.reset_by_server', 'users:<id do admin>',
+        '{"feito_por": "<quem rodou>", "motivo": "<por quê>"}');
+```
+
+O admin entra só com o SMS e liga o fator de novo, com o celular novo.
+
 ## Migrações
 
 ```bash
