@@ -164,7 +164,22 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
 - **Nginx** (`deploy/nginx/fuuphp.conf`):
   - serve só o PWA compilado e as rotas `api/v1/<área>/<ação>.php`;
   - dotfiles e código-fonte nunca saem;
-  - HSTS e `nosniff` em tudo.
+  - HSTS e `nosniff` em tudo;
+  - ninguém põe o app num iframe (`X-Frame-Options DENY` e
+    `frame-ancestors 'none'`), contra clickjacking no painel e no admin;
+  - `Permissions-Policy`: só localização; câmera, microfone e pagamento do
+    navegador desligados;
+  - `server_tokens off`: a versão do Nginx não aparece;
+  - limite por IP real no login, no OTP e no cadastro de loja (30/min, rajada
+    de 20), segunda trava depois do Cloudflare. `refresh.php` fica de fora:
+    com CGNAT, muitos clientes saem pelo mesmo IP.
+- **Firewall da VPS:** 80/443 só pras faixas do Cloudflare, senão quem acha
+  o IP pula o WAF. SSH só por chave, sem root, e atualização de segurança
+  automática (`unattended-upgrades`), que é por onde chega a correção de
+  falha nova no Nginx, PHP ou PostgreSQL. Passo a passo no GO_LIVE.
+- **Webhook do Mercado Pago:** assinatura HMAC conferida (sem segredo em
+  produção, recusa). Mesmo assim ele não confia no corpo: busca o pagamento
+  na API do Mercado Pago, então repetir uma notificação não aprova nada.
 - **IP do cliente:** o PHP usa só `REMOTE_ADDR`, que o Nginx acerta a partir
   de `CF-Connecting-IP` **só** pras faixas do Cloudflare. Ninguém forja o IP
   gravado na prova de consentimento.

@@ -215,7 +215,29 @@ No Cloudflare:
 
 O Nginx só aceita o IP do cliente vindo do Cloudflare (`real_ip`), e o PHP
 usa só esse IP (`client_ip()`). Assim, a prova de consentimento não grava IP
-forjado. No firewall da VPS, deixe aberto só SSH e 80/443.
+forjado.
+
+**Firewall da VPS: 80/443 só pro Cloudflare.** Com 443 aberto pro mundo,
+quem descobrir o IP da VPS fala direto com ela e pula o WAF e o limite do
+Cloudflare. Com o `ufw`:
+
+```sh
+ufw default deny incoming
+ufw allow OpenSSH
+for net in $(curl -s https://www.cloudflare.com/ips-v4) $(curl -s https://www.cloudflare.com/ips-v6); do
+  ufw allow proto tcp from "$net" to any port 80,443
+done
+ufw enable
+```
+
+Refaça quando o Cloudflare mudar as faixas (as mesmas do `set_real_ip_from`
+no Nginx).
+
+**SSH:** só por chave (`PasswordAuthentication no` e `PermitRootLogin no` em
+`/etc/ssh/sshd_config`), e as atualizações de segurança automáticas ligadas
+(`apt install unattended-upgrades`). É por elas que chega a correção de uma
+falha nova (zero-day) no Nginx, no PHP ou no PostgreSQL sem esperar alguém
+lembrar.
 
 ### Monitoramento: saber que caiu antes do cliente
 
