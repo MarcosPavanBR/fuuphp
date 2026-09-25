@@ -176,4 +176,33 @@ echo "== comissão fora da faixa é barrada =="
 [ "$(curl -s -X POST "$BASE/admin/policy.php" -H "Content-Type: application/json" "${AAUTH[@]}" \
    -d '{"enabled_methods":[]}' | jq -r '.code')" = "no_methods" ] || fail "desligou todas as formas de pagamento"
 
+echo "== saúde do sistema (INFRA-02): erro não tratado vai pro banco, sem segredo, agrupado; o admin vê e resolve =="
+TAG="monitoramento-$(php -r 'echo substr(str_shuffle(str_repeat("abcdefghijklmnopqrstuvwxyz", 2)), 0, 12);')"
+# Um script PHP que quebra de verdade, como um worker do cron (o handler
+# global registra). Arquivo, não php -r: o -r ignora set_exception_handler.
+BOOM="$(mktemp /tmp/fuu-boom-XXXXXX.php)"
+cat > "$BOOM" <<'PHP'
+<?php
+require getenv('FUU_ROOT') . '/lib/bootstrap.php';
+throw new RuntimeException('falha ' . getenv('FUU_TAG') . ' tel 11987654321 token eyJhbGciOi.eyJzdWIi.assinatura url /x?token=abc');
+PHP
+boom() {
+  FUU_ROOT="$ROOT" FUU_TAG="$TAG" DATABASE_URL="${API_DATABASE_URL:-$DATABASE_URL}" APP_ENV=development \
+    php "$BOOM" >/dev/null 2>&1 || true
+}
+boom; boom
+ROW=$(psql "$DATABASE_URL" -tAc "SELECT source || '|' || count || '|' || message FROM app_errors WHERE message LIKE '%${TAG}%'")
+[ "$(echo "$ROW" | cut -d'|' -f1-2)" = "worker|2" ] || fail "erro não registrado/agrupado como esperado: $ROW"
+echo "$ROW" | grep -qE "11987654321|eyJ|token=abc" && fail "segredo vazou pro registro de erro: $ROW"
+HEALTH=$(curl -s "$BASE/admin/system_health.php" "${AAUTH[@]}")
+EID=$(echo "$HEALTH" | jq -er --arg t "$TAG" '.errors[] | select(.message | contains($t)) | .id') || fail "o admin não vê o erro: $HEALTH"
+[ "$(curl -s -X POST "$BASE/admin/system_health.php" "${AAUTH[@]}" -H "Content-Type: application/json" \
+  -d "{\"id\":${EID},\"action\":\"resolve\"}" | jq -r '.resolved')" = "true" ] || fail "não marcou como resolvido"
+curl -s "$BASE/admin/system_health.php" "${AAUTH[@]}" | jq -e --arg t "$TAG" '[.errors[] | select(.message | contains($t))] | length == 0' >/dev/null \
+  || fail "erro resolvido continuou em aberto"
+boom
+[ "$(psql "$DATABASE_URL" -tAc "SELECT resolved_at IS NULL AND count = 3 FROM app_errors WHERE message LIKE '%${TAG}%'")" = "t" ] \
+  || fail "o erro que voltou não reabriu"
+rm -f "$BOOM"
+
 echo "OK: painel da plataforma (Fase 12 + 10.5) passou no smoke test"

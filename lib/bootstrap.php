@@ -25,6 +25,7 @@ require_once __DIR__ . '/core/money.php';
 // /dev/null nos testes da trava de produção); o padrão é o .env da raiz.
 load_env(getenv('FUU_ENV_FILE') ?: APP_ROOT . '/.env');
 require_once __DIR__ . '/core/db.php';
+require_once __DIR__ . '/core/app_errors.php';
 require_once __DIR__ . '/core/response.php';
 require_once __DIR__ . '/core/validation.php';
 require_once __DIR__ . '/core/uuid.php';
@@ -108,6 +109,12 @@ set_exception_handler(static function (Throwable $e): void {
         $e->getFile(),
         $e->getLine()
     ));
+    // E no banco, pro admin ver sem abrir o log (lib/core/app_errors.php).
+    record_app_error(
+        PHP_SAPI === 'cli' ? 'worker' : 'api',
+        $e,
+        PHP_SAPI === 'cli' ? basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'cli')) : (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH)
+    );
     error_response(500, 'internal_error', 'Erro interno. Tente novamente em instantes.');
 });
 

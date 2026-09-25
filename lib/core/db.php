@@ -9,7 +9,18 @@ function db(): PDO
     if ($pdo instanceof PDO) {
         return $pdo;
     }
+    $pdo = db_connect();
 
+    return $pdo;
+}
+
+/**
+ * Uma conexão nova, fora da única da requisição. Quem precisa é o registro
+ * de erro (lib/core/app_errors.php): o erro pode ter acontecido no meio de
+ * uma transação que já falhou, e nada mais roda nela até o ROLLBACK.
+ */
+function db_connect(): PDO
+{
     $url = env_required('DATABASE_URL');
     $parts = parse_url($url);
     if ($parts === false || !isset($parts['host'], $parts['path'])) {

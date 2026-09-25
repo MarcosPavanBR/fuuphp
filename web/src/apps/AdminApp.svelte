@@ -8,6 +8,7 @@
   import DisputeQueue from '../lib/screens/admin/DisputeQueue.svelte';
   import FraudSignalsPanel from '../lib/screens/admin/FraudSignalsPanel.svelte';
   import ReportsScreen from '../lib/screens/admin/ReportsScreen.svelte';
+  import SystemHealthPanel from '../lib/screens/admin/SystemHealthPanel.svelte';
   import PolicyScreen from '../lib/screens/admin/PolicyScreen.svelte';
   import CampaignsScreen from '../lib/screens/admin/CampaignsScreen.svelte';
   import RefundsScreen from '../lib/screens/admin/RefundsScreen.svelte';
@@ -118,6 +119,8 @@
         <NettingScreen />
       {:else if tab === 'reports'}
         <ReportsScreen />
+        <!-- Erros registrados e backup (sem abrir o log do servidor). -->
+        <SystemHealthPanel />
       {:else if tab === 'campaigns'}
         <CampaignsScreen />
       {:else if tab === 'banners'}
