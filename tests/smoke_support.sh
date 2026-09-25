@@ -175,6 +175,42 @@ FIRST=$(curl -s -X POST "$BASE/cart/apply_coupon.php" -H "Content-Type: applicat
   -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"code\":\"${CUPOM_NOVO}\"}")
 [ "$(echo "$FIRST" | jq -r '.coupon.discount')" = "5" ] || fail "cupom de primeiro pedido recusado pra quem nunca pediu: $FIRST"
 
+echo "== primeiro pedido é um por ENDEREÇO (NEG-01): conta nova com CPF novo na mesma casa é recusada =="
+HOUSE='"street":"Rua da Casa Smoke","city":"São Paulo","city_ibge_code":"3550308","state":"SP"'
+ADDR2=$(curl -s -X POST "$BASE/addresses/create.php" -H "Content-Type: application/json" "${AUTH2[@]}" \
+  -d "{${HOUSE},\"number\":\"77\",\"postal_code\":\"01002-000\",\"lat\":-23.5003,\"lng\":-46.6003}" | jq -er '.id') || fail "endereço da casa"
+FIRST_ORDER=$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: application/json" "${AUTH2[@]}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR2},\"payment_method\":\"cash\",\"coupon_code\":\"${CUPOM_NOVO}\"}")
+echo "$FIRST_ORDER" | jq -e '.order.id' >/dev/null || fail "o primeiro pedido de verdade na casa foi recusado: $FIRST_ORDER"
+PHONE3="119$(( RANDOM % 90000000 + 10000000 ))"
+CODE3=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
+  -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE3\",\"full_name\":\"Conta Nova Mesma Casa\"}" | jq -er '.dev_code')
+AUTH3=(-H "Authorization: Bearer $(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \
+  -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE3\",\"code\":\"$CODE3\"}" | jq -er '.access_token')")
+curl -s -X POST "$BASE/profile/update.php" -H "Content-Type: application/json" "${AUTH3[@]}" -d "{\"cpf\":\"$(gen_cpf)\"}" >/dev/null
+curl -s -X POST "$BASE/cart/add_item.php" -H "Content-Type: application/json" "${AUTH3[@]}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"menu_item_id\":${ITEM_ID},\"quantity\":1}" >/dev/null
+curl -s -X POST "$BASE/cart/apply_coupon.php" -H "Content-Type: application/json" "${AUTH3[@]}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"code\":\"${CUPOM_NOVO}\"}" | jq -e '.coupon' >/dev/null || fail "conta 3 nem aplicou o cupom"
+# Mesmo CEP (sem hífen) e mesmo número (com espaço), com o pino ~170 m longe
+# (fora da tolerância de 50 m): tem que pegar pelo CEP + número.
+ADDR3=$(curl -s -X POST "$BASE/addresses/create.php" -H "Content-Type: application/json" "${AUTH3[@]}" \
+  -d "{${HOUSE},\"number\":\" 77 \",\"postal_code\":\"01002000\",\"lat\":-23.5018,\"lng\":-46.6003}" | jq -er '.id') || fail "endereço da conta 3"
+REUSE=$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: application/json" "${AUTH3[@]}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR3},\"payment_method\":\"cash\",\"coupon_code\":\"${CUPOM_NOVO}\"}")
+[ "$(echo "$REUSE" | jq -r '.code')" = "coupon_address_used" ] || fail "primeiro pedido repetido na mesma casa passou: $REUSE"
+[ "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM fraud_signals f JOIN users u ON u.id = f.user_id WHERE f.kind = 'address_reuse' AND u.phone = '${PHONE3}'")" = "1" ] \
+  || fail "a tentativa não virou sinal de fraude"
+ADMIN_PHONE_FS="119$(( RANDOM % 90000000 + 10000000 ))"
+psql_run -c "UPDATE users SET phone = '${ADMIN_PHONE_FS}' WHERE id = '${ADMIN_ID}'"
+ACODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" -d "{\"purpose\":\"login\",\"phone\":\"${ADMIN_PHONE_FS}\"}" | jq -er '.dev_code')
+ATOKEN=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" -d "{\"purpose\":\"login\",\"phone\":\"${ADMIN_PHONE_FS}\",\"code\":\"${ACODE}\"}" | jq -er '.access_token')
+FS=$(curl -s "$BASE/admin/fraud_signals.php?days=7" -H "Authorization: Bearer $ATOKEN")
+[ "$(echo "$FS" | jq -r '.by_kind.address_reuse')" -ge 1 ] || fail "o admin não vê o sinal de fraude: $FS"
+echo "$FS" | jq -e '[.signals[] | select(.kind == "address_reuse") | .user_phone | test("^[0-9]{6}…[0-9]{2}$")] | all' >/dev/null \
+  || fail "telefone do sinal não saiu mascarado: $FS"
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/admin/fraud_signals.php" "${AUTH3[@]}")" = "403" ] || fail "cliente viu os sinais de fraude"
+
 echo "== frete grátis desconta o frete calculado no checkout =="
 FREE=$(curl -s -X POST "$BASE/cart/apply_coupon.php" -H "Content-Type: application/json" "${AUTH[@]}" \
   -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"code\":\"${CUPOM_FRETE}\"}")

@@ -211,6 +211,17 @@ try {
             $pdo->rollBack();
             error_response(409, 'coupon_audience', coupon_audience_message((string) $coupon['audience'], ($coupon['owner_user_id'] ?? null) !== null));
         }
+        // Primeiro pedido é um por ENDEREÇO, não só por CPF (NEG-01): conta
+        // nova com CPF gerado não repete o cupom na mesma casa. Fica o sinal
+        // de fraude pro admin ver.
+        if ($coupon['audience'] === 'first_order' && first_order_used_at_address($pdo, (int) $addressId, (string) $claims['sub'])) {
+            $pdo->rollBack();
+            $pdo->prepare(
+                "INSERT INTO fraud_signals (kind, subject, user_id, order_id, score)
+                 VALUES ('address_reuse', :subject, :uid, :oid, 60)"
+            )->execute(['subject' => 'address:' . (int) $addressId, 'uid' => $claims['sub'], 'oid' => $cart['id']]);
+            error_response(409, 'coupon_address_used', 'O cupom de primeiro pedido já foi usado neste endereço.');
+        }
 
         // Frete grátis só tem valor agora: no carrinho ainda não há endereço,
         // então o frete era zero e o desconto também. Aqui o frete acabou de

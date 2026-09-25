@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_api_catalog.php` a partir dos próprios arquivos de
 > `api/v1`. Não edite à mão: o CI confere (`--check`) e falha se estiver desatualizado.
 
-126 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
+127 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
 `{code, message, trace_id}` com o status HTTP certo (`lib/core/response.php`). As URLs são
 contrato público: mudar um caminho quebra app instalado.
 
@@ -30,6 +30,7 @@ contrato público: mudar um caminho quebra app instalado.
 | `/api/v1/admin/couriers.php` | GET, POST | admin |  | Tela 15.2, lado de dentro: a fila de análise das candidaturas. |
 | `/api/v1/admin/disputes.php` | POST | admin |  | Tela 12.2 — "Disputas e galeria antifraude". |
 | `/api/v1/admin/export.php` | GET | admin |  | Tela 12.3 — a exportação contábil que a tela promete. |
+| `/api/v1/admin/fraud_signals.php` | GET | admin |  | Sinais de fraude pro admin (aba Ocorrências). O sistema grava sinais em fraud_signals (comprovante de entrega repetido, cupom de primeiro pedido repetido no mesmo endereço -- auditoria NEG-01), mas nenhuma tela lia: sinal que ninguém vê não protege nada. |
 | `/api/v1/admin/incident_photo.php` | GET | admin |  | A foto da ocorrência (tela 13.3) pra quem decide o destino da sacola. |
 | `/api/v1/admin/incidents.php` | GET, POST | admin |  | Tela 13.3, o outro lado: "Passado o prazo, o suporte libera: devolver à loja ou descartar." |
 | `/api/v1/admin/netting.php` | GET, POST | admin |  | Tela 9.7 — "Painel da plataforma: netting semanal e repasse". |

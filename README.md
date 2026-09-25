@@ -30,7 +30,7 @@ trás de cada item.
 
 ## O que este repositório contém
 
-A **fundação de banco** (trinta e nove migrações SQL), a **API em PHP** sobre
+A **fundação de banco** (quarenta migrações SQL), a **API em PHP** sobre
 ela e os **quatro apps em Svelte** (`web/`): cliente, painel da loja, app do
 entregador e painel da plataforma. As 15 fases do mock estão construídas --
 onboarding, descoberta, cardápio e carrinho, os cinco meios de pagamento

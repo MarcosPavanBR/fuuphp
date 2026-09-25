@@ -6,6 +6,7 @@
   import AdminLoginScreen from '../lib/screens/admin/AdminLoginScreen.svelte';
   import StoreQueue from '../lib/screens/admin/StoreQueue.svelte';
   import DisputeQueue from '../lib/screens/admin/DisputeQueue.svelte';
+  import FraudSignalsPanel from '../lib/screens/admin/FraudSignalsPanel.svelte';
   import ReportsScreen from '../lib/screens/admin/ReportsScreen.svelte';
   import PolicyScreen from '../lib/screens/admin/PolicyScreen.svelte';
   import CampaignsScreen from '../lib/screens/admin/CampaignsScreen.svelte';
@@ -105,6 +106,8 @@
         <StoreQueue data={stores} onRefresh={pull} />
       {:else if tab === 'disputes'}
         <DisputeQueue data={disputes} onRefresh={pull} />
+        <!-- O que o sistema anotou como suspeito (só leitura). -->
+        <FraudSignalsPanel />
       {:else if tab === 'refunds'}
         <!-- 13.3 + 13.4 na mesma mesa: liberar a sacola e decidir o dinheiro
              são a mesma conversa, com o mesmo pedido na frente. -->

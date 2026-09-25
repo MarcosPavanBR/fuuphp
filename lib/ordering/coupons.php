@@ -271,3 +271,38 @@ function store_coupon_budget(PDO $pdo, string $restaurantId): array
         'available' => max(0.0, round($limit - $committed, 2)),
     ];
 }
+
+/**
+ * O cupom de primeiro pedido já foi usado NESTE endereço por outra conta?
+ * (auditoria NEG-01). Mesmo endereço = mesmo CEP e número, ou a menos de
+ * ~50 m (quando os dois têm coordenada). Pedido cancelado ou recusado não
+ * conta: o cupom não chegou a ser aproveitado.
+ *
+ * O CPF só passa pelo dígito verificador e um telefone novo custa um chip,
+ * então conta nova com CPF gerado repetiria o "primeiro pedido" sem fim. O
+ * endereço de entrega é o que não se inventa.
+ */
+function first_order_used_at_address(PDO $pdo, int $addressId, string $userId): bool
+{
+    $stmt = $pdo->prepare(
+        "SELECT 1
+           FROM addresses here
+           JOIN coupon_redemptions cr ON true
+           JOIN coupons c ON c.id = cr.coupon_id AND c.audience = 'first_order'
+           JOIN orders o ON o.id = cr.order_id AND o.user_id <> :uid
+                        AND o.status NOT IN ('cancelled', 'rejected')
+           JOIN addresses there ON there.id = o.address_id
+          WHERE here.id = :aid
+            AND (
+                  (regexp_replace(here.postal_code, '\\D', '', 'g') = regexp_replace(there.postal_code, '\\D', '', 'g')
+                   AND lower(trim(coalesce(here.number, ''))) <> ''
+                   AND lower(trim(here.number)) = lower(trim(coalesce(there.number, ''))))
+               OR (here.lat IS NOT NULL AND there.lat IS NOT NULL
+                   AND abs(here.lat - there.lat) < 0.00045 AND abs(here.lng - there.lng) < 0.00045)
+            )
+          LIMIT 1"
+    );
+    $stmt->execute(['aid' => $addressId, 'uid' => $userId]);
+
+    return $stmt->fetchColumn() !== false;
+}
