@@ -111,7 +111,10 @@
       () => {
         locating = false;
         toastr.warning('Não deu pra usar a localização — a taxa fica pela praça escolhida.');
-      }
+      },
+      // Sem timeout, um GPS que não responde deixava o botão "localizando"
+      // girando pra sempre (o erro nunca vinha).
+      { timeout: 10000, maximumAge: 60000 }
     );
   }
 

@@ -349,6 +349,11 @@ jobs:
           MERCADOPAGO_MODE: fake
         run: bash tests/smoke_timezone.sh
 
+      - name: "Smoke test -- entrada ruim em todas as rotas, por todos os papéis: nenhum 5xx"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+        run: bash tests/smoke_fuzz.sh
+
       - name: "Papéis do banco: RLS por loja, livro só de inserção, app_rw sem DDL (go-live)"
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery

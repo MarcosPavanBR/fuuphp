@@ -36,8 +36,8 @@ $body = read_json_body();
 $restaurantId = (string) ($body['restaurant_id'] ?? '');
 $code = strtoupper(trim((string) ($body['code'] ?? '')));
 
-if ($restaurantId === '') {
-    error_response(422, 'restaurant_id_required', 'Informe restaurant_id.', fields: ['restaurant_id' => 'obrigatório']);
+if (!is_valid_uuid($restaurantId)) {
+    error_response(422, 'restaurant_id_required', 'Informe um restaurant_id válido.', fields: ['restaurant_id' => 'obrigatório (uuid)']);
 }
 
 $pdo = db();

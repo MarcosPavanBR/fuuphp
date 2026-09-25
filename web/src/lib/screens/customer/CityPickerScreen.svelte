@@ -71,7 +71,10 @@
       () => {
         if (current !== pick) return;
         toastr.warning('Não deu pra usar a localização. Sem problema: escolha o bairro na lista.');
-      }
+      },
+      // Sem timeout, GPS que não responde deixaria a pergunta sem resposta
+      // pra sempre; posição de até 1 min atrás serve pra distância de loja.
+      { timeout: 10000, maximumAge: 60000 }
     );
   }
 </script>

@@ -327,21 +327,27 @@ O Pix manual continua fora do Mercado Pago: cai direto na chave Pix da loja
 
 1. No painel do Mercado Pago (Suas integrações), crie a aplicação e os
    usuários de teste (vendedor e comprador).
-2. Em homologação (`APP_ENV=staging`), use as credenciais de **teste**
+2. **CSP:** o Nginx manda a Content-Security-Policy (auditoria SEG-02). O
+   pagamento com cartão (SDK do Mercado Pago) não pôde ser testado daqui:
+   na homologação, depois de pagar um pedido com cartão de teste, procure
+   `csp:` no log do PHP (`grep csp: /var/log/php*`). Linha lá = domínio que
+   a política bloqueou; acrescente-o no `Content-Security-Policy` do
+   `deploy/nginx/fuuphp.conf` e recarregue o Nginx.
+3. Em homologação (`APP_ENV=staging`), use as credenciais de **teste**
    (`TEST-...`): access token e public key. O webhook vai em
    `https://<dominio>/api/v1/payments/webhook_mercadopago.php`, com o evento
    Pagamentos, e a "assinatura secreta" gerada vai em
    `MERCADOPAGO_WEBHOOK_SECRET`.
-3. Pague com os cartões de teste da documentação do Mercado Pago (o nome do
+4. Pague com os cartões de teste da documentação do Mercado Pago (o nome do
    titular decide o resultado: `APRO` aprova, `OTHE` recusa) e confira:
    - pedido aprovado vai pra cozinha;
    - recusado volta pra escolha do meio;
    - o webhook chega com assinatura válida;
    - o estorno (13.4) sai.
-4. Pix no sandbox: confira a geração do QR/copia-e-cola e a expiração. O
+5. Pix no sandbox: confira a geração do QR/copia-e-cola e a expiração. O
    pagamento de verdade é conferido em produção com um valor baixo, estornado
    em seguida.
-5. Produção: troque para as credenciais de **produção** (`APP_USR-...`) e
+6. Produção: troque para as credenciais de **produção** (`APP_USR-...`) e
    `APP_ENV=production`. A trava recusa `TEST-` em produção.
 
 ## 5. OTP (login) — SMS pela Twilio

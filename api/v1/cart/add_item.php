@@ -15,11 +15,16 @@ $body = read_json_body();
 $restaurantId = $body['restaurant_id'] ?? null;
 $menuItemId = (int) ($body['menu_item_id'] ?? 0);
 $quantity = (int) ($body['quantity'] ?? 1);
-$variantIds = array_map('intval', $body['variant_ids'] ?? []);
-$notes = isset($body['notes']) ? trim((string) $body['notes']) : null;
+$rawVariants = $body['variant_ids'] ?? [];
+if (!is_array($rawVariants) || (isset($body['notes']) && !is_string($body['notes']))) {
+    error_response(422, 'invalid_request', 'variant_ids precisa ser uma lista e notes, um texto.',
+        fields: ['variant_ids' => 'lista de ids', 'notes' => 'texto']);
+}
+$variantIds = array_map('intval', $rawVariants);
+$notes = isset($body['notes']) ? trim($body['notes']) : null;
 
-if (!is_string($restaurantId) || $restaurantId === '') {
-    error_response(422, 'restaurant_id_required', 'Informe restaurant_id.', fields: ['restaurant_id' => 'obrigatório']);
+if (!is_string($restaurantId) || !is_valid_uuid($restaurantId)) {
+    error_response(422, 'restaurant_id_required', 'Informe um restaurant_id válido.', fields: ['restaurant_id' => 'obrigatório (uuid)']);
 }
 if ($menuItemId <= 0) {
     error_response(422, 'menu_item_id_required', 'Informe menu_item_id.', fields: ['menu_item_id' => 'obrigatório']);

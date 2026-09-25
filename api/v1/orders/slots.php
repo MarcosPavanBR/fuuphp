@@ -14,8 +14,8 @@ require_method('GET');
 require_auth();
 
 $restaurantId = $_GET['restaurant_id'] ?? '';
-if (!is_string($restaurantId) || $restaurantId === '') {
-    error_response(422, 'restaurant_id_required', 'Informe restaurant_id.', fields: ['restaurant_id' => 'obrigatório']);
+if (!is_string($restaurantId) || !is_valid_uuid($restaurantId)) {
+    error_response(422, 'restaurant_id_required', 'Informe um restaurant_id válido.', fields: ['restaurant_id' => 'obrigatório (uuid)']);
 }
 
 $pdo = db();

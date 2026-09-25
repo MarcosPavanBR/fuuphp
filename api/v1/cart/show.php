@@ -15,7 +15,7 @@ require_method('GET');
 $claims = require_auth();
 
 $restaurantId = $_GET['restaurant_id'] ?? null;
-if ($restaurantId !== null && (!is_string($restaurantId) || $restaurantId === '')) {
+if ($restaurantId !== null && (!is_string($restaurantId) || !is_valid_uuid($restaurantId))) {
     error_response(422, 'restaurant_id_required', 'restaurant_id inválido.');
 }
 

@@ -184,6 +184,15 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
   - `Permissions-Policy`: só localização; câmera, microfone e pagamento do
     navegador desligados;
   - `server_tokens off`: a versão do Nginx não aparece;
+  - **Content-Security-Policy completa** (auditoria SEG-02): script só do
+    próprio domínio e do Mercado Pago, conexão só com a API, o Mercado Pago
+    e o ViaCEP, imagem do mapa do OpenStreetMap, nada de `object`, `base`
+    ou formulário pra fora. Um XSS, se entrar, não carrega script de fora
+    nem manda o token pra outro domínio. `'unsafe-inline'` só em estilo
+    (o Svelte usa atributo `style`); `eval` bloqueado (o sweetalert testa
+    e cai no plano B, sem quebrar). Violações vão pro log via
+    `system/csp_report.php`. Conferido no navegador: os quatro apps
+    servidos pelo Nginx com a política de verdade, sem bloqueio;
   - o acompanhamento ao vivo (`orders/track.php`, SSE) leva o access token
     na URL, porque o EventSource não manda cabeçalho; o `access_log` usa o
     formato `fuu_combined`, que nessa rota grava só o caminho, sem o token;

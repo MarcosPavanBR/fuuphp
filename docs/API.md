@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_api_catalog.php` a partir dos próprios arquivos de
 > `api/v1`. Não edite à mão: o CI confere (`--check`) e falha se estiver desatualizado.
 
-124 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
+125 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
 `{code, message, trace_id}` com o status HTTP certo (`lib/core/response.php`). As URLs são
 contrato público: mudar um caminho quebra app instalado.
 
@@ -212,4 +212,5 @@ contrato público: mudar um caminho quebra app instalado.
 
 | Rota | Métodos | Quem | Idem. | O que faz |
 |---|---|---|---|---|
+| `/api/v1/system/csp_report.php` | POST | público |  | Relatório de violação da Content-Security-Policy (deploy/nginx/fuuphp.conf, auditoria SEG-02). O navegador manda sozinho quando a política bloqueia algo -- é assim que um bloqueio indevido (um domínio novo do Mercado Pago, por exemplo) aparece no log em vez… |
 | `/api/v1/system/health.php` | GET | público |  | Saúde do sistema, pro monitoramento externo (UptimeRobot, Better Stack...) e pra quem acabou de pôr uma versão no ar conferir que ela respondeu. |

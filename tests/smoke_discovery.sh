@@ -85,6 +85,13 @@ done
 ONLY=$(curl -s "$BASE/restaurants/list.php?${Q}&limit=1&ids=${FAR_ID},nao-e-uuid")
 [ "$(echo "$ONLY" | jq -r '[.restaurants[].id] | join(",")')" = "$FAR_ID" ] || fail "?ids= não trouxe só a favorita: $ONLY"
 
+echo "== relatório de CSP: 204 sempre (lixo, formato antigo e Reporting API), nunca 5xx =="
+for body in 'isto não é json' '{"csp-report":{"blocked-uri":"https://evil.example/x.js","effective-directive":"script-src","document-uri":"https://x/?token=abc"}}' \
+            '[{"type":"csp-violation","body":{"blockedURL":"inline","effectiveDirective":"script-src-elem","documentURL":"https://x/"}}]'; do
+  [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/system/csp_report.php" -H 'Content-Type: application/csp-report' -d "$body")" = "204" ] \
+    || fail "csp_report não respondeu 204 pra: $body"
+done
+
 echo "== filtro de categoria só devolve a categoria pedida =="
 PIZZA=$(curl -s "$BASE/restaurants/list.php?city_ibge_code=${CITY}&category=Pizza")
 COUNT=$(echo "$PIZZA" | jq '.restaurants | length')

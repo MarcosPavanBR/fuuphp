@@ -9,8 +9,8 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 
 require_method('GET');
 $id = $_GET['id'] ?? '';
-if (!is_string($id) || $id === '') {
-    error_response(422, 'id_required', 'Informe ?id=.');
+if (!is_string($id) || !is_valid_uuid($id)) {
+    error_response(422, 'id_required', 'Informe um ?id= válido.');
 }
 
 $pdo = db();
