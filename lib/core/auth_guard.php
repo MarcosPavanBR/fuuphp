@@ -21,26 +21,61 @@ function require_auth(): array
 function decode_access_token(string $rawToken): array
 {
     try {
-        return Jwt::decode($rawToken, jwt_secret());
+        $claims = Jwt::decode($rawToken, jwt_secret());
     } catch (Throwable $e) {
         error_response(401, 'invalid_token', 'Token inválido ou expirado. Use /v1/auth/refresh.');
     }
+    // Token de propósito único (o ticket do acompanhamento ao vivo) nunca
+    // vale como access token: é assinado com o mesmo segredo, e sem esta
+    // linha um ticket que vazasse num log daria acesso a tudo por 5 min.
+    if (isset($claims['purpose'])) {
+        error_response(401, 'invalid_token', 'Token inválido ou expirado. Use /v1/auth/refresh.');
+    }
+
+    return $claims;
+}
+
+/** Validade do ticket do acompanhamento ao vivo (orders/track_ticket.php). */
+const TRACK_TICKET_TTL_SECONDS = 300;
+
+/**
+ * Emite o ticket do acompanhamento ao vivo de UM pedido: EventSource, a API
+ * nativa do navegador, não manda cabeçalho, então a credencial vai na URL --
+ * e URL vai parar em log. Por isso não é o access token: é um JWT que só
+ * abre orders/track.php, só desse pedido, só por 5 minutos (auditoria
+ * SEG-03). Os claims de parceiro (restaurant_id, courier_id) vão junto,
+ * porque authorize_order_access() olha pra eles.
+ */
+function issue_track_ticket(array $claims, int $orderId): string
+{
+    $ticket = array_intersect_key($claims, array_flip(['sub', 'role', 'kind', 'restaurant_id', 'courier_id']));
+    $ticket['purpose'] = 'track';
+    $ticket['order_id'] = $orderId;
+
+    return Jwt::encode($ticket, jwt_secret(), TRACK_TICKET_TTL_SECONDS);
 }
 
 /**
- * Só pra orders/track.php (SSE, Fase 5.3): EventSource, a API nativa do
- * navegador, não deixa mandar headers customizados, então não tem como
- * usar Authorization: Bearer do jeito normal nesta rota. Aceita o token
- * por query string como exceção documentada -- só nesta função, só GET,
- * nunca numa rota que muda estado. Toda outra rota continua exigindo o
- * header.
+ * Só pra orders/track.php: aceita o cabeçalho Authorization normal ou o
+ * ?ticket= de issue_track_ticket() -- que precisa ser DESTE pedido. O access
+ * token na URL (?token=) não é mais aceito.
  */
-function require_auth_header_or_query(): array
+function require_track_access(int $orderId): array
 {
-    if (isset($_GET['token']) && is_string($_GET['token']) && $_GET['token'] !== '') {
-        return decode_access_token($_GET['token']);
+    $ticket = $_GET['ticket'] ?? null;
+    if (!is_string($ticket) || $ticket === '') {
+        return require_auth();
     }
-    return require_auth();
+    try {
+        $claims = Jwt::decode($ticket, jwt_secret());
+    } catch (Throwable) {
+        error_response(401, 'invalid_ticket', 'Ticket vencido ou inválido. Peça outro.');
+    }
+    if (($claims['purpose'] ?? null) !== 'track' || (int) ($claims['order_id'] ?? 0) !== $orderId) {
+        error_response(401, 'invalid_ticket', 'Esse ticket não é deste pedido.');
+    }
+
+    return $claims;
 }
 
 /**

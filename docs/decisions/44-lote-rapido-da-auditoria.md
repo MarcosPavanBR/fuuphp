@@ -29,11 +29,15 @@ formato `fuu_combined`: nessa rota, só o caminho; nas outras, igual ao
 combined. Conferido com `nginx -t` e requisição real: o log mostra
 `GET /api/v1/orders/track.php`, sem o token.
 
-**O que sobra:** o `error_log` do Nginx não tem formato configurável e, num
-erro de upstream nessa rota, grava a linha da requisição. É raro (a rota
-fecha sozinha em 25 s, o limite é 60 s) e o token vence em 15 minutos. A
-correção completa é um ticket de uso único pro SSE, trocado pelo access
-token numa chamada normal, e fica pra quando mexer no acompanhamento.
+**Resolvido de vez (lote seguinte):** a URL não leva mais o access token.
+O app pede `orders/track_ticket.php` (com o cabeçalho normal) e recebe um
+ticket que só abre o acompanhamento **daquele pedido**, por **5 minutos**, e
+que **não vale como access token** em rota nenhuma (`decode_access_token`
+recusa token com `purpose`). `?token=` deixou de ser aceito. Assim, mesmo o
+`error_log` do Nginx (sem formato configurável) ou um log do Cloudflare
+guardariam no máximo um ticket de leitura de um pedido que vence em 5 min.
+Teste em `smoke_tracking.sh`: ticket de outro pedido, ticket como access
+token, access token na URL e ticket pro pedido alheio são recusados.
 
 ## INFRA-03: CI
 

@@ -54,6 +54,7 @@ done
 
 echo "== signup, endereço, carrinho, checkout e pagamento (dinheiro) =="
 PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
+OTHER_PHONE="119$(( RANDOM % 90000000 + 10000000 ))"
 CODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
   -d "{\"purpose\":\"signup\",\"phone\":\"$PHONE\",\"full_name\":\"Cliente Tracking Smoke\"}" | jq -er '.dev_code') || fail "otp_request falhou"
 ACCESS=$(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \
@@ -81,14 +82,30 @@ EVENTS_COUNT=$(echo "$SHOW" | jq '.events | length')
 [ "$EVENTS_COUNT" -ge 2 ] || fail "esperava pelo menos 2 eventos (cart->pending_payment, pending_payment->paid), veio $EVENTS_COUNT: $SHOW"
 [ "$(echo "$SHOW" | jq -r '.events[-1].to_status')" = "paid" ] || fail "último evento não é 'paid': $SHOW"
 
+echo "== ticket do acompanhamento ao vivo (SEG-03): só deste pedido, e não vale como access token =="
+TICKET=$(curl -s -X POST "$BASE/orders/track_ticket.php" -H "Content-Type: application/json" "${AUTH[@]}" \
+  -d "{\"order_id\":${ORDER_ID}}" | jq -er '.ticket') || fail "ticket não saiu"
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/orders/show.php?id=${ORDER_ID}" -H "Authorization: Bearer $TICKET")" = "401" ] \
+  || fail "o ticket do SSE abriu uma rota comum como se fosse access token"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -m 4 "$BASE/orders/track.php?id=$((ORDER_ID + 100000))&ticket=${TICKET}")" = "401" ] \
+  || fail "ticket de um pedido abriu o acompanhamento de outro"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -m 4 "$BASE/orders/track.php?id=${ORDER_ID}&token=${ACCESS}")" = "401" ] \
+  || fail "access token na URL ainda é aceito no SSE"
+OTHER=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/orders/track_ticket.php" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $(curl -s -X POST "$BASE/auth/otp_verify.php" -H "Content-Type: application/json" \
+    -d "{\"purpose\":\"signup\",\"phone\":\"${OTHER_PHONE}\",\"code\":\"$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \
+      -d "{\"purpose\":\"signup\",\"phone\":\"${OTHER_PHONE}\",\"full_name\":\"Outro Cliente\"}" | jq -r '.dev_code')\"}" | jq -r '.access_token')" \
+  -d "{\"order_id\":${ORDER_ID}}")
+[ "$OTHER" = "403" ] || [ "$OTHER" = "404" ] || fail "outro cliente ganhou ticket do pedido alheio ($OTHER)"
+
 echo "== orders/track.php (SSE): snapshot imediato tem o status atual =="
 SNAPSHOT_FILE="/tmp/smoke-tracking-snapshot.txt"
-timeout 4 curl -s -N "$BASE/orders/track.php?id=${ORDER_ID}&token=${ACCESS}" --output "$SNAPSHOT_FILE" || true
+timeout 4 curl -s -N "$BASE/orders/track.php?id=${ORDER_ID}&ticket=${TICKET}" --output "$SNAPSHOT_FILE" || true
 grep -q '"status":"paid"' "$SNAPSHOT_FILE" || fail "snapshot inicial do SSE não trouxe status=paid: $(cat "$SNAPSHOT_FILE")"
 
 echo "== orders/track.php (SSE): evento ao vivo quando advance_order roda em outro processo =="
 LIVE_FILE="/tmp/smoke-tracking-live.txt"
-( timeout 8 curl -s -N "$BASE/orders/track.php?id=${ORDER_ID}&token=${ACCESS}" --output "$LIVE_FILE" ) &
+( timeout 8 curl -s -N "$BASE/orders/track.php?id=${ORDER_ID}&ticket=${TICKET}" --output "$LIVE_FILE" ) &
 CURL_PID=$!
 sleep 2
 psql_run -c "SELECT advance_order(${ORDER_ID}, 'preparing', NULL, 'system');" >/dev/null

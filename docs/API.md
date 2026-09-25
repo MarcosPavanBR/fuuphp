@@ -3,7 +3,7 @@
 > Gerado por `php bin/generate_api_catalog.php` a partir dos próprios arquivos de
 > `api/v1`. Não edite à mão: o CI confere (`--check`) e falha se estiver desatualizado.
 
-125 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
+126 rotas. Toda rota responde JSON (exceto as de imagem, CSV e SSE); erro é sempre
 `{code, message, trace_id}` com o status HTTP certo (`lib/core/response.php`). As URLs são
 contrato público: mudar um caminho quebra app instalado.
 
@@ -125,7 +125,8 @@ contrato público: mudar um caminho quebra app instalado.
 | `/api/v1/orders/show.php` | GET | autenticado |  | Tela 5 — um pedido com itens, linha do tempo (order_events) e a avaliação, se houver. Cliente vê só o próprio; loja, só os da loja. |
 | `/api/v1/orders/slots.php` | GET | autenticado |  | Tela 14.4 — "Quando você quer receber?" |
 | `/api/v1/orders/status.php` | POST | autenticado |  | Pede uma mudança de status do pedido. Aqui só se decide QUEM pode pedir cada transição (loja: preparo, pronto, saiu, recusar, cancelar e -- só na retirada no balcão -- entregue; cliente: cancelar); se a transição é válida, quem decide é `advance_order()` no… |
-| `/api/v1/orders/track.php` | GET | autenticado (token também por query, SSE) |  | Tela 5.3 — Tracking em tempo real. "O aviso chega por SSE alimentado por LISTEN/NOTIFY do PostgreSQL." advance_order() já faz PERFORM pg_notify('order_changed', order_id) a cada transição (migração 004); este endpoint só escuta. |
+| `/api/v1/orders/track.php` | GET | público |  | Tela 5.3 — Tracking em tempo real. "O aviso chega por SSE alimentado por LISTEN/NOTIFY do PostgreSQL." advance_order() já faz PERFORM pg_notify('order_changed', order_id) a cada transição (migração 004); este endpoint só escuta. |
+| `/api/v1/orders/track_ticket.php` | POST | autenticado |  | Ticket do acompanhamento ao vivo (orders/track.php, SSE). O EventSource do navegador não manda cabeçalho, então a credencial vai na URL -- e URL vai parar em log (Nginx, Cloudflare, histórico). Em vez do access token, que abre tudo, vai este ticket: só abre… |
 
 ## Pagamentos (Fase 4, 7.1)
 

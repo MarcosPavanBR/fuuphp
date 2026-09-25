@@ -22,12 +22,14 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 // não da técnica em si.
 
 require_method('GET');
-$claims = require_auth_header_or_query();
 
 $orderId = (int) ($_GET['id'] ?? 0);
 if ($orderId <= 0) {
     error_response(422, 'id_required', 'Informe ?id= com o número do pedido.');
 }
+// Credencial: ?ticket= de orders/track_ticket.php (o EventSource não manda
+// cabeçalho) ou o Authorization normal. O access token na URL não vale mais.
+$claims = require_track_access($orderId);
 
 $pdo = db();
 $order = fetch_order($pdo, $orderId);

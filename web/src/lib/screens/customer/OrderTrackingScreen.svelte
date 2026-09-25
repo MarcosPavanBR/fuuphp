@@ -59,9 +59,27 @@
     mp_card: 'Cartão', pix_auto: 'Pix', pix_manual: 'Pix', cash: 'Dinheiro', pos_machine: 'Maquininha',
   };
 
-  function connect() {
-    const token = currentToken();
-    evtSource = new EventSource(`${BASE}/orders/track.php?id=${orderId}&token=${encodeURIComponent(token ?? '')}`);
+  // A credencial do SSE é um ticket de 5 min só deste pedido (auditoria
+  // SEG-03), não o access token: URL vai parar em log. connecting evita
+  // duas conexões se o efeito rodar de novo enquanto o ticket chega.
+  let connecting = false;
+  async function connect() {
+    if (connecting || evtSource) return;
+    connecting = true;
+    let ticket;
+    try {
+      ticket = (await api.post('/orders/track_ticket.php', { auth: true, body: { order_id: orderId } })).ticket;
+    } catch {
+      // sem ticket agora (rede): tenta de novo em alguns segundos
+      connecting = false;
+      setTimeout(() => {
+        if (!evtSource && !destroyed && !showCancel && !awaitingCourier && order) connect();
+      }, 5000);
+      return;
+    }
+    connecting = false;
+    if (evtSource || destroyed || showCancel || awaitingCourier) return;
+    evtSource = new EventSource(`${BASE}/orders/track.php?id=${orderId}&ticket=${encodeURIComponent(ticket)}`);
     evtSource.addEventListener('order_update', (e) => {
       const data = JSON.parse(e.data);
       order = data.order;
@@ -71,10 +89,9 @@
     // limite de 25s do backend (documentado em orders/track.php) funciona
     // como long-poll encadeado, sem perder evento nenhum.
     //
-    // Mas ele reconecta com a MESMA URL, e o token dela vence em 15 min: aí
+    // Mas ele reconecta com a MESMA URL, e o ticket dela vence em 5 min: aí
     // o servidor responde 401 e o navegador desiste de vez (CLOSED). Nesse
-    // caso a conexão é refeita aqui, com o token atual (a sessão renova
-    // sozinha em services/api.js).
+    // caso a conexão é refeita aqui, com um ticket novo.
     const source = evtSource;
     source.addEventListener('error', () => {
       if (source.readyState !== EventSource.CLOSED || evtSource !== source) return;
