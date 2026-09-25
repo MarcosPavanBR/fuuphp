@@ -109,7 +109,7 @@
       {/each}
     </div>
 
-    {#if selectedCity}
+    {#if selectedCity && selectedCity.neighborhoods.length > 0}
       <p class="section-label">BAIRRO</p>
       <div class="chips">
         {#each selectedCity.neighborhoods as n (n)}
@@ -126,11 +126,14 @@
     {/if}
   </div>
 
+  <!-- Cidade sem bairro cadastrado (a coluna aceita lista vazia, e cidade
+       inserida direto no banco nasce assim) não pode prender o cliente no
+       onboarding: confirma só com a cidade. -->
   <div class="footer">
     <button
       type="button"
       class="btn-fuu-primary w-100"
-      disabled={!selectedCity || !selectedNeighborhood}
+      disabled={!selectedCity || (selectedCity.neighborhoods.length > 0 && !selectedNeighborhood)}
       onclick={() => onDone({ uf, city: selectedCity, neighborhood: selectedNeighborhood, coords })}
     >
       Confirmar

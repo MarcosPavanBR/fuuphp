@@ -117,6 +117,26 @@ conferido contra os vetores da RFC (migração 042).
 Ficou opcional pra não trancar o admin fundador fora no primeiro deploy.
 **Recomendação:** ligar em todo admin antes de abrir.
 
+## ARQ-02: telas grandes quebradas em componentes
+
+As três telas maiores misturavam lista e formulário no mesmo arquivo.
+Cada uma perdeu a parte que tinha vida própria:
+
+| Tela | Antes | Depois | Componente novo |
+|---|---|---|---|
+| Cardápio (`MenuScreen`) | 760 linhas | 424 | `MenuItemEditor`: rascunho, variações, foto, publicar |
+| Horário (`HoursScreen`) | 723 linhas | 518 | `SlotCapacityPanel` e `HolidayPanel` |
+| Endereços (`AddressesScreen`) | 649 linhas | 333 | `NewAddressForm`: CEP, posição, área de entrega, taxa |
+
+A busca do CEP virou `utils/viacep.js`, usada no cadastro e na edição.
+
+Os campos ganharam `maxlength` iguais aos limites do servidor. Os fluxos
+foram conferidos no navegador, pelo Nginx de produção com a CSP real:
+
+- cardápio: editar, rascunho, publicar, novo item, descartar;
+- horário: capacidade, feriado criado e removido;
+- endereço: criar com área de entrega, editar, remover.
+
 ## O que depende do Marcos
 
 | Item | Por quê |

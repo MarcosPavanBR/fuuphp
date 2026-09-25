@@ -149,6 +149,27 @@ Outros casos corrigidos:
 **Quantidade por linha do carrinho:** de 1 a 99 (`CART_MAX_QUANTITY`), com o
 limite também nos botões do app.
 
+## "Array" gravado sem erro nenhum
+
+Não dar 500 não basta. No PHP, `(string)` de uma lista vira o texto
+`"Array"`, e isso é gravado sem erro. Foi assim que um bairro chamado
+"Array" apareceu no onboarding: `admin/cities.php` aceitava uma lista dentro
+da lista de bairros. A rota agora recusa item que não é texto.
+
+O fuzz profundo ganhou uma varredura final: nenhuma coluna de texto (nem
+lista de texto) do banco pode conter `"Array"`. A varredura foi conferida
+contra o banco antigo, onde achou o bairro.
+
+## Onboarding preso numa cidade sem bairro
+
+A coluna `service_cities.neighborhoods` aceita lista vazia (é o padrão). Só a
+tela do admin exige pelo menos um bairro. Uma cidade inserida direto no
+banco nascia sem bairro, e o botão "Confirmar" do onboarding, que exigia um,
+nunca ligava: o cliente ficava preso.
+
+Agora, sem bairro cadastrado, o app confirma só com a cidade, e a Home não
+mostra mais a vírgula sobrando. Achado no teste de navegador da ARQ-02.
+
 ## O que ficou de fora (e por quê)
 
 - **Rotas que o fuzz ainda não alcança fundo**, porque o corpo válido para

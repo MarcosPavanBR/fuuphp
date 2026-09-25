@@ -173,7 +173,7 @@
 <div class="home">
   <div class="top-bar">
     <i class="bi bi-geo-alt-fill"></i>
-    <span>{location.neighborhood}, {location.city.name}</span>
+    <span>{location.neighborhood ? `${location.neighborhood}, ` : ''}{location.city.name}</span>
   </div>
 
   <button type="button" class="search-bar" onclick={onSearch}>

@@ -2,6 +2,8 @@
   import { api } from '../../services/api.js';
   import { toastr } from '../../utils/toastr.js';
   import { staffToken } from '../../state/staffSession.svelte.js';
+  import SlotCapacityPanel from './SlotCapacityPanel.svelte';
+  import HolidayPanel from './HolidayPanel.svelte';
 
   // Tela 11.4 — "Horário, feriados e último pedido".
   //
@@ -26,16 +28,10 @@
   let form = $state(null);
   let scope = $state('day');
   let saving = $state(false);
-  let holidayForm = $state(null);
-  // 14.4 — quantos pedidos agendados cabem numa faixa de 30 min. Zero é
-  // "essa loja não aceita agendamento", e é o padrão.
-  let slotCapacity = $state(0);
-  let savingCapacity = $state(false);
 
   async function load() {
     try {
       data = await api.get('/restaurants/hours.php', { token: staffToken() });
-      slotCapacity = data.slot_capacity ?? 0;
       if (editingDay === null) editingDay = data.today_dow;
     } catch (e) {
       toastr.error(e.message ?? 'Não deu pra carregar o horário.');
@@ -124,76 +120,11 @@
     }
   }
 
-  async function saveCapacity() {
-    savingCapacity = true;
-    try {
-      await api.post('/restaurants/hours_save.php', {
-        token: staffToken(),
-        body: { slot_capacity: Number(slotCapacity) },
-      });
-      toastr.success(
-        Number(slotCapacity) > 0
-          ? `Agendamento ligado: ${slotCapacity} pedido(s) por faixa de 30 min.`
-          : 'Agendamento desligado — a loja só recebe pedido pra agora.'
-      );
-      await load();
-      onChanged?.();
-    } catch (e) {
-      toastr.error(e.message ?? 'Não deu pra salvar a capacidade.');
-    } finally {
-      savingCapacity = false;
-    }
-  }
-
-  function newHoliday() {
-    holidayForm = { day: '', closed: true, opens: '18:00', closes: '23:00', last_order: '22:30', note: '' };
-  }
-
-  async function saveHoliday() {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(holidayForm.day)) {
-      toastr.warning('Escolha a data.');
-      return;
-    }
-    saving = true;
-    try {
-      await api.post('/restaurants/holiday.php', {
-        token: staffToken(),
-        body: {
-          day: holidayForm.day,
-          closed: holidayForm.closed,
-          opens: holidayForm.closed ? null : holidayForm.opens,
-          closes: holidayForm.closed ? null : holidayForm.closes,
-          last_order: holidayForm.closed ? null : holidayForm.last_order,
-          note: holidayForm.note.trim() === '' ? null : holidayForm.note.trim(),
-        },
-      });
-      toastr.success('Data especial salva.');
-      holidayForm = null;
-      await load();
-      onChanged?.();
-    } catch (e) {
-      toastr.error(e.message ?? 'Não deu pra salvar a data.');
-    } finally {
-      saving = false;
-    }
-  }
-
-  async function removeHoliday(holiday) {
-    try {
-      await api.post('/restaurants/holiday.php', {
-        token: staffToken(),
-        body: { action: 'remove', id: holiday.id },
-      });
-      await load();
-      onChanged?.();
-    } catch (e) {
-      toastr.error(e.message ?? 'Não deu pra remover a data.');
-    }
-  }
-
-  function dayLabel(iso) {
-    const [y, m, d] = iso.split('-');
-    return `${d}/${m}/${y}`;
+  // Capacidade e feriados salvam sozinhos (SlotCapacityPanel, HolidayPanel)
+  // e pedem pra tela recarregar -- o layout do painel muda com eles.
+  async function reload() {
+    await load();
+    onChanged?.();
   }
 
   let maxOrders = $derived(Math.max(1, ...(data?.histogram ?? []).map((h) => Number(h.orders_count))));
@@ -275,62 +206,8 @@
         </div>
       {/if}
 
-      <div class="holidays">
-        <p class="holidays-title">Pedido agendado</p>
-        <p class="capacity-note">
-          Quantos pedidos agendados cabem em cada faixa de 30 min. Zero desliga o agendamento — a vaga é
-          da capacidade da sua cozinha, não do relógio.
-        </p>
-        <div class="capacity-row">
-          <input type="number" min="0" max="100" step="1" bind:value={slotCapacity} class="fuu-mono" />
-          <button type="button" class="btn-fuu-primary" disabled={savingCapacity} onclick={saveCapacity}>
-            {savingCapacity ? 'Salvando…' : 'Salvar capacidade'}
-          </button>
-        </div>
-      </div>
-
-      <div class="holidays">
-        <p class="holidays-title">Feriados e datas especiais</p>
-        <div class="holiday-list">
-          {#each data.holidays as holiday (holiday.id)}
-            <div class="holiday">
-              <strong>{dayLabel(holiday.day)}{holiday.note ? ` · ${holiday.note}` : ''}</strong>
-              <span class:closed={holiday.closed}>
-                {holiday.closed
-                  ? 'fechado o dia todo'
-                  : `só ${hhmm(holiday.opens)} – ${hhmm(holiday.closes)}`}
-              </span>
-              <button type="button" class="holiday-del" onclick={() => removeHoliday(holiday)}>
-                <i class="bi bi-trash"></i> remover
-              </button>
-            </div>
-          {/each}
-          <button type="button" class="holiday-add" onclick={newHoliday}>
-            <i class="bi bi-plus-lg"></i> Adicionar
-          </button>
-        </div>
-
-        {#if holidayForm}
-          <div class="holiday-form">
-            <label class="time">data <input type="date" bind:value={holidayForm.day} /></label>
-            <label class="time">nome <input type="text" placeholder="Nossa Senhora" bind:value={holidayForm.note} /></label>
-            <label class="switch-row">
-              <input type="checkbox" bind:checked={holidayForm.closed} />
-              <span class="switch"></span>
-              <span class="switch-label">Fechado o dia todo</span>
-            </label>
-            {#if !holidayForm.closed}
-              <label class="time">abre <input type="time" bind:value={holidayForm.opens} /></label>
-              <label class="time">fecha <input type="time" bind:value={holidayForm.closes} /></label>
-              <label class="time">último pedido <input type="time" bind:value={holidayForm.last_order} /></label>
-            {/if}
-            <div class="editor-actions">
-              <button type="button" class="discard" onclick={() => (holidayForm = null)}>Cancelar</button>
-              <button type="button" class="btn-fuu-primary" disabled={saving} onclick={saveHoliday}>Salvar data</button>
-            </div>
-          </div>
-        {/if}
-      </div>
+      <SlotCapacityPanel capacity={data.slot_capacity ?? 0} onChanged={reload} />
+      <HolidayPanel holidays={data.holidays} onChanged={reload} />
     </main>
 
     <aside class="side">
@@ -452,16 +329,14 @@
     border-radius: 20px;
     margin-left: 3px;
   }
-  .editor,
-  .holidays {
+  .editor {
     background: var(--fuu-white);
     border: 1px solid var(--fuu-line-3);
     border-radius: var(--fuu-radius-card);
     padding: 18px;
     margin-top: 14px;
   }
-  .editor-title,
-  .holidays-title {
+  .editor-title {
     font-size: 15px;
     font-weight: 800;
     color: var(--fuu-ink-1);
@@ -536,86 +411,6 @@
   .editor-actions .btn-fuu-primary {
     width: auto;
     padding: 13px 22px;
-  }
-  .capacity-note {
-    font-size: 12.5px;
-    color: var(--fuu-ink-2);
-    line-height: 1.6;
-    margin: 0 0 12px;
-    max-width: 46em;
-  }
-  .capacity-row {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-  }
-  .capacity-row input {
-    width: 90px;
-    border: 1px solid var(--fuu-line-3);
-    border-radius: 9px;
-    padding: 12px;
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--fuu-ink-1);
-    background: var(--fuu-white);
-  }
-  .capacity-row .btn-fuu-primary {
-    width: auto;
-    padding: 12px 20px;
-  }
-  .holiday-list {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-  .holiday {
-    flex: 1 1 220px;
-    border: 1px solid var(--fuu-line-3);
-    border-radius: 10px;
-    padding: 13px;
-    font-size: 13px;
-    line-height: 1.5;
-    color: var(--fuu-ink-2);
-  }
-  .holiday strong {
-    display: block;
-    color: var(--fuu-ink-1);
-  }
-  .holiday .closed {
-    color: var(--fuu-alert);
-    font-weight: 700;
-  }
-  .holiday-del {
-    display: block;
-    background: none;
-    border: none;
-    padding: 6px 0 0;
-    font-family: var(--fuu-font-body);
-    font-size: 11.5px;
-    color: var(--fuu-ink-5);
-  }
-  .holiday-add {
-    width: 150px;
-    border: 1.5px dashed var(--fuu-line-1);
-    border-radius: 10px;
-    padding: 13px;
-    background: none;
-    font-family: var(--fuu-font-body);
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--fuu-ink-6);
-  }
-  .holiday-form {
-    display: flex;
-    gap: 14px;
-    flex-wrap: wrap;
-    align-items: center;
-    border-top: 1px dashed var(--fuu-line-2);
-    margin-top: 14px;
-    padding-top: 14px;
-  }
-  .holiday-form .time input[type='text'] {
-    font-family: var(--fuu-font-body);
   }
   .switch-row {
     display: flex;

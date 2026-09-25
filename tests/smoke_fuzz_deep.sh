@@ -181,4 +181,19 @@ export FUZZ_BASE="$BASE" FUZZ_LOG="$LOG" FUZZ_STORE="$STORE" FUZZ_ITEM="$ITEM" F
 echo "== cada campo de cada rota, um valor ruim por vez =="
 php "$ROOT/tests/support/fuzz_deep.php" || fail "alguma rota deu 5xx com entrada ruim (lista acima)"
 
+echo "== nenhuma lista virou o texto \"Array\" no banco =="
+# Não dar 500 não basta: (string) de uma lista no PHP vira "Array" e é
+# gravado sem erro nenhum -- foi assim que um bairro chamado "Array" apareceu
+# no onboarding. Toda coluna de texto (e lista de texto) do banco é varrida.
+SCAN=$(psql "$DATABASE_URL" -tAc "
+  SELECT string_agg(format('(SELECT %L AS col FROM %I WHERE %s LIMIT 1)', table_name || '.' || column_name, table_name,
+         CASE WHEN data_type = 'ARRAY' THEN format('%L = ANY(%I)', 'Array', column_name)
+              ELSE format('%I::text = %L', column_name, 'Array') END), ' UNION ALL ')
+    FROM information_schema.columns c
+    JOIN information_schema.tables t USING (table_schema, table_name)
+   WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE'
+     AND (c.data_type IN ('text', 'character varying', 'character') OR (c.data_type = 'ARRAY' AND c.udt_name = '_text'))")
+ARRAYS=$(psql "$DATABASE_URL" -tAc "$SCAN" | sort -u | tr '\n' ' ')
+[ -z "${ARRAYS// /}" ] || fail "coluna com o texto \"Array\" gravado (lista convertida em texto): $ARRAYS"
+
 echo "OK: fuzz profundo sem nenhum 5xx"

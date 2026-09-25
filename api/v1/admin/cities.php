@@ -42,14 +42,19 @@ $neighborhoods = $body['neighborhoods'] ?? [];
 if (is_string($neighborhoods)) {
     $neighborhoods = explode(',', $neighborhoods);
 }
-$neighborhoods = is_array($neighborhoods)
-    ? array_values(array_unique(array_filter(array_map(
-        static fn ($n): string => mb_substr(trim((string) $n), 0, 60),
-        $neighborhoods
-    ), static fn (string $n): bool => $n !== '')))
-    : [];
+// Lista de nomes: um item que não é texto (uma lista dentro da lista) virava
+// o bairro "Array" na tela de onboarding -- achado pelo fuzz profundo.
+$badNeighborhood = !is_array($neighborhoods) || count($neighborhoods) > 500
+    || array_filter($neighborhoods, static fn ($n) => !is_string($n) && !is_int($n)) !== [];
+$neighborhoods = $badNeighborhood ? [] : array_values(array_unique(array_filter(array_map(
+    static fn ($n): string => mb_substr(trim((string) $n), 0, 60),
+    $neighborhoods
+), static fn (string $n): bool => $n !== '')));
 
 $fields = [];
+if ($badNeighborhood) {
+    $fields['neighborhoods'] = 'lista de nomes de bairro (até 500)';
+}
 if (strlen($ibge) !== 7) {
     $fields['ibge_code'] = 'código IBGE de 7 dígitos';
 }
@@ -68,7 +73,7 @@ if (!is_numeric($lat) || (float) $lat < -34 || (float) $lat > 6) {
 if (!is_numeric($lng) || (float) $lng < -74 || (float) $lng > -34) {
     $fields['lng'] = 'longitude do centro da cidade (ex.: -47.0608)';
 }
-if ($neighborhoods === []) {
+if ($neighborhoods === [] && !$badNeighborhood) {
     $fields['neighborhoods'] = 'ao menos um bairro';
 }
 if ($timezone === '' && array_key_exists($uf, UF_NAMES)) {

@@ -190,7 +190,9 @@ $routes = [
     ['admin', 'admin/incident_photo.php', ['id' => (int) $env('INCIDENT')], ['get' => true]],
     ['admin', 'admin/banners.php', ['action' => 'position', 'id' => (int) $env('BANNER'), 'position' => 1]],
     ['admin', 'admin/campaigns.php', ['code' => 'CAMP' . $stamp, 'kind' => 'fixed', 'value' => 5, 'min_order' => 20, 'budget_cap' => 100, 'ends_at' => '2030-01-01', 'audience' => 'all', 'payer' => 'platform', 'restaurant_id' => $store, 'dry_run' => true]],
-    ['admin', 'admin/cities.php', ['ibge_code' => '3550308', 'name' => 'São Paulo', 'uf' => 'SP', 'lat' => -23.55, 'lng' => -46.63, 'timezone' => 'America/Sao_Paulo', 'neighborhoods' => ['Centro']], ['nested' => ['neighborhoods.0']]],
+    // Cidade só do fuzz (Alta Floresta D'Oeste/RO): as trocas aceitas não
+    // podem renomear a praça que as outras suítes usam.
+    ['admin', 'admin/cities.php', ['ibge_code' => '1100015', 'name' => 'Alta Floresta Fuzz', 'uf' => 'RO', 'lat' => -11.93, 'lng' => -61.99, 'timezone' => 'America/Porto_Velho', 'neighborhoods' => ['Centro'], 'active' => false], ['nested' => ['neighborhoods.0']]],
     ['admin', 'admin/couriers.php', ['application_id' => (int) $env('APPLICATION'), 'decision' => 'needs_fix', 'note' => 'foto ilegível', 'city_ibge_code' => $city]],
     ['admin', 'admin/disputes.php', ['dispute_id' => (int) $env('DISPUTE'), 'resolution' => 'conferido', 'charge' => 'platform']],
     ['admin', 'admin/incidents.php', ['incident_id' => (int) $env('INCIDENT'), 'resolution' => 'returned', 'refund' => false, 'refund_payer' => 'platform']],
