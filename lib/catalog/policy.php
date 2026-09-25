@@ -23,76 +23,113 @@ const ONLINE_PAYMENT_METHODS = ['mp_card', 'pix_auto', 'pix_manual'];
  */
 function resolve_policy(PDO $pdo, string $restaurantId): array
 {
-    $policyStmt = $pdo->query(
-        'SELECT * FROM platform_policies ORDER BY version DESC LIMIT 1'
-    );
-    $policy = $policyStmt->fetch();
+    return resolve_policies($pdo, [$restaurantId])[$restaurantId];
+}
+
+/**
+ * resolve_policy() de várias lojas de uma vez, com o mesmo resultado, em
+ * 4 consultas no total em vez de 4 por loja. É o que a Home usa pra montar
+ * os cards (auditoria PERF-01: 30 lojas faziam ~465 consultas).
+ *
+ * @param list<string> $restaurantIds
+ * @return array<string, array> política por loja (loja desconhecida recebe
+ *                              a da plataforma, como em resolve_policy)
+ */
+function resolve_policies(PDO $pdo, array $restaurantIds): array
+{
+    $policy = $pdo->query('SELECT * FROM platform_policies ORDER BY version DESC LIMIT 1')->fetch();
     if ($policy === false) {
         throw new RuntimeException('nenhuma platform_policies cadastrada');
     }
+    $platformMethods = pg_text_array_to_php((string) $policy['enabled_methods']);
+    $ids = array_values(array_unique($restaurantIds));
+    if ($ids === []) {
+        return [];
+    }
+    $in = implode(',', array_fill(0, count($ids), '?'));
 
-    $enabledMethods = pg_text_array_to_php((string) $policy['enabled_methods']);
-
-    $settingsStmt = $pdo->prepare('SELECT * FROM restaurant_payment_settings WHERE restaurant_id = :id');
-    $settingsStmt->execute(['id' => $restaurantId]);
-    $settings = $settingsStmt->fetch();
-
-    if ($settings !== false) {
-        $storeMethods = pg_text_array_to_php((string) $settings['methods']);
-        $enabledMethods = array_values(array_intersect($enabledMethods, $storeMethods));
+    $settings = [];
+    $stmt = $pdo->prepare("SELECT * FROM restaurant_payment_settings WHERE restaurant_id IN ({$in})");
+    $stmt->execute($ids);
+    foreach ($stmt->fetchAll() as $row) {
+        $settings[(string) $row['restaurant_id']] = $row;
     }
 
     // Trava de atraso (bin/apply_financial_blocks.php liga, a baixa em
-    // admin/netting.php desliga): enquanto valer, só formas online -- no
-    // checkout, na troca de método e na tela 4.1, porque todos passam aqui.
-    $blockStmt = $pdo->prepare('SELECT online_only_until > now() FROM restaurants WHERE id = :id');
-    $blockStmt->execute(['id' => $restaurantId]);
-    if ($blockStmt->fetchColumn() === true) {
-        $enabledMethods = array_values(array_intersect($enabledMethods, ONLINE_PAYMENT_METHODS));
+    // admin/netting.php desliga) e a cidade de cada loja (pras exceções da
+    // praça).
+    $stores = [];
+    $stmt = $pdo->prepare("SELECT id, city_ibge_code, online_only_until > now() AS online_only FROM restaurants WHERE id IN ({$in})");
+    $stmt->execute($ids);
+    foreach ($stmt->fetchAll() as $row) {
+        $stores[(string) $row['id']] = $row;
     }
 
-    // A ordem é a do merge: a última linha vence. Antes vinha "mais nova
-    // primeiro", e uma exceção antiga sobrescrevia a nova.
-    $overrideStmt = $pdo->prepare(
-        "SELECT o.patch FROM policy_overrides o
-          WHERE ((o.scope = 'restaurant' AND o.scope_id = :id)
-              OR (o.scope = 'city' AND o.scope_id =
-                    (SELECT city_ibge_code FROM restaurants WHERE id = :rid)))
-            AND (o.expires_at IS NULL OR o.expires_at > now())
-          ORDER BY (o.scope = 'restaurant'), o.created_at, o.id"
+    // Exceções: primeiro as da praça (cidade da loja), depois as da loja,
+    // que ganham; dentro de cada escopo, a mais nova é aplicada por último
+    // e vence. (Antes vinha "mais nova primeiro", e a velha sobrescrevia.)
+    $cities = array_values(array_unique(array_filter(array_column($stores, 'city_ibge_code'))));
+    $overrides = ['city' => [], 'restaurant' => []];
+    $params = $ids;
+    $cityClause = '';
+    if ($cities !== []) {
+        $cityClause = " OR (scope = 'city' AND scope_id IN (" . implode(',', array_fill(0, count($cities), '?')) . '))';
+        $params = array_merge($params, $cities);
+    }
+    $stmt = $pdo->prepare(
+        "SELECT scope, scope_id, patch FROM policy_overrides
+          WHERE ((scope = 'restaurant' AND scope_id IN ({$in})){$cityClause})
+            AND (expires_at IS NULL OR expires_at > now())
+          ORDER BY created_at, id"
     );
-    $overrideStmt->execute(['id' => $restaurantId, 'rid' => $restaurantId]);
-
-    $snapshot = [
-        'policy_version' => (int) $policy['version'],
-        'commission_bps' => (int) $policy['commission_bps'],
-        'cash_ceiling' => (float) $policy['cash_ceiling'],
-        'enabled_methods' => $enabledMethods,
-        'max_change' => $settings !== false ? (float) $settings['max_change'] : 100.00,
-        'min_order' => $settings !== false ? (float) $settings['min_order'] : 0.0,
-        // Taxa de cancelamento entra no snapshot pelo mesmo motivo que
-        // comissão e teto de espécie: o cliente concorda com a política do
-        // dia do pedido, e mudar a política depois não pode reescrever o que
-        // já foi combinado (tela 13.1).
-        'cancel_fee' => (float) ($policy['cancel_fee'] ?? 0),
-        // Tarifa de entrega entra no snapshot pelo mesmo motivo que a taxa de
-        // cancelamento: o cliente concorda com o frete do dia do pedido, e
-        // republicar a política amanhã não pode reescrever o que já foi
-        // cobrado (tela 14.3).
-        'delivery_base_fee' => (float) ($policy['delivery_base_fee'] ?? 0),
-        'delivery_per_km' => (float) ($policy['delivery_per_km'] ?? 0),
-        'delivery_max_km' => $policy['delivery_max_km'] === null ? null : (float) $policy['delivery_max_km'],
-        'no_courier_timeout_seconds' => pg_interval_to_seconds((string) $policy['no_courier_timeout']),
-    ];
-
-    foreach ($overrideStmt->fetchAll() as $row) {
+    $stmt->execute($params);
+    foreach ($stmt->fetchAll() as $row) {
         $patch = json_decode((string) $row['patch'], true);
         if (is_array($patch)) {
-            $snapshot = array_merge($snapshot, $patch);
+            $overrides[$row['scope']][(string) $row['scope_id']][] = $patch;
         }
     }
 
-    return $snapshot;
+    $result = [];
+    foreach ($ids as $id) {
+        $storeSettings = $settings[$id] ?? false;
+        $enabledMethods = $platformMethods;
+        if ($storeSettings !== false) {
+            $enabledMethods = array_values(array_intersect($enabledMethods, pg_text_array_to_php((string) $storeSettings['methods'])));
+        }
+        // Em trava: só formas online -- no checkout, na troca de método e na
+        // tela 4.1, porque todos passam aqui.
+        if (($stores[$id]['online_only'] ?? false) === true) {
+            $enabledMethods = array_values(array_intersect($enabledMethods, ONLINE_PAYMENT_METHODS));
+        }
+
+        $snapshot = [
+            'policy_version' => (int) $policy['version'],
+            'commission_bps' => (int) $policy['commission_bps'],
+            'cash_ceiling' => (float) $policy['cash_ceiling'],
+            'enabled_methods' => $enabledMethods,
+            'max_change' => $storeSettings !== false ? (float) $storeSettings['max_change'] : 100.00,
+            'min_order' => $storeSettings !== false ? (float) $storeSettings['min_order'] : 0.0,
+            // Taxa de cancelamento entra no snapshot pelo mesmo motivo que
+            // comissão e teto de espécie: o cliente concorda com a política do
+            // dia do pedido, e mudar a política depois não pode reescrever o
+            // que já foi combinado (tela 13.1).
+            'cancel_fee' => (float) ($policy['cancel_fee'] ?? 0),
+            // Tarifa de entrega, pelo mesmo motivo: republicar a política
+            // amanhã não reescreve o frete já cobrado (tela 14.3).
+            'delivery_base_fee' => (float) ($policy['delivery_base_fee'] ?? 0),
+            'delivery_per_km' => (float) ($policy['delivery_per_km'] ?? 0),
+            'delivery_max_km' => $policy['delivery_max_km'] === null ? null : (float) $policy['delivery_max_km'],
+            'no_courier_timeout_seconds' => pg_interval_to_seconds((string) $policy['no_courier_timeout']),
+        ];
+        $city = (string) ($stores[$id]['city_ibge_code'] ?? '');
+        foreach (array_merge($overrides['city'][$city] ?? [], $overrides['restaurant'][$id] ?? []) as $patch) {
+            $snapshot = array_merge($snapshot, $patch);
+        }
+        $result[$id] = $snapshot;
+    }
+
+    return $result;
 }
 
 /**

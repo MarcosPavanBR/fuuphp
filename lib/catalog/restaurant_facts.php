@@ -42,28 +42,34 @@ function restaurant_card_facts(PDO $pdo, array $restaurantIds, ?float $lat, ?flo
 
     $stores = $pdo->prepare("SELECT id, lat, lng, prep_minutes, prep_auto_bump FROM restaurants WHERE id IN ({$placeholders})");
     $stores->execute($restaurantIds);
+    $stores = $stores->fetchAll();
+
+    // Política e fila de todas as lojas de uma vez (resolve_policies,
+    // kitchen_queues): antes eram ~15 consultas por loja (PERF-01).
+    try {
+        $policies = resolve_policies($pdo, array_map('strval', array_column($stores, 'id')));
+    } catch (RuntimeException) {
+        $policies = []; // sem política cadastrada: o card fica sem frete, não quebra a lista
+    }
+    $queues = kitchen_queues($pdo, array_map('strval', array_column($stores, 'id')));
 
     $facts = [];
-    foreach ($stores->fetchAll() as $store) {
+    foreach ($stores as $store) {
         $id = (string) $store['id'];
         $rating = $ratings[$id] ?? ['rating' => null, 'n' => 0];
 
         $fee = null;
         $inArea = null;
         $travel = null;
-        if ($lat !== null && $lng !== null) {
-            try {
-                $quote = delivery_quote($store, ['lat' => $lat, 'lng' => $lng], resolve_policy($pdo, $id));
-                $fee = $quote['fee'] === null ? null : (float) $quote['fee'];
-                $inArea = $quote['in_area'];
-                if ($quote['distance_km'] !== null) {
-                    $travel = (int) ceil((float) $quote['distance_km'] / DELIVERY_AVG_KMH * 60);
-                }
-            } catch (RuntimeException) {
-                // sem política cadastrada: o card fica sem frete, não quebra a lista
+        if ($lat !== null && $lng !== null && isset($policies[$id])) {
+            $quote = delivery_quote($store, ['lat' => $lat, 'lng' => $lng], $policies[$id]);
+            $fee = $quote['fee'] === null ? null : (float) $quote['fee'];
+            $inArea = $quote['in_area'];
+            if ($quote['distance_km'] !== null) {
+                $travel = (int) ceil((float) $quote['distance_km'] / DELIVERY_AVG_KMH * 60);
             }
         }
-        $prep = effective_prep_minutes($pdo, $id, $store)['effective'];
+        $prep = prep_minutes_for_queue($store, $queues[$id] ?? 0)['effective'];
 
         $facts[$id] = [
             'rating' => $rating['n'] >= RATING_MIN_REVIEWS ? $rating['rating'] : null,

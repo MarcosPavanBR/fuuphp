@@ -68,6 +68,23 @@ FIRST_ID=$(echo "$LIST" | jq -er '.restaurants[0].id') || fail "lista não veio:
 DIST=$(echo "$LIST" | jq -r --arg id "$NEAR_ID" '.restaurants[] | select(.id == $id) | .distance_km')
 [ "$DIST" = "0.0" ] || fail "distância da loja perto não bateu (esperava ~0.0, veio $DIST)"
 
+echo "== paginação: 1 por página, sem repetir nem pular; ?ids= acha a loja em qualquer página =="
+Q="city_ibge_code=${CITY}&lat=-22.9040&lng=-47.0600&open_only=0"
+TOTAL=$(curl -s "$BASE/restaurants/list.php?${Q}&limit=200" | jq '.restaurants | length')
+[ "$TOTAL" -ge 2 ] || fail "precisa de 2 lojas pra testar a página (veio $TOTAL)"
+P1=$(curl -s "$BASE/restaurants/list.php?${Q}&limit=1")
+[ "$(echo "$P1" | jq -c '[(.restaurants|length), .has_more, .next_offset]')" = "[1,true,1]" ] || fail "página 1: $P1"
+SEEN=""; OFF=0
+while [ "$OFF" != "null" ]; do
+  PAGE=$(curl -s "$BASE/restaurants/list.php?${Q}&limit=1&offset=${OFF}")
+  SEEN="$SEEN $(echo "$PAGE" | jq -r '.restaurants[].id')"
+  OFF=$(echo "$PAGE" | jq -r '.next_offset')
+done
+[ "$(echo $SEEN | tr ' ' '\n' | sort -u | wc -l)" = "$TOTAL" ] || fail "páginas repetiram ou pularam loja: $SEEN"
+[ "$(echo $SEEN | wc -w)" = "$TOTAL" ] || fail "alguma loja saiu em duas páginas: $SEEN"
+ONLY=$(curl -s "$BASE/restaurants/list.php?${Q}&limit=1&ids=${FAR_ID},nao-e-uuid")
+[ "$(echo "$ONLY" | jq -r '[.restaurants[].id] | join(",")')" = "$FAR_ID" ] || fail "?ids= não trouxe só a favorita: $ONLY"
+
 echo "== filtro de categoria só devolve a categoria pedida =="
 PIZZA=$(curl -s "$BASE/restaurants/list.php?city_ibge_code=${CITY}&category=Pizza")
 COUNT=$(echo "$PIZZA" | jq '.restaurants | length')

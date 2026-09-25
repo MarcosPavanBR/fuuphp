@@ -60,7 +60,8 @@
     stores = [];
     if (!city) return;
     api
-      .get('/restaurants/list.php', { query: { city_ibge_code: city, open_only: '0' } })
+      // limit 200: o seletor de loja do banner precisa de todas, não da 1ª página.
+      .get('/restaurants/list.php', { query: { city_ibge_code: city, open_only: '0', limit: 200 } })
       .then((res) => {
         if (form.city === city) stores = res.restaurants;
       })

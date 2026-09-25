@@ -27,35 +27,61 @@
   let restaurants = $state([]);
   let cityCategories = $state([]);
   let loading = $state(true);
+  // A lista vem paginada (restaurants/list.php, 40 por vez, das mais perto
+  // pras mais longe): "Ver mais lojas" busca a próxima página.
+  let nextOffset = $state(null);
+  let loadingMore = $state(false);
   let banners = $state([]);
   let popular = $state([]);
   let favorites = $state(new Set());
   let slide = $state(0);
   let carousel = $state();
 
-  // Filtro de categoria vai pro servidor; "Favoritas" filtra aqui mesmo.
+  // Categoria e favoritas vão pro servidor (favoritas por ?ids=, pra achar a
+  // loja mesmo que ela estivesse numa página que não foi carregada). O
+  // filtro local só tira na hora a loja que a pessoa acabou de desfavoritar.
   let shown = $derived(
     category === FAVORITES ? restaurants.filter((r) => favorites.has(r.id)) : restaurants
   );
   let chips = $derived(STORE_CATEGORIES.filter((c) => cityCategories.includes(c)));
 
+  function listQuery(offset) {
+    return {
+      city_ibge_code: location.city.ibge,
+      category: category === FAVORITES ? null : category,
+      ids: category === FAVORITES ? [...favorites].join(',') : null,
+      lat: location.near?.lat ?? location.lat,
+      lng: location.near?.lng ?? location.lng,
+      offset: offset || null,
+    };
+  }
+
   async function loadStores() {
     loading = true;
     try {
-      const data = await api.get('/restaurants/list.php', {
-        query: {
-          city_ibge_code: location.city.ibge,
-          category: category === FAVORITES ? null : category,
-          lat: location.near?.lat ?? location.lat,
-          lng: location.near?.lng ?? location.lng,
-        },
-      });
+      const data = await api.get('/restaurants/list.php', { query: listQuery(0) });
       restaurants = data.restaurants;
       cityCategories = data.categories ?? [];
+      nextOffset = data.next_offset ?? null;
     } catch (e) {
       toastr.error(e.message ?? 'Não deu pra carregar as lojas.');
     } finally {
       loading = false;
+    }
+  }
+
+  async function loadMore() {
+    if (nextOffset === null || loadingMore) return;
+    loadingMore = true;
+    try {
+      const data = await api.get('/restaurants/list.php', { query: listQuery(nextOffset) });
+      const seen = new Set(restaurants.map((r) => r.id));
+      restaurants = [...restaurants, ...data.restaurants.filter((r) => !seen.has(r.id))];
+      nextOffset = data.next_offset ?? null;
+    } catch (e) {
+      toastr.error(e.message ?? 'Não deu pra carregar mais lojas.');
+    } finally {
+      loadingMore = false;
     }
   }
 
@@ -285,10 +311,28 @@
         </div>
       {/each}
     </div>
+    {#if nextOffset !== null}
+      <button type="button" class="more" disabled={loadingMore} onclick={loadMore}>
+        {loadingMore ? 'Carregando…' : 'Ver mais lojas'}
+      </button>
+    {/if}
   {/if}
 </div>
 
 <style>
+  .more {
+    display: block;
+    width: 100%;
+    margin-top: 12px;
+    padding: 12px;
+    border: 1.5px solid var(--fuu-line-2);
+    border-radius: 12px;
+    background: var(--fuu-white);
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--fuu-ink-2);
+  }
   .home {
     padding: 4px 20px 16px;
   }

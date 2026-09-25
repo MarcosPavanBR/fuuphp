@@ -33,8 +33,43 @@ function effective_prep_minutes(PDO $pdo, string $restaurantId, ?array $store = 
           WHERE restaurant_id = :id AND status IN ('paid','preparing')"
     );
     $queueStmt->execute(['id' => $restaurantId]);
-    $queue = (int) $queueStmt->fetchColumn();
 
+    return prep_minutes_for_queue($store, (int) $queueStmt->fetchColumn());
+}
+
+/**
+ * Filas de várias lojas numa consulta só (pedidos pagos ou em preparo),
+ * pra quem monta muitos cards de uma vez (restaurant_facts.php).
+ *
+ * @param list<string> $restaurantIds
+ * @return array<string, int>
+ */
+function kitchen_queues(PDO $pdo, array $restaurantIds): array
+{
+    if ($restaurantIds === []) {
+        return [];
+    }
+    $in = implode(',', array_fill(0, count($restaurantIds), '?'));
+    $stmt = $pdo->prepare(
+        "SELECT restaurant_id, count(*) AS n FROM orders
+          WHERE restaurant_id IN ({$in}) AND status IN ('paid','preparing')
+          GROUP BY restaurant_id"
+    );
+    $stmt->execute(array_values($restaurantIds));
+    $queues = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $queues[(string) $row['restaurant_id']] = (int) $row['n'];
+    }
+
+    return $queues;
+}
+
+/**
+ * A regra do acréscimo (11.2) dado o tamanho da fila: um lugar só, usado por
+ * effective_prep_minutes() e pelos cards da Home.
+ */
+function prep_minutes_for_queue(array $store, int $queue): array
+{
     $base = (int) $store['prep_minutes'];
     // Quem chama pode passar uma linha sem prep_auto_bump (ex.: vitrine): sem a coluna, não acelera.
     $bumped = ($store['prep_auto_bump'] ?? false) === true &&$queue > PREP_QUEUE_THRESHOLD;

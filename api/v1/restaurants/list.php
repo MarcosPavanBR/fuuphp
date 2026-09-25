@@ -6,6 +6,10 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 
 // Tela 2.1 — lojas aprovadas de uma cidade, abertas por padrão, com
 // distância, nota, frete e tempo quando o app manda a posição (lat/lng).
+//
+// Paginada (auditoria PERF-01): ?limit= (padrão 40, até 200) e ?offset=;
+// a resposta diz has_more e next_offset. ?ids=a,b,c limita a essas lojas
+// (as favoritas do cliente, que podem estar em qualquer página).
 
 require_method('GET');
 
@@ -18,6 +22,17 @@ $category = $_GET['category'] ?? null;
 $openOnly = ($_GET['open_only'] ?? '1') !== '0';
 $lat = isset($_GET['lat']) ? (float) $_GET['lat'] : null;
 $lng = isset($_GET['lng']) ? (float) $_GET['lng'] : null;
+
+$limit = min(200, max(1, (int) ($_GET['limit'] ?? 40)));
+$offset = max(0, (int) ($_GET['offset'] ?? 0));
+$ids = null;
+if (isset($_GET['ids']) && is_string($_GET['ids']) && $_GET['ids'] !== '') {
+    $ids = array_values(array_filter(explode(',', $_GET['ids']), 'is_valid_uuid'));
+    $ids = array_slice(array_unique($ids), 0, 200);
+    if ($ids === []) {
+        json_response(200, ['restaurants' => [], 'categories' => [], 'has_more' => false, 'next_offset' => null]);
+    }
+}
 
 $pdo = db();
 
@@ -58,13 +73,27 @@ if (is_string($category) && $category !== '') {
     $sql .= ' AND r.category = :category';
     $params['category'] = $category;
 }
+if ($ids !== null) {
+    $names = [];
+    foreach ($ids as $i => $id) {
+        $names[] = ":id{$i}";
+        $params["id{$i}"] = $id;
+    }
+    $sql .= ' AND r.id IN (' . implode(',', $names) . ')';
+}
+// r.id no fim: desempate estável, senão a mesma loja podia aparecer em duas
+// páginas (ou em nenhuma) quando duas têm a mesma distância e o mesmo nome.
 $sql .= ($lat !== null && $lng !== null)
-    ? ' ORDER BY distance_km NULLS LAST, r.name'
-    : ' ORDER BY r.name';
+    ? ' ORDER BY distance_km NULLS LAST, r.name, r.id'
+    : ' ORDER BY r.name, r.id';
+// Um a mais que o pedido: é assim que se sabe se há próxima página.
+$sql .= ' LIMIT ' . ($limit + 1) . ' OFFSET ' . $offset;
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $restaurants = $stmt->fetchAll();
+$hasMore = count($restaurants) > $limit;
+$restaurants = array_slice($restaurants, 0, $limit);
 
 // Nota, frete e tempo do card (tela 2.1): lib/catalog/restaurant_facts.php.
 $facts = restaurant_card_facts($pdo, array_column($restaurants, 'id'), $lat, $lng);
@@ -84,4 +113,9 @@ $catStmt->execute(['city' => $cityIbge]);
 $present = $catStmt->fetchAll(PDO::FETCH_COLUMN);
 $categories = array_values(array_filter(STORE_CATEGORIES, static fn (string $c): bool => in_array($c, $present, true)));
 
-json_response(200, ['restaurants' => $restaurants, 'categories' => $categories]);
+json_response(200, [
+    'restaurants' => $restaurants,
+    'categories' => $categories,
+    'has_more' => $hasMore,
+    'next_offset' => $hasMore ? $offset + $limit : null,
+]);
