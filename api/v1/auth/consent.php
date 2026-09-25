@@ -18,7 +18,7 @@ if (!in_array($kind, ['terms', 'privacy_policy', 'marketing', 'location'], true)
     error_response(422, 'invalid_kind', 'Informe kind: terms, privacy_policy, marketing ou location.');
 }
 
-$version = trim((string) ($body['version'] ?? ''));
+$version = body_text($body, 'version', 40) ?? '';
 if ($version === '') {
     error_response(422, 'version_required', 'Informe a versão do termo aceito.', fields: ['version' => 'obrigatório']);
 }

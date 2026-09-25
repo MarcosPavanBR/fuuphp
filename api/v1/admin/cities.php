@@ -31,11 +31,11 @@ require_method('POST');
 $body = read_json_body();
 
 $ibge = only_digits((string) ($body['ibge_code'] ?? ''));
-$name = trim((string) ($body['name'] ?? ''));
-$uf = strtoupper(trim((string) ($body['uf'] ?? '')));
+$name = body_text($body, 'name', 100) ?? '';
+$uf = strtoupper(body_text($body, 'uf', 2) ?? '');
 $lat = $body['lat'] ?? null;
 $lng = $body['lng'] ?? null;
-$timezone = trim((string) ($body['timezone'] ?? ''));
+$timezone = body_text($body, 'timezone', 60) ?? '';
 $activeGiven = array_key_exists('active', $body);
 $active = ($body['active'] ?? true) !== false;
 $neighborhoods = $body['neighborhoods'] ?? [];

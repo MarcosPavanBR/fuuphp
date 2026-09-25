@@ -70,12 +70,8 @@ function netting_payload(PDO $pdo, string $start, string $end, int $debitDow): a
 }
 
 $week = netting_last_week();
-$start = isset($_GET['start']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $_GET['start']) === 1
-    ? (string) $_GET['start']
-    : $week['start'];
-$end = isset($_GET['end']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $_GET['end']) === 1
-    ? (string) $_GET['end']
-    : $week['end'];
+$start = is_valid_date($_GET['start'] ?? null) ? $_GET['start'] : $week['start'];
+$end = is_valid_date($_GET['end'] ?? null) ? $_GET['end'] : $week['end'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     json_response(200, array_merge(netting_payload($pdo, $start, $end, $debitDow), [
@@ -86,8 +82,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 require_method('POST');
 $body = read_json_body();
 $action = (string) ($body['action'] ?? '');
-$start = (string) ($body['start'] ?? $start);
-$end = (string) ($body['end'] ?? $end);
+$start = $body['start'] ?? $start;
+$end = $body['end'] ?? $end;
+// Data que existe no calendário, e começo antes do fim: o texto ia direto
+// pro ::date do banco, e "" ou 30/02 davam 500.
+if (!is_valid_date($start) || !is_valid_date($end) || $start > $end) {
+    error_response(422, 'invalid_period', 'Período inválido (AAAA-MM-DD, começo antes do fim).', fields: ['start' => 'inválido', 'end' => 'inválido']);
+}
 
 if ($action === 'generate') {
     // A mesma função do pg_cron, chamada à mão quando a terça passou e
@@ -152,7 +153,7 @@ try {
     $pdo->prepare(
         "UPDATE payouts SET state = 'paid', provider_ref = :ref WHERE id = :id"
     )->execute([
-        'ref' => isset($body['provider_ref']) ? trim((string) $body['provider_ref']) : null,
+        'ref' => body_text($body, 'provider_ref', 100),
         'id' => $payoutId,
     ]);
 

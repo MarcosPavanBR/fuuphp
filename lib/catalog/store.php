@@ -9,6 +9,11 @@ declare(strict_types=1);
 const PREP_QUEUE_THRESHOLD = 8;
 const PREP_BUMP_MINUTES = 10;
 
+// Teto de sanidade do preço de um item do cardápio (R$). Não é regra de
+// negócio: é o que separa "item caro" de "digitou zeros a mais" -- e o que
+// impede 1e30 de chegar na coluna numeric (restaurants/menu_item.php).
+const MENU_PRICE_MAX = 10000;
+
 /**
  * Tempo de preparo que o cliente vê agora.
  *

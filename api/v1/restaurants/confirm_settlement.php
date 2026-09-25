@@ -40,8 +40,10 @@ if ($restaurantId === null) {
     error_response(403, 'forbidden', 'Esse login não está vinculado a uma loja.');
 }
 
-$code = isset($body['code']) ? only_digits((string) $body['code']) : '';
-$counted = isset($body['counted_amount']) ? round((float) $body['counted_amount'], 2) : null;
+$code = is_string($body['code'] ?? null) || is_int($body['code'] ?? null) ? only_digits((string) $body['code']) : '';
+// O que a loja contou na mão: número de R$ 0 a R$ 100.000 ("x" virava 0 e
+// 1e30 estourava a coluna).
+$counted = money_input($body['counted_amount'] ?? null, 0, 100000);
 
 if (strlen($code) !== 6 || $counted === null) {
     error_response(422, 'invalid_request', 'Informe o código de 6 dígitos e o valor contado.', fields: ['code' => 'obrigatório', 'counted_amount' => 'obrigatório']);

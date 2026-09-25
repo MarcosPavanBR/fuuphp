@@ -21,12 +21,13 @@ $body = read_json_body();
 $action = (string) ($body['action'] ?? '');
 
 if ($action === 'register') {
-    $label = trim((string) ($body['label'] ?? ''));
-    $acquirer = strtolower(trim((string) ($body['acquirer'] ?? '')));
-    $serial = isset($body['serial']) ? trim((string) $body['serial']) : null;
+    $str = static fn (string $k): string => is_string($body[$k] ?? null) ? trim($body[$k]) : '';
+    $label = $str('label');
+    $acquirer = strtolower($str('acquirer'));
+    $serial = $str('serial') === '' ? null : $str('serial');
 
-    if ($label === '' || $acquirer === '') {
-        error_response(422, 'invalid_request', 'Informe o apelido da máquina e a adquirente.', fields: ['label' => 'obrigatório', 'acquirer' => 'obrigatório']);
+    if ($label === '' || $acquirer === '' || mb_strlen($label) > 40 || mb_strlen($acquirer) > 40 || ($serial !== null && mb_strlen($serial) > 60)) {
+        error_response(422, 'invalid_request', 'Informe o apelido da máquina e a adquirente (até 40 letras cada; série até 60).', fields: ['label' => 'obrigatório', 'acquirer' => 'obrigatório']);
     }
 
     $stmt = $pdo->prepare(
@@ -42,7 +43,11 @@ if ($action === 'register') {
 }
 
 if ($action === 'deactivate') {
-    $deviceId = (string) ($body['device_id'] ?? '');
+    $deviceId = is_string($body['device_id'] ?? null) ? $body['device_id'] : '';
+    // Id da máquina é uuid; texto qualquer chegava no banco e dava 500.
+    if (!is_valid_uuid($deviceId)) {
+        error_response(404, 'device_not_found', 'Máquina não encontrada.');
+    }
 
     // Máquina na rua não some do cadastro: enquanto a custódia estiver
     // aberta, desativar esconderia justamente o equipamento que falta voltar.
@@ -72,7 +77,7 @@ if ($action !== 'confirm_return') {
     error_response(422, 'invalid_action', 'Ação inválida: register, deactivate ou confirm_return.', fields: ['action' => 'inválida']);
 }
 
-$custodyId = (int) ($body['custody_id'] ?? 0);
+$custodyId = positive_id($body['custody_id'] ?? null) ?? 0;
 if ($custodyId <= 0) {
     error_response(422, 'custody_required', 'Informe custody_id.', fields: ['custody_id' => 'obrigatório']);
 }

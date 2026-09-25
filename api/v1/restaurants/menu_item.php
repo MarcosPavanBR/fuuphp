@@ -20,26 +20,37 @@ $claims = require_auth();
 $restaurantId = require_store_staff($claims);
 $body = read_json_body();
 
-$itemId = isset($body['id']) ? (int) $body['id'] : 0;
-$name = trim((string) ($body['name'] ?? ''));
-$description = isset($body['description']) ? trim((string) $body['description']) : null;
-$category = isset($body['category']) ? trim((string) $body['category']) : null;
-$price = isset($body['price']) ? round((float) $body['price'], 2) : null;
+$itemId = isset($body['id']) ? (positive_id($body['id']) ?? -1) : 0;
+$text = static fn (string $key): ?string => isset($body[$key]) && is_string($body[$key]) ? trim($body[$key]) : null;
+$name = $text('name') ?? '';
+$description = $text('description');
+$category = $text('category');
+// Preço é número de verdade: (float) "x" dava 0 e publicava o item de graça.
+$price = is_number_between($body['price'] ?? null, 0, MENU_PRICE_MAX) ? round((float) $body['price'], 2) : null;
 $available = $body['available'] ?? true;
 $variants = $body['variants'] ?? null;
 
 $fields = [];
-if ($name === '') {
-    $fields['name'] = 'obrigatório';
+if ($itemId < 0) {
+    $fields['id'] = 'id do item';
 }
-if ($price === null || $price < 0) {
-    $fields['price'] = 'obrigatório, em reais';
+if ($name === '' || mb_strlen($name) > 80) {
+    $fields['name'] = 'obrigatório, até 80 caracteres';
+}
+if ($description !== null && mb_strlen($description) > 500) {
+    $fields['description'] = 'até 500 caracteres';
+}
+if ($category !== null && mb_strlen($category) > 40) {
+    $fields['category'] = 'até 40 caracteres';
+}
+if ($price === null) {
+    $fields['price'] = 'obrigatório, em reais (de 0 a ' . MENU_PRICE_MAX . ')';
 }
 if (!is_bool($available)) {
     $fields['available'] = 'true ou false';
 }
-if ($variants !== null && !is_array($variants)) {
-    $fields['variants'] = 'lista';
+if ($variants !== null && (!is_array($variants) || !array_is_list($variants) || count($variants) > 100)) {
+    $fields['variants'] = 'lista (até 100)';
 }
 if ($fields !== []) {
     error_response(422, 'invalid_item', 'Confira os campos do item.', fields: $fields);
@@ -49,18 +60,29 @@ if ($fields !== []) {
 // ItemModal agrupa por group_name), então é barrada aqui e não no banco.
 $cleanVariants = [];
 foreach ($variants ?? [] as $i => $variant) {
-    $group = trim((string) ($variant['group_name'] ?? ''));
-    $vname = trim((string) ($variant['name'] ?? ''));
-    if ($group === '' || $vname === '') {
-        error_response(422, 'invalid_variant', 'Toda variação precisa de grupo e nome.', fields: ["variants.{$i}" => 'incompleta']);
+    $variant = is_array($variant) ? $variant : [];
+    $group = is_string($variant['group_name'] ?? null) ? trim($variant['group_name']) : '';
+    $vname = is_string($variant['name'] ?? null) ? trim($variant['name']) : '';
+    if ($group === '' || $vname === '' || mb_strlen($group) > 40 || mb_strlen($vname) > 60) {
+        error_response(422, 'invalid_variant', 'Toda variação precisa de grupo (até 40 letras) e nome (até 60).', fields: ["variants.{$i}" => 'incompleta']);
+    }
+    // Acréscimo pode ser negativo (tamanho menor), mas é número e cabe na
+    // coluna: 1e30 dava 500.
+    $delta = $variant['price_delta'] ?? 0;
+    if (!is_number_between($delta, -MENU_PRICE_MAX, MENU_PRICE_MAX)) {
+        error_response(422, 'invalid_variant', 'Acréscimo da variação em reais.', fields: ["variants.{$i}.price_delta" => 'número em reais']);
+    }
+    $maxSel = $variant['max_selections'] ?? null;
+    if ($maxSel !== null && !is_int_between($maxSel, 1, 50)) {
+        error_response(422, 'invalid_variant', 'Máximo de escolhas de 1 a 50.', fields: ["variants.{$i}.max_selections" => 'de 1 a 50']);
     }
     $cleanVariants[] = [
         'group_name' => $group,
         'name' => $vname,
-        'price_delta' => round((float) ($variant['price_delta'] ?? 0), 2),
+        'price_delta' => round((float) $delta, 2),
         'required' => ($variant['required'] ?? false) === true,
-        'max_selections' => isset($variant['max_selections']) ? (int) $variant['max_selections'] : null,
-        'position' => (int) ($variant['position'] ?? $i),
+        'max_selections' => $maxSel === null ? null : (int) $maxSel,
+        'position' => is_int_between($variant['position'] ?? null, 0, 10000) ? (int) $variant['position'] : $i,
     ];
 }
 

@@ -140,7 +140,6 @@ function coupon_audience_includes(PDO $pdo, array $coupon, string $userId): bool
     return $stmt->fetchColumn() !== false;
 }
 
-/** A frase de recusa, no idioma da campanha. */
 /**
  * O cupom já foi usado por este CPF OU por esta conta?
  *
@@ -159,6 +158,7 @@ function coupon_used_by(PDO $pdo, int $couponId, string $cpf, string $userId): b
     return $stmt->fetchColumn() === true;
 }
 
+/** A frase de recusa, no idioma da campanha. */
 function coupon_audience_message(string $audience, bool $personal = false): string
 {
     if ($personal) {
@@ -305,4 +305,106 @@ function first_order_used_at_address(PDO $pdo, int $addressId, string $userId): 
     $stmt->execute(['aid' => $addressId, 'uid' => $userId]);
 
     return $stmt->fetchColumn() !== false;
+}
+
+/**
+ * O cupom, com `live` = ativo e dentro das datas AGORA (relógio do banco).
+ * Por código (aplicar no carrinho) ou por id (o cupom que o carrinho guarda
+ * desde a migração 044); $lock trava a linha pro checkout, que vai mexer no
+ * orçamento dela.
+ */
+function fetch_coupon(PDO $pdo, string|int $codeOrId, bool $lock = false): ?array
+{
+    $where = is_int($codeOrId) ? 'c.id = :k' : 'c.code = :k';
+    $stmt = $pdo->prepare(
+        "SELECT c.*, (c.active AND c.starts_at <= now() AND (c.ends_at IS NULL OR c.ends_at > now())) AS live
+           FROM coupons c WHERE {$where}" . ($lock ? ' FOR UPDATE' : '')
+    );
+    $stmt->execute(['k' => $codeOrId]);
+    $coupon = $stmt->fetch();
+    return $coupon === false ? null : $coupon;
+}
+
+/**
+ * O desconto que o cupom dá sobre este subtotal -- e sobre este frete, no
+ * fechamento (no carrinho ainda não há endereço, então frete grátis vale 0).
+ * Nunca passa do subtotal (fixo e percentual) nem do frete (frete grátis):
+ * cupom não vira crédito.
+ */
+function coupon_discount(array $coupon, float $subtotal, float $deliveryFee = 0.0): float
+{
+    $discount = match ($coupon['kind']) {
+        'fixed' => (float) $coupon['value'],
+        'percent' => round($subtotal * (float) $coupon['value'] / 100, 2),
+        'free_delivery' => $deliveryFee,
+        default => 0.0,
+    };
+    $ceiling = $coupon['kind'] === 'free_delivery' ? $deliveryFee : $subtotal;
+    return round(max(0.0, min($discount, $ceiling)), 2);
+}
+
+/**
+ * Por que este cupom NÃO vale neste carrinho agora -- ou null, se vale.
+ *
+ * A mesma lista ao aplicar (cart/apply_coupon.php) e ao fechar
+ * (orders/checkout.php): entre um e outro a campanha pode vencer ou
+ * esgotar, a pessoa pode ter usado o cupom em outro pedido, e o carrinho
+ * pode ter encolhido abaixo do pedido mínimo. $amount é quanto este pedido
+ * vai consumir do orçamento (0 ao aplicar, quando nada é consumido ainda).
+ *
+ * @return array{0: int, 1: string, 2: string}|null [status HTTP, code, mensagem]
+ */
+function coupon_rejection(PDO $pdo, array $coupon, array $cart, string $cpf, string $userId, float $amount = 0.0): ?array
+{
+    if (!$coupon['live']) {
+        return [404, 'coupon_not_found', 'Cupom inválido ou fora do prazo.'];
+    }
+    if ($coupon['restaurant_id'] !== null && $coupon['restaurant_id'] !== $cart['restaurant_id']) {
+        return [409, 'coupon_other_store', 'Esse cupom é de outra loja.'];
+    }
+    if ((float) $cart['subtotal'] < (float) $coupon['min_order']) {
+        return [409, 'coupon_min_order', sprintf(
+            'Esse cupom vale a partir de R$ %s em itens.',
+            number_format((float) $coupon['min_order'], 2, ',', '.')
+        )];
+    }
+    if (coupon_used_by($pdo, (int) $coupon['id'], $cpf, $userId)) {
+        return [409, 'coupon_already_used', 'Você já usou esse cupom.'];
+    }
+    // O público da campanha (tela 15.3: primeiro pedido, inativos há 15/30
+    // dias) é a mesma condição que conta o público na projeção.
+    if (!coupon_audience_includes($pdo, $coupon, $userId)) {
+        return [409, 'coupon_audience', coupon_audience_message((string) $coupon['audience'], ($coupon['owner_user_id'] ?? null) !== null)];
+    }
+    // Passar do teto seria recusado pelo CHECK within_budget -- com 500.
+    if ((float) $coupon['spent'] >= (float) $coupon['budget_cap']
+        || money_cents((string) $coupon['spent']) + money_cents($amount) > money_cents((string) $coupon['budget_cap'])) {
+        return [409, 'coupon_exhausted', 'Esse cupom acabou (orçamento da campanha esgotou).'];
+    }
+    return null;
+}
+
+/**
+ * Refaz o desconto do cupom do carrinho depois que os itens mudaram
+ * (chamada por recompute_cart_subtotal). Percentual acompanha o subtotal;
+ * abaixo do pedido mínimo o desconto vira zero -- o cupom fica no carrinho
+ * e o checkout explica por que não vale. Carrinho sem cupom não tem
+ * desconto: o crédito de carteira só entra no fechamento.
+ */
+function refresh_cart_coupon(PDO $pdo, int $cartId): void
+{
+    $cart = fetch_order($pdo, $cartId);
+    if ($cart === null || $cart['status'] !== 'cart') {
+        return;
+    }
+    $discount = 0.0;
+    if ($cart['coupon_id'] !== null) {
+        $coupon = fetch_coupon($pdo, (int) $cart['coupon_id']);
+        if ($coupon !== null && (float) $cart['subtotal'] >= (float) $coupon['min_order']) {
+            $discount = coupon_discount($coupon, (float) $cart['subtotal']);
+        }
+    }
+    if (money_cents((string) $cart['discount']) !== money_cents($discount)) {
+        $pdo->prepare('UPDATE orders SET discount = :d WHERE id = :id')->execute(['d' => $discount, 'id' => $cartId]);
+    }
 }

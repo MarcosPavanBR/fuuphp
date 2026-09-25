@@ -49,12 +49,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 require_method('POST');
 $body = read_json_body();
 
-$applicationId = (string) ($body['application_id'] ?? '');
+$applicationId = $body['application_id'] ?? '';
 $decision = $body['decision'] ?? '';
-$note = isset($body['note']) ? trim((string) $body['note']) : null;
+$note = isset($body['note']) && is_string($body['note']) ? trim($body['note']) : null;
 
-if ($applicationId === '' || !in_array($decision, ['approve', 'reject', 'needs_fix'], true)) {
+// O id da candidatura é uuid (vira o id do entregador); texto qualquer
+// chegava no banco e dava 500.
+if (!is_string($applicationId) || !is_valid_uuid($applicationId) || !in_array($decision, ['approve', 'reject', 'needs_fix'], true)) {
     error_response(422, 'invalid_request', 'Informe application_id e decision (approve, reject ou needs_fix).');
+}
+if ($note !== null && mb_strlen($note) > 1000) {
+    error_response(422, 'note_too_long', 'O motivo vai até 1000 caracteres.', fields: ['note' => 'até 1000 caracteres']);
 }
 if ($decision !== 'approve' && ($note === null || $note === '')) {
     error_response(422, 'note_required', 'Recusa e pedido de correção precisam de motivo — é o que a pessoa vai ler.', fields: ['note' => 'obrigatório']);

@@ -34,8 +34,9 @@ if ($action === 'remove') {
     json_response(200, ['removed' => $id]);
 }
 
-$day = (string) ($body['day'] ?? '');
-if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $day) !== 1) {
+$day = $body['day'] ?? '';
+if (!is_valid_date($day)) {
+    // 2026-02-30 passava no formato e dava 500 no banco.
     error_response(422, 'invalid_day', 'Data no formato AAAA-MM-DD.', fields: ['day' => 'inválido']);
 }
 
@@ -50,13 +51,18 @@ $lastOrder = $closed ? null : ($body['last_order'] ?? null);
 
 if (!$closed) {
     foreach (['opens' => $opens, 'closes' => $closes] as $field => $value) {
-        if (!is_string($value) || preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $value) !== 1) {
+        if (!is_valid_time($value)) {
             error_response(422, 'invalid_time', 'Dia com horário especial precisa de abertura e fechamento.', fields: [$field => 'inválido']);
         }
     }
-    if ($lastOrder !== null && preg_match('/^\d{2}:\d{2}(:\d{2})?$/', (string) $lastOrder) !== 1) {
+    if ($lastOrder !== null && !is_valid_time($lastOrder)) {
         error_response(422, 'invalid_time', 'Último pedido no formato HH:MM.', fields: ['last_order' => 'inválido']);
     }
+}
+
+$note = is_string($body['note'] ?? null) ? trim($body['note']) : null;
+if ($note !== null && mb_strlen($note) > 120) {
+    error_response(422, 'invalid_note', 'A observação vai até 120 caracteres.', fields: ['note' => 'até 120 caracteres']);
 }
 
 // UNIQUE (restaurant_id, day): cadastrar a mesma data duas vezes é corrigir
@@ -76,7 +82,7 @@ $stmt->execute([
     'opens' => $opens,
     'closes' => $closes,
     'last_order' => $lastOrder,
-    'note' => isset($body['note']) ? trim((string) $body['note']) : null,
+    'note' => $note,
 ]);
 $holiday = $stmt->fetch();
 

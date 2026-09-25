@@ -354,6 +354,11 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
         run: bash tests/smoke_fuzz.sh
 
+      - name: "Smoke test -- fuzz profundo: corpo válido com um campo ruim por vez, em registros que existem: nenhum 5xx"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+        run: bash tests/smoke_fuzz_deep.sh
+
       - name: "Papéis do banco: RLS por loja, livro só de inserção, app_rw sem DDL (go-live)"
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery

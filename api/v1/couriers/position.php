@@ -42,7 +42,9 @@ $pdo->prepare(
     'id' => $courierId,
     'lat' => round((float) $lat, 6),
     'lng' => round((float) $lng, 6),
-    'heading' => isset($body['heading']) && is_numeric($body['heading']) ? round((float) $body['heading'], 1) : null,
+    // Rumo em graus (0 a 360). Fora disso é lixo do GPS: fica sem rumo, em
+    // vez de estourar a coluna (1e30 dava 500).
+    'heading' => is_number_between($body['heading'] ?? null, 0, 360) ? round((float) $body['heading'], 1) : null,
 ]);
 
 json_response(200, ['ok' => true, 'fresh_seconds' => COURIER_POSITION_FRESH_SECONDS]);

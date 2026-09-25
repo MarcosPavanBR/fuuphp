@@ -65,7 +65,10 @@ $policy = resolve_policy($pdo, (string) $order['restaurant_id']);
 if (!in_array($newMethod, $policy['enabled_methods'], true)) {
     error_response(422, 'payment_method_not_allowed', 'Essa loja não aceita esse método de pagamento.', fields: ['payment_method' => 'não habilitado por esta loja']);
 }
-$changeFor = isset($body['change_for']) ? (float) $body['change_for'] : null;
+$changeFor = isset($body['change_for']) ? money_input($body['change_for'], 0, 100000) : null;
+if (isset($body['change_for']) && $changeFor === null) {
+    error_response(422, 'invalid_change_for', 'Troco em reais.', fields: ['change_for' => 'inválido']);
+}
 if ($newMethod === 'cash' && $changeFor !== null && $changeFor < (float) $order['total']) {
     error_response(422, 'invalid_change_for', 'Troco precisa ser maior ou igual ao total.', fields: ['change_for' => 'inválido']);
 }

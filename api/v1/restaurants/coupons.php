@@ -81,13 +81,15 @@ if ($action !== 'create') {
     error_response(422, 'invalid_action', 'Informe action: create ou deactivate.');
 }
 
-$code = strtoupper(trim((string) ($body['code'] ?? '')));
+$code = is_string($body['code'] ?? null) ? strtoupper(trim($body['code'])) : '';
 $kind = $body['kind'] ?? '';
-$value = round((float) ($body['value'] ?? 0), 2);
-$minOrder = round((float) ($body['min_order'] ?? 0), 2);
+// Números de verdade e com teto (o (float) de antes aceitava "x" como 0 e
+// 1e30 estourava a coluna): valor até R$ 10.000, pedido mínimo até R$ 100.000.
+$value = money_input($body['value'] ?? null, 0, 10000) ?? 0.0;
+$minOrder = money_input($body['min_order'] ?? 0, 0, 100000) ?? -1.0;
 $audience = $body['audience'] ?? '';
-$budgetCap = round((float) ($body['budget_cap'] ?? 0), 2);
-$days = (int) ($body['days'] ?? 0);
+$budgetCap = money_input($body['budget_cap'] ?? null, 0, 10000000) ?? 0.0;
+$days = is_int_between($body['days'] ?? null, 0, 3650) ? (int) $body['days'] : 0;
 $dryRun = ($body['dry_run'] ?? false) === true;
 
 $fields = [];
@@ -101,13 +103,13 @@ if (!in_array($audience, ['all', 'first_order', 'inactive_15d', 'inactive_30d'],
     $fields['audience'] = 'público inválido';
 }
 if ($value <= 0) {
-    $fields['value'] = 'maior que zero';
+    $fields['value'] = 'maior que zero (até 10.000)';
 }
 if ($kind === 'percent' && $value > 100) {
     $fields['value'] = 'percentual acima de 100';
 }
 if ($minOrder < 0) {
-    $fields['min_order'] = 'não pode ser negativo';
+    $fields['min_order'] = 'de R$ 0 a R$ 100.000';
 }
 if ($budgetCap <= 0) {
     $fields['budget_cap'] = 'obrigatório e maior que zero';

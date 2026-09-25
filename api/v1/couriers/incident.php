@@ -62,8 +62,8 @@ if ($order['status'] !== 'delivering') {
     error_response(409, 'order_not_in_delivery', 'Esse pedido não está em rota de entrega.');
 }
 
-$lat = isset($body['lat']) && is_numeric($body['lat']) ? (float) $body['lat'] : null;
-$lng = isset($body['lng']) && is_numeric($body['lng']) ? (float) $body['lng'] : null;
+$lat = coord_input($body['lat'] ?? null, 90);
+$lng = coord_input($body['lng'] ?? null, 180);
 
 if (in_array($action, ['arrive', 'call', 'bell'], true)) {
     $kind = $action === 'arrive' ? 'arrival' : $action;
@@ -103,9 +103,14 @@ if (!array_key_exists($kind, INCIDENT_KINDS)) {
 
 // "PROVA (OBRIGATÓRIA)". Obrigatória de verdade: sem foto não abre. É ela
 // que sustenta a decisão do suporte e a disputa depois.
-$photoKey = isset($body['photo_storage_key']) ? trim((string) $body['photo_storage_key']) : '';
+$photoKey = isset($body['photo_storage_key']) ? body_text($body, 'photo_storage_key', 200) ?? '' : '';
 if ($photoKey === '') {
     error_response(422, 'photo_required', 'A foto do local é obrigatória — é ela que sustenta a ocorrência.', fields: ['photo_storage_key' => 'obrigatória']);
+}
+// A foto tem que ser deste pedido e ter chegado (lib/dispatch/delivery_photos.php):
+// texto qualquer abria a ocorrência "com prova".
+if (verified_delivery_photo($orderId, $photoKey) === null) {
+    error_response(422, 'photo_not_found', 'A foto do local não chegou. Tire e envie de novo.', fields: ['photo_storage_key' => 'não encontrada']);
 }
 
 $context = incident_context($pdo, $order);

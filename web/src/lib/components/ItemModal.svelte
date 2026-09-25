@@ -124,14 +124,15 @@
 
     <div class="group">
       <div class="group-header"><span class="group-name">Observação</span></div>
-      <textarea placeholder="Sem cebola, por favor…" bind:value={notes} rows="2"></textarea>
+      <textarea placeholder="Sem cebola, por favor…" bind:value={notes} rows="2" maxlength="200"></textarea>
     </div>
 
     <div class="footer">
       <div class="stepper">
         <button type="button" onclick={() => (quantity = Math.max(1, quantity - 1))} aria-label="Diminuir">−</button>
         <span>{quantity}</span>
-        <button type="button" onclick={() => (quantity = quantity + 1)} aria-label="Aumentar">+</button>
+        <!-- 99 é o teto do servidor por linha (CART_MAX_QUANTITY, lib/ordering/cart.php). -->
+        <button type="button" disabled={quantity >= 99} onclick={() => (quantity = Math.min(99, quantity + 1))} aria-label="Aumentar">+</button>
       </div>
       <button
         type="button"

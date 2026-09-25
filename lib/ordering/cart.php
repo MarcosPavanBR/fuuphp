@@ -11,6 +11,16 @@ declare(strict_types=1);
 // ARQ-01.)
 
 /**
+ * Quantidade máxima de uma linha do carrinho. Pedido de 100 pizzas iguais é
+ * encomenda, não delivery -- e sem teto 1e30 chegava na coluna integer e
+ * dava 500 (fuzz profundo de 25/09/2026).
+ */
+const CART_MAX_QUANTITY = 99;
+
+/** Observação de um item ("sem cebola"): vai impressa na comanda. */
+const CART_NOTES_MAX = 200;
+
+/**
  * Valida e precifica UMA linha de pedido (item + variações) contra o
  * cardápio atual da loja. Encerra a requisição com error_response() se o
  * item/variação for inválido -- nunca devolve preço não confiável.
@@ -20,8 +30,8 @@ declare(strict_types=1);
  */
 function price_line(PDO $pdo, string $restaurantId, int $menuItemId, array $variantIds, int $quantity): array
 {
-    if ($quantity < 1) {
-        error_response(422, 'invalid_quantity', "Quantidade inválida para o item {$menuItemId}.");
+    if ($quantity < 1 || $quantity > CART_MAX_QUANTITY) {
+        error_response(422, 'invalid_quantity', "Quantidade inválida para o item {$menuItemId} (de 1 a " . CART_MAX_QUANTITY . ').');
     }
 
     $itemStmt = $pdo->prepare(
@@ -108,7 +118,8 @@ function find_or_create_cart(PDO $pdo, string $userId, string $restaurantId): ar
 
 /**
  * Recalcula o subtotal do carrinho pela soma das linhas (o total é coluna
- * gerada no banco e acompanha sozinho).
+ * gerada no banco e acompanha sozinho) -- e o desconto do cupom aplicado,
+ * que depende do subtotal (lib/ordering/coupons.php).
  */
 function recompute_cart_subtotal(PDO $pdo, int $orderId): void
 {
@@ -116,4 +127,5 @@ function recompute_cart_subtotal(PDO $pdo, int $orderId): void
         "UPDATE orders SET subtotal = (SELECT COALESCE(SUM(line_total), 0) FROM order_items WHERE order_id = :id)
          WHERE id = :id"
     )->execute(['id' => $orderId]);
+    refresh_cart_coupon($pdo, $orderId);
 }

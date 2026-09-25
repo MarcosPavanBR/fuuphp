@@ -79,3 +79,106 @@ function is_valid_uuid(string $value): bool
 {
     return preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $value) === 1;
 }
+
+/**
+ * Data AAAA-MM-DD que existe no calendário: 2026-02-30 não passa. Conferir
+ * antes evita que a data impossível vire 500 (22008) no banco.
+ */
+function is_valid_date(mixed $value): bool
+{
+    if (!is_string($value) || preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $m) !== 1) {
+        return false;
+    }
+    return checkdate((int) $m[2], (int) $m[3], (int) $m[1]) && (int) $m[1] >= 1900 && (int) $m[1] <= 2100;
+}
+
+/**
+ * Número (int, float ou texto numérico) finito entre $min e $max. Booleano,
+ * lista, "NaN" e 1e30 não passam: o que não cabe na coluna numeric vira 500
+ * (22003) se chegar no banco.
+ */
+function is_number_between(mixed $value, float $min, float $max): bool
+{
+    if (!is_int($value) && !is_float($value) && !(is_string($value) && is_numeric($value))) {
+        return false;
+    }
+    $n = (float) $value;
+    return is_finite($n) && $n >= $min && $n <= $max;
+}
+
+/** Inteiro (int, ou texto só com dígitos e sinal) entre $min e $max. */
+function is_int_between(mixed $value, int $min, int $max): bool
+{
+    if (is_string($value) && preg_match('/^-?\d{1,18}$/', $value) === 1) {
+        $value = (int) $value;
+    }
+    return is_int($value) && $value >= $min && $value <= $max;
+}
+
+/** Código IBGE de município: 7 dígitos. */
+function is_valid_ibge(mixed $value): bool
+{
+    return is_string($value) && preg_match('/^\d{7}$/', $value) === 1;
+}
+
+/**
+ * Id numérico de registro (bigint positivo) vindo do corpo ou da query:
+ * devolve o int ou null. "12" e 12 valem; "", "x", 1.5, [] e 0 não.
+ */
+function positive_id(mixed $value): ?int
+{
+    return is_int_between($value, 1, PHP_INT_MAX) ? (int) $value : null;
+}
+
+/**
+ * Horário HH:MM (ou HH:MM:SS) que existe no relógio: 24:00 e 99:99 não
+ * passam (o formato sozinho aceitava, e o banco dava 500 no cast pra time).
+ */
+function is_valid_time(mixed $value): bool
+{
+    return is_string($value) && preg_match('/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/', $value) === 1;
+}
+
+/**
+ * Valor em reais vindo da requisição: número finito entre $min e $max,
+ * arredondado nos centavos -- ou null se não for. É o que separa "valor"
+ * de "(float) de qualquer coisa": (float) "x" dava 0, (float) [] dava 0 ou
+ * 1, e 1e30 passava no is_numeric e estourava a coluna numeric (500).
+ */
+function money_input(mixed $value, float $min, float $max): ?float
+{
+    return is_number_between($value, $min, $max) ? round((float) $value, 2) : null;
+}
+
+/** Coordenada (lat até 90, lng até 180) vinda da requisição, ou null. */
+function coord_input(mixed $value, float $limit): ?float
+{
+    return is_number_between($value, -$limit, $limit) ? round((float) $value, 6) : null;
+}
+
+/**
+ * Texto do corpo da requisição, aparado: null se não veio (ou veio null).
+ * Número inteiro vira texto (CEP e número de casa às vezes chegam assim);
+ * lista, objeto, booleano ou texto acima de $max encerram com 422, com o
+ * campo marcado. Substitui o `trim((string) $body[...])`, que transformava
+ * lista em "Array" e deixava 10 mil letras irem pro banco -- e pra comanda
+ * impressa, pro painel e pro SMS.
+ */
+function body_text(array $body, string $key, int $max): ?string
+{
+    $value = $body[$key] ?? null;
+    if ($value === null) {
+        return null;
+    }
+    if (is_int($value)) {
+        $value = (string) $value;
+    }
+    if (!is_string($value)) {
+        error_response(422, 'invalid_text', "O campo {$key} precisa ser texto.", fields: [$key => 'texto']);
+    }
+    $value = trim($value);
+    if (mb_strlen($value) > $max) {
+        error_response(422, 'text_too_long', "O campo {$key} vai até {$max} caracteres.", fields: [$key => "até {$max} caracteres"]);
+    }
+    return $value;
+}

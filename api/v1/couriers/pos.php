@@ -144,8 +144,8 @@ if ($action === 'register_own') {
     if (!$allowOwn) {
         error_response(409, 'own_pos_not_allowed', 'A plataforma não libera maquininha própria na sua praça.');
     }
-    $label = trim((string) ($body['label'] ?? ''));
-    $acquirer = strtolower(trim((string) ($body['acquirer'] ?? '')));
+    $label = body_text($body, 'label', 40) ?? '';
+    $acquirer = strtolower(body_text($body, 'acquirer', 40) ?? '');
     if ($label === '' || $acquirer === '') {
         error_response(422, 'invalid_request', 'Informe o apelido e a adquirente da sua máquina.', fields: ['label' => 'obrigatório']);
     }
@@ -161,7 +161,7 @@ if ($action === 'register_own') {
         'courier' => $courierId,
         'label' => $label,
         'acq' => $acquirer,
-        'serial' => isset($body['serial']) ? trim((string) $body['serial']) : null,
+        'serial' => body_text($body, 'serial', 60),
     ]);
 
     json_response(201, [
@@ -173,9 +173,9 @@ if ($action === 'register_own') {
 // ── sale: informar NSU e valor ─────────────────────────────────────────
 if ($action === 'sale') {
     $orderId = (int) ($body['order_id'] ?? 0);
-    $nsu = isset($body['nsu']) ? only_digits((string) $body['nsu']) : '';
-    $amount = isset($body['amount']) && is_numeric($body['amount']) ? round((float) $body['amount'], 2) : null;
-    if ($orderId <= 0 || $amount === null || $amount <= 0) {
+    $nsu = is_string($body['nsu'] ?? null) || is_int($body['nsu'] ?? null) ? substr(only_digits((string) $body['nsu']), 0, 20) : '';
+    $amount = money_input($body['amount'] ?? null, 0.01, 100000);
+    if ($orderId <= 0 || $amount === null) {
         error_response(422, 'invalid_request', 'Informe order_id e o valor cobrado.', fields: ['amount' => 'obrigatório']);
     }
 
@@ -216,7 +216,7 @@ if ($action === 'sale') {
     $params = [
         'nsu' => $nsu === '' ? null : $nsu,
         'amount' => $amount,
-        'brand' => isset($body['brand']) ? trim((string) $body['brand']) : null,
+        'brand' => body_text($body, 'brand', 30),
     ];
 
     $pdo->beginTransaction();

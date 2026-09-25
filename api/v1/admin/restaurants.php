@@ -57,7 +57,7 @@ $body = read_json_body();
 
 $restaurantId = (string) ($body['restaurant_id'] ?? '');
 $decision = $body['decision'] ?? null;
-if ($restaurantId === '' || !in_array($decision, ['approve', 'reject'], true)) {
+if (!is_valid_uuid($restaurantId) || !in_array($decision, ['approve', 'reject'], true)) {
     error_response(422, 'invalid_request', 'Informe restaurant_id e decision (approve ou reject).');
 }
 
@@ -72,7 +72,7 @@ if ($restaurant['approved_at'] !== null || $restaurant['rejected_at'] !== null) 
 }
 
 if ($decision === 'reject') {
-    $reason = trim((string) ($body['reason'] ?? ''));
+    $reason = body_text($body, 'reason', 500) ?? '';
     if ($reason === '') {
         error_response(422, 'reason_required', 'Recusa exige motivo — a loja precisa saber o que corrigir.', fields: ['reason' => 'obrigatório']);
     }

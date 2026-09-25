@@ -64,13 +64,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 require_method('POST');
 $body = read_json_body();
 
-$code = strtoupper(trim((string) ($body['code'] ?? '')));
+$code = is_string($body['code'] ?? null) ? strtoupper(trim($body['code'])) : '';
 $kind = $body['kind'] ?? '';
-$value = round((float) ($body['value'] ?? 0), 2);
-$minOrder = round((float) ($body['min_order'] ?? 0), 2);
+// Números de verdade e com teto (o (float) de antes aceitava "x" como 0 e
+// 1e30 estourava a coluna): valor até R$ 10.000, pedido mínimo até R$ 100.000.
+$value = money_input($body['value'] ?? null, 0, 10000) ?? 0.0;
+$minOrder = money_input($body['min_order'] ?? 0, 0, 100000) ?? -1.0;
 $audience = $body['audience'] ?? '';
 $payer = $body['payer'] ?? '';
-$budgetCap = round((float) ($body['budget_cap'] ?? 0), 2);
+$budgetCap = money_input($body['budget_cap'] ?? null, 0, 10000000) ?? 0.0;
 $restaurantId = $body['restaurant_id'] ?? null;
 $dryRun = ($body['dry_run'] ?? false) === true;
 
@@ -88,7 +90,7 @@ if (!in_array($payer, ['store', 'platform', 'shared'], true)) {
     $fields['payer'] = 'store, platform ou shared';
 }
 if ($value <= 0) {
-    $fields['value'] = 'maior que zero';
+    $fields['value'] = 'maior que zero (até 10.000)';
 }
 if ($kind === 'percent' && $value > 100) {
     $fields['value'] = 'percentual acima de 100';
@@ -96,6 +98,9 @@ if ($kind === 'percent' && $value > 100) {
 // "Teto de gasto é obrigatório." Não é validação de formulário: é a regra
 // que o mock põe em primeiro lugar, e o CHECK (budget_cap > 0) da migração
 // 008 já não deixaria passar -- aqui ela vira mensagem em vez de 500.
+if ($minOrder < 0) {
+    $fields['min_order'] = 'de R$ 0 a R$ 100.000';
+}
 if ($budgetCap <= 0) {
     $fields['budget_cap'] = 'obrigatório e maior que zero';
 }
@@ -107,6 +112,9 @@ if ($fields !== []) {
 }
 
 if ($restaurantId !== null && $restaurantId !== '') {
+    if (!is_string($restaurantId) || !is_valid_uuid($restaurantId)) {
+        error_response(404, 'restaurant_not_found', 'Loja não encontrada.');
+    }
     $check = $pdo->prepare('SELECT 1 FROM restaurants WHERE id = :id');
     $check->execute(['id' => $restaurantId]);
     if ($check->fetchColumn() === false) {

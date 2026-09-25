@@ -46,6 +46,11 @@ function error_response(int $status, string $code, string $message, ?string $det
 
 /**
  * Corpo JSON da requisição como array; corpo inválido encerra com 400.
+ *
+ * Texto com caractere nulo (\u0000) também é recusado aqui, pra todas as
+ * rotas de uma vez: o PostgreSQL não guarda esse caractere em `text` (e dá
+ * 500), e funções do PHP como DateTimeImmutable estouram com ele. Ninguém
+ * digita um nulo; quem manda é robô ou ataque.
  */
 function read_json_body(): array
 {
@@ -57,5 +62,35 @@ function read_json_body(): array
     if (!is_array($decoded)) {
         error_response(400, 'invalid_json', 'Corpo da requisição não é um JSON válido.');
     }
+    if (has_nul_byte($decoded)) {
+        error_response(400, 'invalid_characters', 'O texto enviado tem um caractere inválido.');
+    }
     return $decoded;
+}
+
+/** Algum texto (valor ou chave, em qualquer nível) tem o caractere nulo? */
+function has_nul_byte(mixed $value): bool
+{
+    if (is_string($value)) {
+        return str_contains($value, "\0");
+    }
+    if (is_array($value)) {
+        foreach ($value as $k => $v) {
+            if ((is_string($k) && str_contains($k, "\0")) || has_nul_byte($v)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * A mesma trava pra query string (?id=a%00b). Chamada pelo bootstrap em
+ * toda requisição HTTP, antes da rota.
+ */
+function reject_nul_in_query(): void
+{
+    if (has_nul_byte($_GET)) {
+        error_response(400, 'invalid_characters', 'O endereço da requisição tem um caractere inválido.');
+    }
 }

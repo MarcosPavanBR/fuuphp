@@ -45,9 +45,11 @@ require_method('POST');
 $body = read_json_body();
 $restaurantId = (string) ($body['restaurant_id'] ?? '');
 $limit = $body['limit'] ?? null;
-if (!is_valid_uuid($restaurantId) || !is_numeric($limit) || (float) $limit < 0) {
-    error_response(422, 'invalid_request', 'Informe restaurant_id e limit (zero ou mais).',
-        fields: ['limit' => 'zero ou mais']);
+// Teto de sanidade (R$ 1 milhão): 1e30 passava no is_numeric e estourava a
+// coluna numeric no banco.
+if (!is_valid_uuid($restaurantId) || !is_number_between($limit, 0, 1000000)) {
+    error_response(422, 'invalid_request', 'Informe restaurant_id e limit (de 0 a 1.000.000).',
+        fields: ['limit' => 'de 0 a 1.000.000']);
 }
 $limit = round((float) $limit, 2);
 

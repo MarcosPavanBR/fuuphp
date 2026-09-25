@@ -258,11 +258,28 @@ AGAIN=$(curl -s -X POST "$BASE/admin/incidents.php" -H "Content-Type: applicatio
   -d "{\"incident_id\":${INCIDENT_ID},\"resolution\":\"discarded\"}")
 [ "$(echo "$AGAIN" | jq -r '.code')" = "already_resolved" ] || fail "resolveu a mesma ocorrência duas vezes: $AGAIN"
 
-echo "== 13.3: foto repetida em outra corrida vira sinal de fraude =="
+echo "== 8.6: a foto da entrega tem que ser deste pedido e ter chegado no servidor =="
 O2=$(delivering_order cash)
-curl -s -X POST "$BASE/couriers/deliver.php" -H "Content-Type: application/json" \
-  -H "X-Idempotency-Key: $(gen_uuid)" "${COURIER_AUTH[@]}" \
-  -d "{\"order_id\":${O2},\"photo_storage_key\":\"${KEY1}\",\"photo_sha256\":\"$(echo "$UP1" | jq -r '.sha256')\"}" >/dev/null
+deliver_photo() {  # deliver_photo PEDIDO CHAVE -> corpo da resposta
+  curl -s -X POST "$BASE/couriers/deliver.php" -H "Content-Type: application/json" \
+    -H "X-Idempotency-Key: $(gen_uuid)" "${COURIER_AUTH[@]}" \
+    -d "{\"order_id\":$1,\"photo_storage_key\":\"$2\",\"photo_sha256\":\"$(printf 'f%.0s' $(seq 64))\"}"
+}
+[ "$(deliver_photo "$O2" "qualquer-coisa" | jq -r '.code')" = "photo_not_found" ] \
+  || fail "fechou entrega com chave de foto inventada"
+[ "$(deliver_photo "$O2" "delivery/${O2}-0123456789ab.jpg" | jq -r '.code')" = "photo_not_found" ] \
+  || fail "fechou entrega com foto que não existe no servidor"
+[ "$(deliver_photo "$O2" "$KEY1" | jq -r '.code')" = "photo_not_found" ] \
+  || fail "fechou entrega com a foto de OUTRO pedido"
+[ "$(query "SELECT status FROM orders WHERE id=${O2}")" = "delivering" ] || fail "o pedido saiu de rota sem prova válida"
+KEY_O2=$(upload_photo "$O2" "$PHOTO1" | jq -er '.photo_storage_key') || fail "upload da foto do O2 falhou"
+deliver_photo "$O2" "$KEY_O2" >/dev/null
+[ "$(query "SELECT status FROM orders WHERE id=${O2}")" = "delivered" ] || fail "a foto certa não fechou a entrega"
+# O hash gravado é o do arquivo (recalculado no servidor), não o "ffff..." que o aparelho mandou.
+[ "$(query "SELECT sha256 FROM delivery_proofs WHERE order_id=${O2}")" = "$(echo "$UP1" | jq -r '.sha256')" ] \
+  || fail "o hash da prova veio do aparelho, não do arquivo"
+
+echo "== 13.3: foto repetida em outra corrida vira sinal de fraude =="
 O3=$(delivering_order cash)
 UP3=$(upload_photo "$O3" "$PHOTO1")
 [ "$(echo "$UP3" | jq -r '.reused')" = "true" ] || fail "a mesma foto em outra corrida passou sem sinal: $UP3"

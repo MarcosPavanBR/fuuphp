@@ -22,8 +22,8 @@ $shifts = $body['shifts'] ?? null;
 // sabe; zero (o padrão) significa "não aceito agendamento", não "cabe zero".
 $slotCapacity = null;
 if (array_key_exists('slot_capacity', $body)) {
-    $slotCapacity = (int) $body['slot_capacity'];
-    if ($slotCapacity < 0 || $slotCapacity > 100) {
+    $slotCapacity = is_int_between($body['slot_capacity'], 0, 100) ? (int) $body['slot_capacity'] : -1;
+    if ($slotCapacity < 0) {
         error_response(422, 'invalid_slot_capacity', 'Capacidade por faixa vai de 0 (sem agendamento) a 100.', fields: ['slot_capacity' => 'inválida']);
     }
 }
@@ -57,7 +57,7 @@ foreach ($shifts as $shift) {
         error_response(422, 'invalid_shift', 'Turno é lunch ou dinner.', fields: ['shifts' => 'inválido']);
     }
     foreach (['opens', 'closes', 'last_order'] as $field) {
-        if (!isset($shift[$field]) || preg_match('/^\d{2}:\d{2}(:\d{2})?$/', (string) $shift[$field]) !== 1) {
+        if (!is_valid_time($shift[$field] ?? null)) {
             error_response(422, 'invalid_time', 'Horário no formato HH:MM.', fields: ["shifts.{$name}.{$field}" => 'inválido']);
         }
     }

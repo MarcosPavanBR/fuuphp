@@ -84,18 +84,55 @@ echo "== addresses/update: id de outro usuário (inexistente aqui) dá 404 =="
 NOTFOUND=$(curl -s -X POST "$BASE/addresses/update.php" -H "Content-Type: application/json" "${AUTH[@]}" -d '{"id":999999,"label":"x"}')
 [ "$(echo "$NOTFOUND" | jq -r '.code')" = "address_not_found" ] || fail "update de endereço inexistente não deu 404: $NOTFOUND"
 
-echo "== addresses/delete: endereço em uso num pedido é barrado (409) =="
+echo "== endereço usado em pedido não muda por baixo do pedido (migração 043) =="
 ITEM_ID=$(psql "$DATABASE_URL" -tAc "SELECT id FROM menu_items WHERE restaurant_id='${RESTAURANT_ID}'")
 curl -s -X POST "$BASE/cart/add_item.php" -H "Content-Type: application/json" "${AUTH[@]}" \
   -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"menu_item_id\":${ITEM_ID},\"quantity\":1}" >/dev/null
-curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: application/json" "${AUTH[@]}" \
-  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR1_ID},\"payment_method\":\"cash\"}" >/dev/null
-IN_USE=$(curl -s -X POST "$BASE/addresses/delete.php" -H "Content-Type: application/json" "${AUTH[@]}" -d "{\"id\":${ADDR1_ID}}")
-[ "$(echo "$IN_USE" | jq -r '.code')" = "address_in_use" ] || fail "apagar endereço em uso não foi barrado: $IN_USE"
+USED_ORDER=$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: application/json" "${AUTH[@]}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR1_ID},\"payment_method\":\"cash\"}" | jq -er '.order.id') \
+  || fail "checkout pra usar o endereço falhou"
+OLD_STREET=$(psql "$DATABASE_URL" -tAc "SELECT street FROM addresses WHERE id=${ADDR1_ID}")
+EDIT=$(curl -s -X POST "$BASE/addresses/update.php" -H "Content-Type: application/json" "${AUTH[@]}" \
+  -d "{\"id\":${ADDR1_ID},\"street\":\"Rua Nova Depois do Pedido\"}")
+NEW_ADDR_ID=$(echo "$EDIT" | jq -er '.address.id') || fail "editar endereço usado falhou: $EDIT"
+[ "$(echo "$EDIT" | jq -r '.replaced_id')" = "${ADDR1_ID}" ] || fail "editar endereço usado não criou versão nova: $EDIT"
+[ "$NEW_ADDR_ID" != "${ADDR1_ID}" ] || fail "a versão nova tem o mesmo id"
+[ "$(psql "$DATABASE_URL" -tAc "SELECT a.street FROM orders o JOIN addresses a ON a.id = o.address_id WHERE o.id=${USED_ORDER}")" = "$OLD_STREET" ] \
+  || fail "o pedido já feito passou a apontar pra rua nova"
+LIST2=$(curl -s "$BASE/addresses/list.php" "${AUTH[@]}")
+[ "$(echo "$LIST2" | jq "[.addresses[] | select(.id == ${ADDR1_ID})] | length")" = "0" ] || fail "a versão antiga continuou na lista: $LIST2"
+[ "$(echo "$LIST2" | jq "[.addresses[] | select(.id == ${NEW_ADDR_ID})] | length")" = "1" ] || fail "a versão nova não apareceu na lista: $LIST2"
+[ "$(curl -s -X POST "$BASE/addresses/update.php" -H "Content-Type: application/json" "${AUTH[@]}" -d "{\"id\":${ADDR1_ID},\"label\":\"x\"}" | jq -r '.code')" = "address_not_found" ] \
+  || fail "deu pra editar a versão arquivada"
 
-echo "== addresses/delete: endereço sem pedido apaga normal =="
+echo "== apagar endereço usado arquiva: some da lista, o pedido continua apontando pra ele =="
+curl -s -X POST "$BASE/cart/add_item.php" -H "Content-Type: application/json" "${AUTH[@]}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"menu_item_id\":${ITEM_ID},\"quantity\":1}" >/dev/null
+ORDER2=$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: application/json" "${AUTH[@]}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${NEW_ADDR_ID},\"payment_method\":\"cash\"}" | jq -er '.order.id') \
+  || fail "checkout com o endereço novo falhou"
+IN_USE=$(curl -s -X POST "$BASE/addresses/delete.php" -H "Content-Type: application/json" "${AUTH[@]}" -d "{\"id\":${NEW_ADDR_ID}}")
+[ "$(echo "$IN_USE" | jq -r '.archived')" = "true" ] || fail "apagar endereço usado não arquivou: $IN_USE"
+[ "$(curl -s "$BASE/addresses/list.php" "${AUTH[@]}" | jq "[.addresses[] | select(.id == ${NEW_ADDR_ID})] | length")" = "0" ] \
+  || fail "o arquivado continuou na lista"
+[ "$(psql "$DATABASE_URL" -tAc "SELECT address_id FROM orders WHERE id=${ORDER2}")" = "${NEW_ADDR_ID}" ] || fail "o pedido perdeu o endereço"
+curl -s -X POST "$BASE/cart/add_item.php" -H "Content-Type: application/json" "${AUTH[@]}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"menu_item_id\":${ITEM_ID},\"quantity\":1}" >/dev/null
+[ "$(curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: application/json" "${AUTH[@]}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${NEW_ADDR_ID},\"payment_method\":\"cash\"}" | jq -r '.code')" = "address_not_found" ] \
+  || fail "endereço arquivado recebeu pedido novo"
+
+echo "== endereço: tipo, tamanho e faixa conferidos antes do banco =="
+BAD=$(curl -s -X POST "$BASE/addresses/create.php" -H "Content-Type: application/json" "${AUTH[@]}" \
+  -d '{"street":["x"],"city":"São Paulo","city_ibge_code":"x","state":"SP","postal_code":"01001000","lat":999,"lng":-46.6}')
+[ "$(echo "$BAD" | jq -r '.fields | has("street") and has("city_ibge_code") and has("lat")')" = "true" ] \
+  || fail "endereço com rua em lista, IBGE inválido e latitude 999 passou: $BAD"
+
+echo "== addresses/delete: endereço sem pedido apaga de verdade =="
 DELETED=$(curl -s -X POST "$BASE/addresses/delete.php" -H "Content-Type: application/json" "${AUTH[@]}" -d "{\"id\":${ADDR2_ID}}")
 [ "$(echo "$DELETED" | jq -r '.deleted')" = "true" ] || fail "endereço sem pedido não apagou: $DELETED"
+[ "$(echo "$DELETED" | jq -r '.archived')" = "false" ] || fail "endereço sem pedido foi só arquivado: $DELETED"
+[ "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM addresses WHERE id=${ADDR2_ID}")" = "0" ] || fail "a linha continuou no banco"
 
 echo "== cards/create: primeiro cartão vira padrão sozinho =="
 CARD1=$(curl -s -X POST "$BASE/cards/create.php" -H "Content-Type: application/json" "${AUTH[@]}" \

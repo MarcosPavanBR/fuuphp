@@ -61,7 +61,7 @@ if ($method === 'POST') {
     if ($closed) {
         error_response(409, 'chat_closed', 'Este chat fechou 2 h depois da entrega. Abra um chamado no suporte.');
     }
-    $text = trim((string) ($body['body'] ?? ''));
+    $text = body_text($body, 'body', 1000) ?? '';
     if ($text === '') {
         error_response(422, 'body_required', 'Escreva alguma coisa.', fields: ['body' => 'obrigatório']);
     }

@@ -48,7 +48,7 @@ idempotent_response($pdo, 'POST /v1/couriers/deliver', $key, $body, function () 
 
     // Prova de entrega: código do cliente OU foto. Sem uma das duas não
     // fecha -- é o que sustenta disputa depois (Fase 14).
-    $code = isset($body['delivery_code']) ? only_digits((string) $body['delivery_code']) : '';
+    $code = isset($body['delivery_code']) && is_scalar($body['delivery_code']) ? only_digits((string) $body['delivery_code']) : '';
     $hasPhoto = isset($body['photo_storage_key']) && $body['photo_storage_key'] !== '';
 
     if ($code === '' && !$hasPhoto) {
@@ -60,9 +60,17 @@ idempotent_response($pdo, 'POST /v1/couriers/deliver', $key, $body, function () 
     if ($code !== '' && !hash_equals((string) $order['delivery_code'], $code)) {
         return [422, ['code' => 'wrong_delivery_code', 'message' => 'Código não confere. Confira com o cliente ou use a foto.']];
     }
+    // A foto tem que ser DESTE pedido e ter chegado no servidor
+    // (lib/dispatch/delivery_photos.php). Texto qualquer fechava a entrega.
+    $photo = $hasPhoto ? verified_delivery_photo($orderId, $body['photo_storage_key']) : null;
+    if ($code === '' && $photo === null) {
+        return [422, ['code' => 'photo_not_found', 'message' => 'A foto da entrega não chegou. Tire e envie de novo.']];
+    }
 
-    $lat = isset($body['lat']) && is_numeric($body['lat']) ? (float) $body['lat'] : null;
-    $lng = isset($body['lng']) && is_numeric($body['lng']) ? (float) $body['lng'] : null;
+    // Coordenada fora da faixa é lixo do GPS: fica sem, em vez de estourar
+    // a coluna numeric (1e30 dava 500 no meio da entrega).
+    $lat = coord_input($body['lat'] ?? null, 90);
+    $lng = coord_input($body['lng'] ?? null, 180);
 
     $pdo->beginTransaction();
     try {
@@ -74,14 +82,11 @@ idempotent_response($pdo, 'POST /v1/couriers/deliver', $key, $body, function () 
             'order_id' => $orderId,
             'courier_id' => $courierId,
             'kind' => $code !== '' ? 'code' : 'photo',
-            'storage_key' => $hasPhoto ? (string) $body['photo_storage_key'] : null,
-            // O hash vem do upload (couriers/incident_photo.php), que o
-            // calculou do conteúdo real. É ele que faz a mesma foto em duas
-            // corridas virar sinal de fraude -- sem isto a coluna sha256 da
-            // migração 015 ficava vazia e a checagem não checava nada.
-            'sha256' => isset($body['photo_sha256']) && preg_match('/^[0-9a-f]{64}$/', (string) $body['photo_sha256']) === 1
-                ? (string) $body['photo_sha256']
-                : null,
+            'storage_key' => $photo['key'] ?? null,
+            // O hash é recalculado aqui, do arquivo gravado pelo upload --
+            // não o que o aparelho diz (photo_sha256 é ignorado). É ele que
+            // faz a mesma foto em duas corridas virar sinal de fraude.
+            'sha256' => $photo['sha256'] ?? null,
             'lat' => $lat,
             'lng' => $lng,
         ]);

@@ -27,12 +27,15 @@ $claims = require_auth();
 $courierId = require_courier($claims);
 $body = read_json_body();
 
-$restaurantId = (string) ($body['restaurant_id'] ?? '');
+$restaurantId = is_string($body['restaurant_id'] ?? null) ? $body['restaurant_id'] : '';
 $method = $body['method'] ?? 'in_person';
-$amount = isset($body['amount']) ? round((float) $body['amount'], 2) : null;
+$amount = isset($body['amount']) ? money_input($body['amount'], 0.01, 100000) : null;
 
-if ($restaurantId === '' || !in_array($method, ['in_person', 'pix'], true)) {
+if (!is_valid_uuid($restaurantId) || !in_array($method, ['in_person', 'pix'], true)) {
     error_response(422, 'invalid_request', 'Informe restaurant_id e method (in_person ou pix).');
+}
+if (isset($body['amount']) && $amount === null) {
+    error_response(422, 'invalid_amount', 'Valor da baixa em reais.', fields: ['amount' => 'inválido']);
 }
 
 $pdo = db();

@@ -135,10 +135,13 @@ export async function printEscpos(base64) {
 export function printInBrowser(title, text) {
   const win = window.open('', '_blank', 'width=420,height=640');
   if (!win) throw new Error('O navegador bloqueou a janela de impressão.');
-  const escaped = text.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+  // Título e texto escapados: os dois podem trazer o que o cliente digitou
+  // (nome, observação do item), e a janela nova roda com a sessão da loja.
+  const esc = (s) =>
+    String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
   win.document.write(
-    `<!doctype html><title>${title}</title><style>@page{margin:4mm}body{margin:0}` +
-      `pre{font:13px/1.35 monospace;white-space:pre;margin:0}</style><pre>${escaped}</pre>`
+    `<!doctype html><title>${esc(title)}</title><style>@page{margin:4mm}body{margin:0}` +
+      `pre{font:13px/1.35 monospace;white-space:pre;margin:0}</style><pre>${esc(text)}</pre>`
   );
   win.document.close();
   win.focus();

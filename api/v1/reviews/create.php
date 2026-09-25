@@ -37,9 +37,24 @@ if ($orderId <= 0) {
 if ($rating < 1 || $rating > 5) {
     error_response(422, 'invalid_rating', 'Nota precisa ser de 1 a 5.', fields: ['rating' => 'inválida']);
 }
-$tags = is_array($body['tags'] ?? null) ? array_values(array_map('strval', $body['tags'])) : [];
-$comment = isset($body['comment']) ? trim((string) $body['comment']) : null;
-$courierTip = isset($body['courier_tip']) ? (float) $body['courier_tip'] : 0.0;
+// Etiquetas: lista curta de textos curtos ("chegou quente"); comentário até
+// 1000 letras. Lista dentro de lista virava "Array" e texto de 10 mil
+// letras ia inteiro pro banco.
+$tags = $body['tags'] ?? [];
+if (!is_array($tags) || count($tags) > 10) {
+    error_response(422, 'invalid_tags', 'Até 10 etiquetas.', fields: ['tags' => 'lista de até 10']);
+}
+foreach ($tags as $tag) {
+    if (!is_string($tag) || mb_strlen($tag) > 40) {
+        error_response(422, 'invalid_tags', 'Etiqueta é um texto de até 40 letras.', fields: ['tags' => 'inválida']);
+    }
+}
+$tags = array_values(array_unique(array_map('trim', $tags)));
+$comment = is_string($body['comment'] ?? null) ? trim($body['comment']) : null;
+if ($comment !== null && mb_strlen($comment) > 1000) {
+    error_response(422, 'comment_too_long', 'O comentário vai até 1000 caracteres.', fields: ['comment' => 'até 1000 caracteres']);
+}
+$courierTip = isset($body['courier_tip']) ? (money_input($body['courier_tip'], 0, 1000000) ?? -1.0) : 0.0;
 // Mesmo teto da gorjeta no pedido (TIP_MAX, lib/ordering/orders.php).
 if (!is_valid_tip($courierTip)) {
     error_response(422, 'invalid_courier_tip', 'Gorjeta inválida (de R$ 0 a R$ 200).', fields: ['courier_tip' => 'de 0 a 200']);

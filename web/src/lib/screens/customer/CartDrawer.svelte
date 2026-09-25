@@ -101,7 +101,7 @@
             <div class="stepper">
               <button type="button" disabled={busyItemId === item.id} onclick={() => changeQty(item, -1)} aria-label="Diminuir">−</button>
               <span>{item.quantity}</span>
-              <button type="button" disabled={busyItemId === item.id} onclick={() => changeQty(item, 1)} aria-label="Aumentar">+</button>
+              <button type="button" disabled={busyItemId === item.id || item.quantity >= 99} onclick={() => changeQty(item, 1)} aria-label="Aumentar">+</button>
             </div>
           </div>
           <p class="line-total fuu-mono">{money(item.line_total)}</p>

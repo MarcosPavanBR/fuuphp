@@ -23,10 +23,11 @@ $restaurantId = $body['restaurant_id'] ?? null;
 $addressId = $body['address_id'] ?? null;
 $paymentMethod = $body['payment_method'] ?? null;
 
-if (!is_string($restaurantId) || $restaurantId === '') {
+if (!is_string($restaurantId) || !is_valid_uuid($restaurantId)) {
     error_response(422, 'restaurant_id_required', 'Informe restaurant_id.', fields: ['restaurant_id' => 'obrigatório']);
 }
-if (!is_int($addressId) && !is_string($addressId)) {
+$addressId = positive_id($addressId);
+if ($addressId === null) {
     error_response(422, 'address_id_required', 'Informe address_id.', fields: ['address_id' => 'obrigatório']);
 }
 if (!in_array($paymentMethod, ['mp_card', 'pix_auto', 'pix_manual', 'cash', 'pos_machine'], true)) {
@@ -54,7 +55,9 @@ if ($restaurant['pause_until'] !== null && strtotime((string) $restaurant['pause
     error_response(409, 'store_paused', 'Essa loja está pausada no momento.', detail: 'volta às ' . $restaurant['pause_until']);
 }
 
-$addressStmt = $pdo->prepare('SELECT id FROM addresses WHERE id = :id AND user_id = :user_id');
+// Arquivado (versão antiga de endereço editado, ou apagado -- migração 043)
+// não recebe pedido novo.
+$addressStmt = $pdo->prepare('SELECT id FROM addresses WHERE id = :id AND user_id = :user_id AND archived_at IS NULL');
 $addressStmt->execute(['id' => $addressId, 'user_id' => $claims['sub']]);
 if ($addressStmt->fetchColumn() === false) {
     error_response(404, 'address_not_found', 'Endereço não encontrado para esse usuário.');
@@ -70,7 +73,11 @@ if ($subtotal < (float) $policy['min_order']) {
     error_response(422, 'below_minimum_order', "Pedido mínimo dessa loja é R$ {$policy['min_order']}.");
 }
 
-$changeFor = isset($body['change_for']) ? (float) $body['change_for'] : null;
+// Troco é número em reais ("x" virava 0; 1e30 estourava a coluna).
+$changeFor = isset($body['change_for']) ? money_input($body['change_for'], 0, 100000) : null;
+if (isset($body['change_for']) && $changeFor === null) {
+    error_response(422, 'invalid_change_for', 'Troco em reais.', fields: ['change_for' => 'inválido']);
+}
 if ($paymentMethod === 'cash' && $changeFor !== null && $changeFor < $subtotal) {
     error_response(422, 'invalid_change_for', 'Troco precisa ser maior ou igual ao subtotal.', fields: ['change_for' => 'inválido']);
 }
@@ -90,7 +97,7 @@ if (!$quote['in_area']) {
     error_response(409, 'out_of_delivery_area', $quote['reason'], detail: 'endereço fora do raio de entrega');
 }
 $deliveryFee = (float) $quote['fee'];
-$tip = isset($body['tip']) ? round((float) $body['tip'], 2) : 0.0;
+$tip = isset($body['tip']) ? (money_input($body['tip'], 0, 1000000) ?? -1.0) : 0.0;
 if (!is_valid_tip($tip)) {
     error_response(422, 'invalid_tip', 'Gorjeta inválida (de R$ 0 a R$ 200).', fields: ['tip' => 'de 0 a 200']);
 }
@@ -142,14 +149,21 @@ if (isset($body['slot']) && is_array($body['slot'])) {
 
 $commission = round($subtotal * $policy['commission_bps'] / 10000, 2);
 
-// Cupom: o desconto já está no carrinho; o que falta é gravar o resgate. O
-// código vem do corpo porque `orders` não tem coluna de cupom -- quem guarda
-// o vínculo é `coupon_redemptions`, criada logo abaixo.
-$couponCode = isset($body['coupon_code']) && trim((string) $body['coupon_code']) !== ''
-    ? strtoupper(trim((string) $body['coupon_code']))
-    : null;
+// Cupom: vale o que o CARRINHO guarda (orders.coupon_id, migração 044), não
+// um código mandado agora. Antes era o código do corpo -- e sem ele o
+// desconto passava sem resgate nenhum (cupom de uso único infinito), e com
+// outro código o desconto somava. O app ainda manda coupon_code: se mandar,
+// tem que ser o mesmo do carrinho.
+$couponId = $cart['coupon_id'] === null ? null : (int) $cart['coupon_id'];
+$couponCode = body_text($body, 'coupon_code', 40);
+if ($couponCode !== null && $couponCode !== '') {
+    $applied = $couponId === null ? null : fetch_coupon($pdo, $couponId);
+    if ($applied === null || strtoupper($couponCode) !== $applied['code']) {
+        error_response(409, 'coupon_not_applied', 'Aplique o cupom no carrinho antes de fechar o pedido.');
+    }
+}
 $customerCpf = null;
-if ($couponCode !== null) {
+if ($couponId !== null) {
     $cpfStmt = $pdo->prepare('SELECT cpf FROM users WHERE id = :id');
     $cpfStmt->execute(['id' => $claims['sub']]);
     $customerCpf = $cpfStmt->fetchColumn();
@@ -187,29 +201,25 @@ try {
     // dinheiro de campanha. A UNIQUE (coupon_id, cpf) e o CHECK
     // `within_budget` fazem o resto -- se o orçamento estourou entre aplicar
     // e fechar, o banco recusa e o checkout inteiro volta atrás.
-    // O desconto do pedido, que o cupom pode ainda mudar abaixo.
-    $discount = (float) $cart['discount'];
+    // O desconto do pedido é o do cupom, recalculado AGORA com o subtotal e o
+    // frete de agora (o carrinho pode ter mudado depois de aplicar).
+    $discount = 0.0;
 
-    if ($couponCode !== null) {
-        $couponStmt = $pdo->prepare('SELECT * FROM coupons WHERE code = :code FOR UPDATE');
-        $couponStmt->execute(['code' => $couponCode]);
-        $coupon = $couponStmt->fetch();
-        if ($coupon === false) {
-            throw new RuntimeException('cupom sumiu entre aplicar e fechar o pedido');
-        }
+    if ($couponId !== null) {
+        $coupon = fetch_coupon($pdo, $couponId, true);
+        $couponAmount = $coupon === null ? 0.0 : coupon_discount($coupon, $subtotal, $deliveryFee);
 
-        // O público da campanha é conferido de novo no fechamento: entre
-        // aplicar e fechar, a pessoa pode ter feito outro pedido e deixado de
-        // ser "primeiro pedido".
-        // Uso conferido de novo aqui, por CPF E por conta: o índice único só
-        // pega o CPF, e o CPF se troca no perfil entre aplicar e fechar.
-        if (coupon_used_by($pdo, (int) $coupon['id'], (string) $customerCpf, (string) $claims['sub'])) {
+        // Tudo conferido de novo no fechamento, com a linha do cupom travada:
+        // prazo, loja, pedido mínimo sobre o subtotal de agora, uso por CPF E
+        // por conta (o CPF se troca no perfil entre aplicar e fechar), público
+        // (a pessoa pode ter feito outro pedido e deixado de ser "primeiro
+        // pedido") e orçamento contando este desconto.
+        $rejection = $coupon === null
+            ? [404, 'coupon_not_found', 'Cupom inválido ou fora do prazo.']
+            : coupon_rejection($pdo, $coupon, $cart, (string) $customerCpf, (string) $claims['sub'], $couponAmount);
+        if ($rejection !== null) {
             $pdo->rollBack();
-            error_response(409, 'coupon_already_used', 'Você já usou esse cupom.');
-        }
-        if (!coupon_audience_includes($pdo, $coupon, (string) $claims['sub'])) {
-            $pdo->rollBack();
-            error_response(409, 'coupon_audience', coupon_audience_message((string) $coupon['audience'], ($coupon['owner_user_id'] ?? null) !== null));
+            error_response(...$rejection);
         }
         // Primeiro pedido é um por ENDEREÇO, não só por CPF (NEG-01): conta
         // nova com CPF gerado não repete o cupom na mesma casa. Fica o sinal
@@ -226,12 +236,7 @@ try {
         // Frete grátis só tem valor agora: no carrinho ainda não há endereço,
         // então o frete era zero e o desconto também. Aqui o frete acabou de
         // ser calculado ($deliveryFee), e é ele que o cupom paga.
-        $couponAmount = $coupon['kind'] === 'free_delivery' ? $deliveryFee : $discount;
-        if ($coupon['kind'] === 'free_delivery' && $couponAmount > 0) {
-            $discount = round($discount + $couponAmount, 2);
-            $pdo->prepare('UPDATE orders SET discount = :d WHERE id = :id')
-                ->execute(['d' => $discount, 'id' => $cart['id']]);
-        }
+        $discount = $couponAmount;
 
         if ($couponAmount > 0) {
             $pdo->prepare(
@@ -258,6 +263,8 @@ try {
                 ->execute(['id' => $coupon['id']]);
         }
     }
+    // Grava o desconto recalculado (e zera o de um carrinho sem cupom).
+    $pdo->prepare('UPDATE orders SET discount = :d WHERE id = :id')->execute(['d' => $discount, 'id' => $cart['id']]);
 
     // Crédito em carteira (tela 13.4): saldo aceito entra sozinho no próximo
     // pedido -- é o que a mensagem de aceite promete. Entra DEPOIS do cupom

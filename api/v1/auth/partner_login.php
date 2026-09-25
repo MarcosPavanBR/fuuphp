@@ -27,7 +27,7 @@ if (!in_array($kind, ['restaurant', 'courier'], true)) {
 
 $loginCode = isset($body['login_code']) ? only_digits((string) $body['login_code']) : '';
 $secret = (string) ($body['secret'] ?? '');
-$deviceId = isset($body['device_id']) ? trim((string) $body['device_id']) : null;
+$deviceId = body_text($body, 'device_id', 100);
 
 if ($kind === 'restaurant' && !is_valid_cnpj($loginCode)) {
     error_response(422, 'invalid_cnpj', 'CNPJ inválido.', fields: ['login_code' => 'inválido']);

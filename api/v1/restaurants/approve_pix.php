@@ -27,8 +27,19 @@ if ($proofId <= 0) {
 if (!in_array($decision, ['approve', 'reject'], true)) {
     error_response(422, 'invalid_decision', 'decision precisa ser "approve" ou "reject".', fields: ['decision' => 'inválido']);
 }
-$countedAmount = isset($body['counted_amount']) ? (float) $body['counted_amount'] : null;
-$reason = isset($body['reason']) ? trim((string) $body['reason']) : null;
+// Valor que a loja viu no comprovante: número de R$ 0 a R$ 100.000, ou
+// nada. Antes, negativo passava e 1e30 dava 500 no meio da transação.
+$countedAmount = null;
+if (isset($body['counted_amount'])) {
+    $countedAmount = money_input($body['counted_amount'], 0, 100000);
+    if ($countedAmount === null) {
+        error_response(422, 'invalid_counted_amount', 'Valor conferido em reais.', fields: ['counted_amount' => 'inválido']);
+    }
+}
+$reason = is_string($body['reason'] ?? null) ? trim($body['reason']) : null;
+if ($reason !== null && mb_strlen($reason) > 300) {
+    error_response(422, 'reason_too_long', 'O motivo vai até 300 caracteres.', fields: ['reason' => 'até 300 caracteres']);
+}
 if ($decision === 'reject' && ($reason === null || $reason === '')) {
     error_response(422, 'reason_required', 'Informe o motivo da recusa — ele aparece pro cliente (Fase 5.4).', fields: ['reason' => 'obrigatório']);
 }

@@ -22,7 +22,7 @@ if (strlen($code) !== 6) {
 }
 
 $phone = isset($body['phone']) ? only_digits((string) $body['phone']) : null;
-$email = isset($body['email']) ? trim((string) $body['email']) : null;
+$email = body_text($body, 'email', 254);
 if ($phone === null && $email === null) {
     error_response(422, 'contact_required', 'Informe phone ou email.');
 }
@@ -104,7 +104,7 @@ $tokens = issue_tokens(
     $pdo,
     (string) $user['id'],
     (string) $user['role'],
-    deviceLabel: isset($body['device_label']) ? (string) $body['device_label'] : null,
+    deviceLabel: body_text($body, 'device_label', 100),
     ip: client_ip()
 );
 

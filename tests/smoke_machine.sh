@@ -143,6 +143,16 @@ SAVED=$(curl -s -X POST "$BASE/restaurants/payment_settings.php" -H "Content-Typ
 [ "$(echo "$SAVED" | jq -r '.settings.max_cash')" = "150.00" ] || fail "teto de dinheiro não gravou: $SAVED"
 [ "$(echo "$SAVED" | jq -r '.settings.max_card_machine')" = "400.00" ] || fail "teto de maquininha não gravou: $SAVED"
 
+echo "== 10.4: salvar com troco máximo e pedido mínimo em branco mantém os de antes =="
+# O app omite o campo vazio. O PostgreSQL confere o NOT NULL antes do ON
+# CONFLICT, então isto dava 500 -- achado pelo fuzz profundo.
+BLANK=$(curl -s -X POST "$BASE/restaurants/payment_settings.php" -H "Content-Type: application/json" "${STAFF_AUTH[@]}" \
+  -d '{"methods":["mp_card","cash","pos_machine"],"max_cash":150,"max_card_machine":400,"min_order":null}')
+[ "$(echo "$BLANK" | jq -r '.settings.max_change')" = "100.00" ] || fail "troco máximo em branco não manteve o anterior: $BLANK"
+[ "$(echo "$BLANK" | jq -r '.settings.min_order')" = "25.00" ] || fail "pedido mínimo em branco não manteve o anterior: $BLANK"
+[ "$(curl -s -X POST "$BASE/restaurants/payment_settings.php" -H "Content-Type: application/json" "${STAFF_AUTH[@]}" \
+   -d '{"methods":["cash"],"max_change":1e30}' | jq -r '.code')" = "invalid_max_change" ] || fail "troco de 1e30 não foi recusado"
+
 echo "== 10.4: cadastrar a maquininha (ela é da loja) =="
 POS1=$(curl -s -X POST "$BASE/restaurants/pos_devices.php" -H "Content-Type: application/json" "${STAFF_AUTH[@]}" \
   -d '{"action":"register","label":"POS-01","acquirer":"stone","serial":"SN-1"}')

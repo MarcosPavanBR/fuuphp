@@ -125,6 +125,13 @@ $methods = $body['methods'] ?? null;
 if (!is_array($methods) || $methods === []) {
     error_response(422, 'methods_required', 'Escolha ao menos uma forma de pagamento.', fields: ['methods' => 'obrigatório']);
 }
+// Lista de códigos (texto): lista dentro da lista dava TypeError (500).
+foreach ($methods as $method) {
+    if (!is_string($method)) {
+        error_response(422, 'unknown_method', 'Forma de pagamento desconhecida.', fields: ['methods' => 'inválido']);
+    }
+}
+$methods = array_values(array_unique($methods));
 
 $allowed = pg_text_array_to_php((string) $policy['enabled_methods']);
 $selectable = $onlineOnly ? array_intersect($allowed, ONLINE_PAYMENT_METHODS) : $allowed;
@@ -147,8 +154,9 @@ $numeric = static function (string $key) use ($body): ?float {
     if (!array_key_exists($key, $body) || $body[$key] === null || $body[$key] === '') {
         return null;
     }
-    if (!is_numeric($body[$key]) || (float) $body[$key] < 0) {
-        error_response(422, 'invalid_' . $key, 'Valor inválido em ' . $key . '.', fields: [$key => 'inválido']);
+    // Teto de sanidade: 1e30 passava no is_numeric e estourava a coluna.
+    if (!is_number_between($body[$key], 0, 100000)) {
+        error_response(422, 'invalid_' . $key, 'Valor inválido em ' . $key . '.', fields: [$key => 'de 0 a 100.000']);
     }
 
     return round((float) $body[$key], 2);
@@ -166,6 +174,17 @@ if ($maxCash !== null && $ceiling !== null && $maxCash > (float) $ceiling) {
     error_response(422, 'above_cash_ceiling', 'O teto de dinheiro da plataforma é R$ ' . number_format((float) $ceiling, 2, ',', '.') . '.', fields: ['max_cash' => 'acima do teto']);
 }
 
+// Troco máximo e pedido mínimo em branco = mantém o que já estava (ou o
+// padrão da coluna, na primeira vez). Tem que ser resolvido AQUI: o
+// PostgreSQL confere o NOT NULL da linha nova antes do ON CONFLICT, então
+// mandar NULL e deixar o COALESCE do UPDATE resolver dava 500 sempre que a
+// loja salvava com um desses campos vazio.
+$current = $pdo->prepare('SELECT max_change, min_order FROM restaurant_payment_settings WHERE restaurant_id = :id');
+$current->execute(['id' => $restaurantId]);
+$currentRow = $current->fetch() ?: ['max_change' => 100.00, 'min_order' => 0];
+$maxChange ??= (float) $currentRow['max_change'];
+$minOrder ??= (float) $currentRow['min_order'];
+
 $stmt = $pdo->prepare(
     'INSERT INTO restaurant_payment_settings
         (restaurant_id, methods, max_cash, max_card_machine, max_change, min_order, updated_by, updated_at)
@@ -173,8 +192,7 @@ $stmt = $pdo->prepare(
      ON CONFLICT (restaurant_id) DO UPDATE
        SET methods = EXCLUDED.methods, max_cash = EXCLUDED.max_cash,
            max_card_machine = EXCLUDED.max_card_machine,
-           max_change = COALESCE(EXCLUDED.max_change, restaurant_payment_settings.max_change),
-           min_order = COALESCE(EXCLUDED.min_order, restaurant_payment_settings.min_order),
+           max_change = EXCLUDED.max_change, min_order = EXCLUDED.min_order,
            updated_by = EXCLUDED.updated_by, updated_at = now()
      RETURNING *'
 );

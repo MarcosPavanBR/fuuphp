@@ -13,15 +13,35 @@ $claims = require_auth();
 $body = read_json_body();
 
 $restaurantId = $body['restaurant_id'] ?? null;
-$menuItemId = (int) ($body['menu_item_id'] ?? 0);
-$quantity = (int) ($body['quantity'] ?? 1);
+$menuItemId = positive_id($body['menu_item_id'] ?? null) ?? 0;
+$quantity = $body['quantity'] ?? 1;
+if (!is_int_between($quantity, 1, CART_MAX_QUANTITY)) {
+    error_response(422, 'invalid_quantity', 'Quantidade de 1 a ' . CART_MAX_QUANTITY . '.', fields: ['quantity' => 'de 1 a ' . CART_MAX_QUANTITY]);
+}
+$quantity = (int) $quantity;
+// variant_ids é LISTA de ids: objeto {"a": 1} virava parâmetro nomeado no
+// PDO e dava 500.
 $rawVariants = $body['variant_ids'] ?? [];
-if (!is_array($rawVariants) || (isset($body['notes']) && !is_string($body['notes']))) {
+if (!is_array($rawVariants) || !array_is_list($rawVariants) || (isset($body['notes']) && !is_string($body['notes']))) {
     error_response(422, 'invalid_request', 'variant_ids precisa ser uma lista e notes, um texto.',
         fields: ['variant_ids' => 'lista de ids', 'notes' => 'texto']);
 }
-$variantIds = array_map('intval', $rawVariants);
+$variantIds = [];
+foreach ($rawVariants as $vid) {
+    $id = positive_id($vid);
+    if ($id === null) {
+        error_response(422, 'invalid_request', 'variant_ids precisa ser uma lista de ids.', fields: ['variant_ids' => 'lista de ids']);
+    }
+    $variantIds[] = $id;
+}
 $notes = isset($body['notes']) ? trim($body['notes']) : null;
+if ($notes !== null && mb_strlen($notes) > CART_NOTES_MAX) {
+    // Vai impressa na comanda: 10 mil letras eram metros de papel.
+    error_response(422, 'notes_too_long', 'A observação vai até ' . CART_NOTES_MAX . ' caracteres.', fields: ['notes' => 'até ' . CART_NOTES_MAX . ' caracteres']);
+}
+if ($notes === '') {
+    $notes = null;
+}
 
 if (!is_string($restaurantId) || !is_valid_uuid($restaurantId)) {
     error_response(422, 'restaurant_id_required', 'Informe um restaurant_id válido.', fields: ['restaurant_id' => 'obrigatório (uuid)']);

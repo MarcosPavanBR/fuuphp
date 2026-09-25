@@ -53,7 +53,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
 require_method('POST');
 $body = read_json_body();
 $accountId = (string) ($body['partner_account_id'] ?? '');
-$reason = trim((string) ($body['reason'] ?? ''));
+$reason = body_text($body, 'reason', 300) ?? '';
 if (!is_valid_uuid($accountId)) {
     error_response(422, 'invalid_request', 'Informe partner_account_id.');
 }

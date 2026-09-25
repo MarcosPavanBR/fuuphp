@@ -1,5 +1,5 @@
 <script>
-  import { api, ApiError } from '../../services/api.js';
+  import { api } from '../../services/api.js';
   import { toastr } from '../../utils/toastr.js';
 
   // Telas 6.1 (endereços salvos) e 14.3 (novo endereço com mapa).
@@ -252,10 +252,8 @@
       toastr.success('Endereço removido');
       await load();
     } catch (e) {
-      const message = e instanceof ApiError && e.code === 'address_in_use'
-        ? 'Esse endereço já foi usado num pedido e não pode ser apagado.'
-        : (e.message ?? 'Não deu pra apagar o endereço.');
-      toastr.error(message);
+      // Endereço usado em pedido é arquivado, não recusado (migração 043).
+      toastr.error(e.message ?? 'Não deu pra apagar o endereço.');
     }
   }
 </script>

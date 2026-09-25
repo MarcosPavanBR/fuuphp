@@ -57,6 +57,7 @@ Criada em `db/migrations/002_catalog.up.sql`. Da migração: restaurants, restau
 | `is_default` | boolean (padrão) |  |  |
 | `created_at` | timestamp with time zone (padrão) |  |  |
 | `reference` | text | sim |  |
+| `archived_at` | timestamp with time zone | sim |  |
 
 ## admin_totp
 
@@ -606,6 +607,7 @@ Criada em `db/migrations/004_ordering.up.sql`. Da migração: orders, order_item
 | `delivery_code` | character (padrão) |  |  |
 | `pickup_by_customer` | boolean (padrão) |  |  |
 | `no_courier_since` | timestamp with time zone | sim |  |
+| `coupon_id` | bigint | sim | `coupons.id` |
 
 ## otp_codes
 

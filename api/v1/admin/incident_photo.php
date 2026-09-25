@@ -31,8 +31,7 @@ if (!is_string($key) || $key === '') {
     error_response(404, 'photo_not_found', 'Essa ocorrência não tem foto (ou ela já passou do prazo de retenção).');
 }
 
-$storageDir = rtrim((string) env('PROOF_STORAGE_DIR', 'storage/proofs'), '/') . '/delivery';
-$absoluteDir = app_path($storageDir);
+$absoluteDir = delivery_photo_dir();
 // basename(): a chave é gerada pelo servidor, mas o arquivo é lido do disco.
 $path = $absoluteDir . '/' . basename($key);
 if (!is_file($path)) {

@@ -14,9 +14,9 @@ contrato público: mudar um caminho quebra app instalado.
 
 | Rota | Métodos | Quem | Idem. | O que faz |
 |---|---|---|---|---|
-| `/api/v1/addresses/create.php` | POST | autenticado |  | Tela 6.1/14.3 — cadastra um endereço do cliente logado. CEP de 8 dígitos, UF de 2 letras e coordenada obrigatórias: é a coordenada que o frete e a área de entrega usam (lib/ordering/delivery.php). |
-| `/api/v1/addresses/delete.php` | POST | autenticado |  | Tela 6.1 — apaga um endereço do cliente logado. Endereço já usado em pedido não apaga (409 address_in_use): o pedido guarda pra onde foi, e a chave estrangeira impede que o histórico perca o destino. |
-| `/api/v1/addresses/list.php` | GET | autenticado |  | Tela 6.1 — os endereços salvos do cliente logado, o padrão primeiro. |
+| `/api/v1/addresses/create.php` | POST | autenticado |  | Tela 6.1/14.3 — cadastra um endereço do cliente logado. CEP de 8 dígitos, UF de 2 letras, código IBGE de 7 dígitos e coordenada obrigatórios: é a coordenada que o frete e a área de entrega usam (lib/ordering/delivery.php). A validação é a mesma da edição (a… |
+| `/api/v1/addresses/delete.php` | POST | autenticado |  | Tela 6.1 — apaga um endereço do cliente logado. |
+| `/api/v1/addresses/list.php` | GET | autenticado |  | Tela 6.1 — os endereços salvos do cliente logado, o padrão primeiro. Os arquivados (versão antiga de um endereço editado depois de usado, ou apagado depois de usado -- migração 043) ficam de fora: só os pedidos antigos apontam pra eles. |
 | `/api/v1/addresses/quote.php` | GET | autenticado |  | Tela 14.3 — "A área de cobertura é validada no servidor e a taxa aparece antes de salvar — não na hora de pagar." |
 | `/api/v1/addresses/update.php` | POST | autenticado |  | Tela 6.1 — Endereços salvos. "CRUD com endereço padrão." Edição parcial (só os campos mandados mudam) e troca de padrão: marcar um endereço como is_default=true desmarca os outros do mesmo usuário na mesma transação -- nunca dois padrões ao mesmo tempo, sem… |
 

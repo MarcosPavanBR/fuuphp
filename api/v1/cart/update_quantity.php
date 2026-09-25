@@ -11,15 +11,16 @@ require_method('POST');
 $claims = require_auth();
 $body = read_json_body();
 
-$orderItemId = (int) ($body['order_item_id'] ?? 0);
-$quantity = (int) ($body['quantity'] ?? 0);
+$orderItemId = positive_id($body['order_item_id'] ?? null);
+$quantity = $body['quantity'] ?? 0;
 
-if ($orderItemId <= 0) {
+if ($orderItemId === null) {
     error_response(422, 'order_item_id_required', 'Informe order_item_id.');
 }
-if ($quantity < 1) {
-    error_response(422, 'invalid_quantity', 'Quantidade precisa ser pelo menos 1 (use remove_item.php pra tirar o item).');
+if (!is_int_between($quantity, 1, CART_MAX_QUANTITY)) {
+    error_response(422, 'invalid_quantity', 'Quantidade de 1 a ' . CART_MAX_QUANTITY . ' (use remove_item.php pra tirar o item).');
 }
+$quantity = (int) $quantity;
 
 $pdo = db();
 

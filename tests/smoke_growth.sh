@@ -258,4 +258,51 @@ LATE=$(curl -s -X POST "$BASE/cart/apply_coupon.php" -H "Content-Type: applicati
   -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"code\":\"${COUPON_CODE}\"}")
 [ "$(echo "$LATE" | jq -r '.code')" != "null" ] || fail "cupom esgotado ainda foi aplicado: $LATE"
 
+echo "== cupom: vale o que o carrinho guarda, não um código mandado ao fechar (migração 044) =="
+# Antes: sem coupon_code no checkout o desconto passava e o resgate não era
+# gravado -- cupom de uso único usado quantas vezes quisesse, orçamento
+# intocado, custo fora do livro. Reproduzido antes de corrigir.
+REUSE_CODE="REUSO${RANDOM}"
+curl -s -X POST "$BASE/admin/campaigns.php" -H "Content-Type: application/json" "${AADMIN[@]}" \
+  -d "{\"code\":\"${REUSE_CODE}\",\"kind\":\"fixed\",\"value\":10,\"min_order\":30,\"audience\":\"all\",\"payer\":\"platform\",\"budget_cap\":1000}" \
+  | jq -e '.coupon.code' >/dev/null || fail "não criou a campanha de reuso"
+BUYER3=$(login_otp "119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))" "Cliente Reuso")
+B3=(-H "Authorization: Bearer $BUYER3")
+curl -s -X POST "$BASE/profile/update.php" -H "Content-Type: application/json" "${B3[@]}" -d "{\"cpf\":\"$(gen_cpf)\"}" >/dev/null
+ADDR3=$(curl -s -X POST "$BASE/addresses/create.php" -H "Content-Type: application/json" "${B3[@]}" \
+  -d '{"street":"Rua Reuso","city":"São Paulo","city_ibge_code":"3550308","state":"SP","postal_code":"01001000","lat":-23.55,"lng":-46.63}' | jq -er '.id')
+add_item3() { curl -s -X POST "$BASE/cart/add_item.php" -H "Content-Type: application/json" "${B3[@]}" -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"menu_item_id\":$1,\"quantity\":1}"; }
+apply3() { curl -s -X POST "$BASE/cart/apply_coupon.php" -H "Content-Type: application/json" "${B3[@]}" -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"code\":\"$1\"}"; }
+checkout3() { curl -s -X POST "$BASE/orders/checkout.php" -H "Content-Type: application/json" "${B3[@]}" \
+  -d "{\"restaurant_id\":\"${RESTAURANT_ID}\",\"address_id\":${ADDR3},\"payment_method\":\"cash\",\"change_for\":200${1:-}}"; }
+
+add_item3 "$ITEM_ID" >/dev/null
+[ "$(apply3 "$REUSE_CODE" | jq -r '.cart.discount')" = "10.00" ] || fail "cupom de reuso não aplicou"
+NOCODE=$(checkout3)   # SEM coupon_code, como o app faz quando a gaveta do carrinho foi reaberta
+[ "$(echo "$NOCODE" | jq -r '.order.discount')" = "10.00" ] || fail "o desconto do carrinho sumiu no fechamento: $NOCODE"
+[ "$(query "SELECT count(*) FROM coupon_redemptions cr JOIN coupons c ON c.id = cr.coupon_id WHERE c.code='${REUSE_CODE}'")" = "1" ] \
+  || fail "fechou com desconto sem gravar o resgate (cupom de uso único vira infinito)"
+[ "$(query "SELECT spent FROM coupons WHERE code='${REUSE_CODE}'")" = "10.00" ] || fail "o orçamento da campanha não foi consumido"
+[ "$(query "SELECT count(*) FROM ledger_entries WHERE origin='coupon' AND order_id=$(echo "$NOCODE" | jq -r '.order.id')")" != "0" ] \
+  || fail "o custo do cupom ficou fora do livro"
+add_item3 "$ITEM_ID" >/dev/null
+[ "$(apply3 "$REUSE_CODE" | jq -r '.code')" = "coupon_already_used" ] || fail "o mesmo cupom foi aplicado de novo"
+
+echo "== fechar com um código que não é o do carrinho é recusado (era desconto em dobro) =="
+[ "$(checkout3 ",\"coupon_code\":\"${REUSE_CODE}\"" | jq -r '.code')" = "coupon_not_applied" ] \
+  || fail "aceitou no fechamento um cupom que não está no carrinho"
+
+echo "== tirar itens depois de aplicar: abaixo do mínimo o desconto some e o fechamento explica =="
+CHEAP_ID=$(query "INSERT INTO menu_items (restaurant_id, name, price, category, available) VALUES ('${RESTAURANT_ID}', 'Água Cupom', 5.00, 'Bebidas', true) RETURNING id" | head -1)
+MIN_CODE="MINIMO${RANDOM}"
+curl -s -X POST "$BASE/admin/campaigns.php" -H "Content-Type: application/json" "${AADMIN[@]}" \
+  -d "{\"code\":\"${MIN_CODE}\",\"kind\":\"percent\",\"value\":10,\"min_order\":30,\"audience\":\"all\",\"payer\":\"platform\",\"budget_cap\":1000}" >/dev/null
+# O carrinho de agora tem o item principal (sobrou do "aplicado de novo" acima).
+[ "$(apply3 "$MIN_CODE" | jq -r '.coupon.code')" = "${MIN_CODE}" ] || fail "cupom percentual não aplicou"
+LINE=$(curl -s "$BASE/cart/show.php?restaurant_id=${RESTAURANT_ID}" "${B3[@]}" | jq -r '.items[0].id')
+curl -s -X POST "$BASE/cart/remove_item.php" -H "Content-Type: application/json" "${B3[@]}" -d "{\"order_item_id\":${LINE}}" >/dev/null
+SHRUNK=$(add_item3 "$CHEAP_ID")
+[ "$(echo "$SHRUNK" | jq -r '.order.discount')" = "0.00" ] || fail "desconto ficou num carrinho abaixo do mínimo do cupom: $SHRUNK"
+[ "$(checkout3 | jq -r '.code')" = "coupon_min_order" ] || fail "fechou abaixo do pedido mínimo do cupom"
+
 echo "OK: entrada de entregador (15.2) e campanhas (15.3) passaram no smoke test"

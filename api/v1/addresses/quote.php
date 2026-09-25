@@ -22,8 +22,8 @@ $pdo = db();
 // lat/lng que a tela ainda está montando.
 $address = null;
 if (isset($_GET['address_id'])) {
-    $stmt = $pdo->prepare('SELECT id, lat, lng, city_ibge_code FROM addresses WHERE id = :id AND user_id = :uid');
-    $stmt->execute(['id' => (int) $_GET['address_id'], 'uid' => $claims['sub']]);
+    $stmt = $pdo->prepare('SELECT id, lat, lng, city_ibge_code FROM addresses WHERE id = :id AND user_id = :uid AND archived_at IS NULL');
+    $stmt->execute(['id' => positive_id($_GET['address_id']) ?? 0, 'uid' => $claims['sub']]);
     $address = $stmt->fetch();
     if ($address === false) {
         error_response(404, 'address_not_found', 'Endereço não encontrado.');
@@ -31,19 +31,22 @@ if (isset($_GET['address_id'])) {
 } else {
     $lat = $_GET['lat'] ?? null;
     $lng = $_GET['lng'] ?? null;
-    if (!is_numeric($lat) || !is_numeric($lng)) {
+    if (!is_number_between($lat, -90, 90) || !is_number_between($lng, -180, 180)) {
         error_response(422, 'point_required', 'Informe address_id, ou lat e lng.', fields: ['lat' => 'obrigatório', 'lng' => 'obrigatório']);
     }
     $address = [
         'lat' => (float) $lat,
         'lng' => (float) $lng,
-        'city_ibge_code' => isset($_GET['city_ibge_code']) ? (string) $_GET['city_ibge_code'] : null,
+        'city_ibge_code' => is_valid_ibge($_GET['city_ibge_code'] ?? null) ? $_GET['city_ibge_code'] : null,
     ];
 }
 
 $restaurantId = $_GET['restaurant_id'] ?? null;
 
-if (is_string($restaurantId) && $restaurantId !== '') {
+if ($restaurantId !== null && $restaurantId !== '') {
+    if (!is_string($restaurantId) || !is_valid_uuid($restaurantId)) {
+        error_response(404, 'restaurant_not_found', 'Loja não encontrada.');
+    }
     $restStmt = $pdo->prepare('SELECT id, name, lat, lng, prep_minutes, prep_auto_bump FROM restaurants WHERE id = :id');
     $restStmt->execute(['id' => $restaurantId]);
     $restaurant = $restStmt->fetch();

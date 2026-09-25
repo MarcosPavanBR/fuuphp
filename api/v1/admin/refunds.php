@@ -88,7 +88,7 @@ $body = read_json_body();
 $refundId = (int) ($body['refund_id'] ?? 0);
 $action = (string) ($body['action'] ?? 'refund');
 $adjustment = (string) ($body['fee_adjustment'] ?? 'keep');
-$note = isset($body['note']) ? trim((string) $body['note']) : null;
+$note = body_text($body, 'note', 500);
 
 if ($refundId <= 0 || !in_array($action, ['refund', 'wallet_offer', 'execute', 'confirm_manual'], true)) {
     error_response(422, 'invalid_request', 'Informe refund_id e action (refund, wallet_offer, execute ou confirm_manual).');
@@ -120,7 +120,7 @@ if ($action === 'execute') {
 // adquirente. A referência é obrigatória -- é ela que se apresenta quando o
 // cliente disser que não recebeu.
 if ($action === 'confirm_manual') {
-    $ref = trim((string) ($body['provider_ref'] ?? ''));
+    $ref = body_text($body, 'provider_ref', 100) ?? '';
     if ($ref === '') {
         error_response(422, 'provider_ref_required', 'Informe o identificador (E2E do Pix, protocolo da adquirente).', fields: ['provider_ref' => 'obrigatório']);
     }
@@ -134,11 +134,11 @@ if (!array_key_exists($adjustment, REFUND_FEE_ADJUSTMENTS)) {
     error_response(422, 'invalid_adjustment', 'Ajuste da taxa inválido: perdoar, metade ou manter.', fields: ['fee_adjustment' => 'inválido']);
 }
 
-$bonus = isset($body['bonus']) && is_numeric($body['bonus'])
-    ? round((float) $body['bonus'], 2)
-    : WALLET_BONUS_DEFAULT;
-if ($bonus < 0) {
-    error_response(422, 'invalid_bonus', 'O bônus não pode ser negativo.', fields: ['bonus' => 'inválido']);
+// Bônus é crédito dado ao cliente: número de 0 a R$ 1.000 (teto contra
+// zero a mais digitado, não regra de negócio; 1e30 dava 500 no banco).
+$bonus = isset($body['bonus']) ? money_input($body['bonus'], 0, 1000) : WALLET_BONUS_DEFAULT;
+if ($bonus === null) {
+    error_response(422, 'invalid_bonus', 'O bônus vai de R$ 0 a R$ 1.000.', fields: ['bonus' => 'inválido']);
 }
 
 $pdo->beginTransaction();

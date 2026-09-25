@@ -15,7 +15,8 @@ $body = read_json_body();
 
 $orderId = (int) ($body['order_id'] ?? 0);
 $to = $body['to'] ?? null;
-$reason = isset($body['reason']) ? (string) $body['reason'] : null;
+// O motivo aparece pro cliente e vai pro histórico do pedido: texto curto.
+$reason = body_text($body, 'reason', 300);
 
 if ($orderId <= 0 || !is_string($to)) {
     error_response(422, 'invalid_request', 'Informe order_id e to.');

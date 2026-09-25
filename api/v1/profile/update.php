@@ -27,7 +27,7 @@ $userId = (string) $claims['sub'];
 $updates = [];
 
 if (array_key_exists('full_name', $body)) {
-    $fullName = trim((string) $body['full_name']);
+    $fullName = body_text($body, 'full_name', 120) ?? '';
     if ($fullName === '') {
         error_response(422, 'full_name_required', 'Nome completo é obrigatório.', fields: ['full_name' => 'obrigatório']);
     }
@@ -35,7 +35,7 @@ if (array_key_exists('full_name', $body)) {
 }
 
 if (array_key_exists('email', $body)) {
-    $email = $body['email'] === null ? null : trim((string) $body['email']);
+    $email = $body['email'] === null ? null : body_text($body, 'email', 254) ?? '';
     if ($email !== null && !is_valid_email($email)) {
         error_response(422, 'invalid_email', 'E-mail inválido.', fields: ['email' => 'inválido']);
     }

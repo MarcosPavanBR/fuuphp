@@ -54,7 +54,7 @@ require_method('POST');
 $body = read_json_body();
 
 $disputeId = (int) ($body['dispute_id'] ?? 0);
-$resolution = trim((string) ($body['resolution'] ?? ''));
+$resolution = body_text($body, 'resolution', 1000) ?? '';
 $charge = $body['charge'] ?? null; // 'courier' | 'store' | 'platform' | null
 
 if ($disputeId <= 0 || $resolution === '') {

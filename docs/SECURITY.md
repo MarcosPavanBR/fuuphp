@@ -160,9 +160,41 @@ migração 042
   - um uso por CPF **e** por conta (trocar o CPF no perfil não libera o
     cupom de novo: `coupon_used_by`, decisão 38);
   - cupom criado pela loja é sempre pago por ela (CHECK da migração 031) e
-    fica dentro do teto que a plataforma libera.
+    fica dentro do teto que a plataforma libera;
+  - o carrinho guarda **qual** cupom foi aplicado (`orders.coupon_id`,
+    migração 044). O checkout usa esse, não um código mandado na hora, e
+    confere tudo de novo com o subtotal do momento: prazo, loja, pedido
+    mínimo, uso, público e orçamento (`coupon_rejection`). Antes, fechar sem
+    o código dava o desconto sem registrar o uso (decisão 46).
+- **Valores em reais vindos da requisição** passam por `money_input()`:
+  número de verdade, dentro de uma faixa. `(float) "x"` virava 0 e 1e30
+  estourava a coluna (decisão 46).
+- **Prova de entrega por foto:** a foto tem que ser do pedido e ter chegado
+  no servidor, e o hash é recalculado do arquivo
+  (`lib/dispatch/delivery_photos.php`). Antes, qualquer texto fechava a
+  entrega sem código.
 - Testes: `smoke_payments.sh`, `smoke_money.sh`, `smoke_support.sh`,
-  `smoke_store_coupons.sh`, `smoke_courier.sh`.
+  `smoke_store_coupons.sh`, `smoke_courier.sh`, `smoke_growth.sh`,
+  `smoke_incident.sh`.
+
+## Entrada ruim (fuzz)
+
+- **`smoke_fuzz.sh`:** lixo em todas as rotas, com ids que não existem, pra
+  cada papel.
+- **`smoke_fuzz_deep.sh`:** parte de um corpo válido, sobre registros que
+  existem de verdade (pedido em rota, entregue, aguardando pagamento,
+  comprovante pendente...), e troca um campo por vez por 16 valores ruins:
+  lista, objeto, número gigante, caractere nulo, texto de 10 mil letras,
+  data e hora impossíveis. São cerca de 5.600 chamadas.
+- Regra dos dois: nenhuma resposta 5xx. Entrada ruim é 4xx, com o campo
+  marcado.
+- **Validadores comuns** ficam em `lib/core/validation.php`:
+  - `body_text` (texto com tipo e tamanho);
+  - `money_input` e `coord_input`;
+  - `is_valid_date` e `is_valid_time`;
+  - `is_int_between` e `positive_id`.
+- **Caractere nulo** é recusado pra todas as rotas de uma vez, no corpo e
+  na query (`read_json_body`, `reject_nul_in_query`).
 
 ## Arquivos enviados
 

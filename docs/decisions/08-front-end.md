@@ -386,11 +386,10 @@ web/
   com badge "PADRÃO" pros outros, botão "Tornar padrão" pro resto — o
   botão chama `addresses/update.php`/`cards/update.php` com só
   `is_default: true`, o backend cuida de desmarcar o resto.
-- **Apagar endereço em uso mostra a mensagem certa, não um erro genérico**
-  — `AddressesScreen.svelte` reconhece especificamente o código
-  `address_in_use` (409) e troca a mensagem por algo que explica o motivo
-  (endereço já usado num pedido), em vez de deixar o texto cru do backend
-  ou um "erro desconhecido".
+- **Apagar endereço já usado em pedido funciona** — desde a migração 043
+  o servidor arquiva em vez de recusar (antes era 409 `address_in_use`, e
+  a tela explicava o motivo). Some da lista; os pedidos antigos continuam
+  apontando pra ele ([decisão 46](46-fuzz-profundo.md)).
 - **Configurações são preferência real de aparelho (localStorage), não
   decorativas** — os três toggles de notificação persistem entre reloads
   deste navegador. Não viram push de verdade ainda (Fase 7.2 não

@@ -36,9 +36,10 @@ if ($order['courier_id'] !== $courierId) {
 }
 
 $meta = ['event' => $event];
-foreach (['lat', 'lng'] as $coord) {
-    if (isset($body[$coord]) && is_numeric($body[$coord])) {
-        $meta[$coord] = (float) $body[$coord];
+foreach (['lat' => 90, 'lng' => 180] as $coord => $limit) {
+    $value = coord_input($body[$coord] ?? null, $limit);
+    if ($value !== null) {
+        $meta[$coord] = $value;
     }
 }
 

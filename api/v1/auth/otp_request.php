@@ -18,7 +18,7 @@ if (!in_array($purpose, ['login', 'signup', 'phone_verify'], true)) {
 }
 
 $phone = isset($body['phone']) ? only_digits((string) $body['phone']) : null;
-$email = isset($body['email']) ? trim((string) $body['email']) : null;
+$email = body_text($body, 'email', 254);
 
 if ($phone === null && $email === null) {
     error_response(422, 'contact_required', 'Informe phone ou email.', fields: ['phone' => 'obrigatório (ou email)']);
@@ -76,7 +76,7 @@ if ($purpose === 'login') {
     if ($existingUserId !== false) {
         $userId = (string) $existingUserId;
     } else {
-        $fullName = trim((string) ($body['full_name'] ?? ''));
+        $fullName = body_text($body, 'full_name', 120) ?? '';
         if ($fullName === '') {
             error_response(422, 'full_name_required', 'Nome completo é obrigatório para cadastro.', fields: ['full_name' => 'obrigatório']);
         }

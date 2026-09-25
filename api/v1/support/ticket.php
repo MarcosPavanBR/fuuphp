@@ -23,11 +23,11 @@ if (($claims['role'] ?? null) !== 'customer') {
 $body = read_json_body();
 
 $category = $body['category'] ?? '';
-if (!array_key_exists($category, SUPPORT_SLA_MINUTES)) {
+if (!is_string($category) || !array_key_exists($category, SUPPORT_SLA_MINUTES)) {
     error_response(422, 'invalid_category', 'Categoria de chamado desconhecida.', fields: ['category' => 'inválida']);
 }
 
-$message = trim((string) ($body['message'] ?? ''));
+$message = is_string($body['message'] ?? null) ? trim($body['message']) : '';
 if ($message === '') {
     error_response(422, 'message_required', 'Conta o que aconteceu — é o que o atendente lê primeiro.', fields: ['message' => 'obrigatório']);
 }

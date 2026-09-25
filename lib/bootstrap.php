@@ -67,6 +67,7 @@ require_once __DIR__ . '/ledger/netting.php';
 // ── entrega: despacho em rodadas, ocorrências ──────────────────────────
 require_once __DIR__ . '/dispatch/dispatch.php';
 require_once __DIR__ . '/dispatch/incidents.php';
+require_once __DIR__ . '/dispatch/delivery_photos.php';
 
 // ── mensagens: push, notificações, suporte ─────────────────────────────
 require_once __DIR__ . '/messaging/push.php';
@@ -79,6 +80,7 @@ require_once __DIR__ . '/printing/escpos.php';
 require_once __DIR__ . '/printing/documents.php';
 
 // ── conta: privacidade (LGPD) e fidelidade ──────────────────────────────────────────
+require_once __DIR__ . '/account/addresses.php';
 require_once __DIR__ . '/account/account_privacy.php';
 require_once __DIR__ . '/account/loyalty.php';
 
@@ -118,6 +120,11 @@ set_exception_handler(static function (Throwable $e): void {
     );
     error_response(500, 'internal_error', 'Erro interno. Tente novamente em instantes.');
 });
+
+// Caractere nulo na query string nunca chega numa rota (lib/core/response.php).
+if (PHP_SAPI !== 'cli') {
+    reject_nul_in_query();
+}
 
 /**
  * Encerra com 405 se o método HTTP não for o esperado pela rota.

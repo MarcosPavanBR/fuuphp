@@ -25,6 +25,11 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 // pedido de verdade pra referenciar). Aqui é aplicação no carrinho, e o
 // carrinho ainda pode ser abandonado -- reservar orçamento agora seria
 // segurar dinheiro que ninguém gastou.
+//
+// O carrinho guarda QUAL cupom foi aplicado (orders.coupon_id, migração
+// 044), e o checkout confere tudo de novo com ele -- não com um código que o
+// app mande na hora de fechar. As regras moram em lib/ordering/coupons.php
+// (coupon_rejection, coupon_discount), as mesmas nos dois momentos.
 
 require_method('POST');
 $claims = require_auth();
@@ -33,8 +38,8 @@ if (($claims['role'] ?? null) !== 'customer') {
 }
 $body = read_json_body();
 
-$restaurantId = (string) ($body['restaurant_id'] ?? '');
-$code = strtoupper(trim((string) ($body['code'] ?? '')));
+$restaurantId = is_string($body['restaurant_id'] ?? null) ? $body['restaurant_id'] : '';
+$code = strtoupper(body_text($body, 'code', 40) ?? '');
 
 if (!is_valid_uuid($restaurantId)) {
     error_response(422, 'restaurant_id_required', 'Informe um restaurant_id válido.', fields: ['restaurant_id' => 'obrigatório (uuid)']);
@@ -53,7 +58,7 @@ if ($cart === false) {
 
 // Código vazio remove o cupom -- o mesmo endpoint desfaz, sem rota nova.
 if ($code === '') {
-    $pdo->prepare('UPDATE orders SET discount = 0 WHERE id = :id')->execute(['id' => $cart['id']]);
+    $pdo->prepare('UPDATE orders SET discount = 0, coupon_id = NULL WHERE id = :id')->execute(['id' => $cart['id']]);
     json_response(200, ['cart' => fetch_order($pdo, (int) $cart['id']), 'coupon' => null]);
 }
 
@@ -64,58 +69,22 @@ if (!is_string($cpf) || $cpf === '') {
     error_response(409, 'cpf_required', 'Cupom exige CPF no cadastro — é um uso por CPF, não por conta.');
 }
 
-$couponStmt = $pdo->prepare(
-    "SELECT * FROM coupons
-     WHERE code = :code AND active
-       AND starts_at <= now() AND (ends_at IS NULL OR ends_at > now())"
-);
-$couponStmt->execute(['code' => $code]);
-$coupon = $couponStmt->fetch();
-if ($coupon === false) {
+$coupon = fetch_coupon($pdo, $code);
+if ($coupon === null) {
     error_response(404, 'coupon_not_found', 'Cupom inválido ou fora do prazo.');
 }
-if ($coupon['restaurant_id'] !== null && $coupon['restaurant_id'] !== $restaurantId) {
-    error_response(409, 'coupon_other_store', 'Esse cupom é de outra loja.');
-}
-
-$subtotal = (float) $cart['subtotal'];
-if ($subtotal < (float) $coupon['min_order']) {
-    error_response(409, 'coupon_min_order', sprintf(
-        'Esse cupom vale a partir de R$ %s em itens.',
-        number_format((float) $coupon['min_order'], 2, ',', '.')
-    ));
-}
-
-if (coupon_used_by($pdo, (int) $coupon['id'], (string) $cpf, (string) $claims['sub'])) {
-    error_response(409, 'coupon_already_used', 'Você já usou esse cupom.');
-}
-
-// O público da campanha (tela 15.3: primeiro pedido, inativos há 15/30 dias)
-// era só usado pra PROJETAR o alcance -- qualquer pessoa resgatava. Agora é
-// a mesma condição (lib/ordering/coupons.php) que conta o público e barra.
-if (!coupon_audience_includes($pdo, $coupon, (string) $claims['sub'])) {
-    error_response(409, 'coupon_audience', coupon_audience_message((string) $coupon['audience'], ($coupon['owner_user_id'] ?? null) !== null));
-}
-
-if ((float) $coupon['spent'] >= (float) $coupon['budget_cap']) {
-    error_response(409, 'coupon_exhausted', 'Esse cupom acabou (orçamento da campanha esgotou).');
+$rejection = coupon_rejection($pdo, $coupon, $cart, (string) $cpf, (string) $claims['sub']);
+if ($rejection !== null) {
+    error_response(...$rejection);
 }
 
 // free_delivery: no carrinho ainda não há endereço, então não há frete pra
 // descontar -- o desconto sai 0 aqui e é aplicado no checkout, sobre o frete
 // calculado (orders/checkout.php). A resposta avisa com `applies_at`.
-$discount = match ($coupon['kind']) {
-    'fixed' => (float) $coupon['value'],
-    'percent' => round($subtotal * (float) $coupon['value'] / 100, 2),
-    'free_delivery' => (float) $cart['delivery_fee'],
-    default => 0.0,
-};
-// Desconto nunca passa do subtotal: cupom não vira crédito nem paga o frete
-// de quem não pediu nada.
-$discount = min($discount, $subtotal);
+$discount = coupon_discount($coupon, (float) $cart['subtotal']);
 
-$pdo->prepare('UPDATE orders SET discount = :d WHERE id = :id')
-    ->execute(['d' => $discount, 'id' => $cart['id']]);
+$pdo->prepare('UPDATE orders SET discount = :d, coupon_id = :c WHERE id = :id')
+    ->execute(['d' => $discount, 'c' => $coupon['id'], 'id' => $cart['id']]);
 
 json_response(200, [
     'cart' => fetch_order($pdo, (int) $cart['id']),

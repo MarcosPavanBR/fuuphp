@@ -28,16 +28,16 @@ const STORE_SIGNUPS_PER_IP_PER_DAY = 3;
 const STORE_PASSWORD_MIN_LENGTH = 8;
 const PARTNER_TERMS_VERSION = '2026-09-01';
 
-$name = trim((string) ($body['name'] ?? ''));
+$name = body_text($body, 'name', 120) ?? '';
 $cnpj = only_digits((string) ($body['cnpj'] ?? ''));
 $category = (string) ($body['category'] ?? '');
 $city = only_digits((string) ($body['city_ibge_code'] ?? ''));
-$address = trim((string) ($body['address'] ?? ''));
-$contactName = trim((string) ($body['contact_name'] ?? ''));
+$address = body_text($body, 'address', 300) ?? '';
+$contactName = body_text($body, 'contact_name', 120) ?? '';
 $contactPhone = only_digits((string) ($body['contact_phone'] ?? ''));
-$email = strtolower(trim((string) ($body['email'] ?? '')));
+$email = strtolower(body_text($body, 'email', 254) ?? '');
 $password = (string) ($body['password'] ?? '');
-$pixKeyRaw = trim((string) ($body['pix_key'] ?? ''));
+$pixKeyRaw = body_text($body, 'pix_key', 140) ?? '';
 $lat = $body['lat'] ?? null;
 $lng = $body['lng'] ?? null;
 

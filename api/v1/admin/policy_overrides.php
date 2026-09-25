@@ -107,9 +107,9 @@ if (($body['action'] ?? null) === 'end') {
 
 // ── criar ────────────────────────────────────────────────────────────────
 $scope = (string) ($body['scope'] ?? '');
-$scopeId = trim((string) ($body['scope_id'] ?? ''));
-$reason = trim((string) ($body['reason'] ?? ''));
-$endsOn = trim((string) ($body['ends_on'] ?? ''));
+$scopeId = body_text($body, 'scope_id', 40) ?? '';
+$reason = body_text($body, 'reason', 200) ?? '';
+$endsOn = body_text($body, 'ends_on', 10) ?? '';
 $rawPatch = is_array($body['patch'] ?? null) ? $body['patch'] : [];
 
 $fields = [];

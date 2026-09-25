@@ -66,8 +66,7 @@ if ($reused) {
     )->execute(['subject' => $sha256, 'courier' => $courierId, 'order' => $orderId]);
 }
 
-$storageDir = rtrim((string) env('PROOF_STORAGE_DIR', 'storage/proofs'), '/') . '/delivery';
-$absoluteDir = app_path($storageDir);
+$absoluteDir = delivery_photo_dir();
 if (!is_dir($absoluteDir) && !mkdir($absoluteDir, 0770, true) && !is_dir($absoluteDir)) {
     error_response(500, 'storage_unavailable', 'Não deu pra guardar a foto agora.');
 }

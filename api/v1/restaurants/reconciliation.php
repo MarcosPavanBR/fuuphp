@@ -17,8 +17,8 @@ $claims = require_auth();
 $restaurantId = require_store_staff($claims);
 $pdo = db();
 
-$day = isset($_GET['day']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $_GET['day']) === 1
-    ? (string) $_GET['day']
+$day = is_valid_date($_GET['day'] ?? null)
+    ? $_GET['day']
     // "16/09 · fechamento do dia anterior": a conferência olha pra ontem,
     // porque o extrato da adquirente do dia de hoje ainda não existe.
     // "Ontem" no relógio da loja, que pode não ser o de Brasília.

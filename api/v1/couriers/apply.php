@@ -27,12 +27,12 @@ if ($user === false) {
     error_response(404, 'user_not_found', 'Conta não encontrada.');
 }
 
-$fullName = trim((string) ($body['full_name'] ?? $user['full_name'] ?? ''));
+$fullName = (body_text($body, 'full_name', 120) ?? trim((string) ($user['full_name'] ?? '')));
 $cpf = only_digits((string) ($body['cpf'] ?? $user['cpf'] ?? ''));
 $phone = only_digits((string) ($body['phone'] ?? $user['phone'] ?? ''));
 $vehicle = $body['vehicle'] ?? '';
-$plate = isset($body['plate']) ? strtoupper(trim((string) $body['plate'])) : null;
-$pixKey = trim((string) ($body['pix_key'] ?? ''));
+$plate = isset($body['plate']) ? strtoupper(body_text($body, 'plate', 10) ?? '') : null;
+$pixKey = body_text($body, 'pix_key', 140) ?? '';
 
 $fields = [];
 if ($fullName === '') {

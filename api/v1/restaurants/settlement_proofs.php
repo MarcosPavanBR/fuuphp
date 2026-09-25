@@ -61,7 +61,10 @@ $body = read_json_body();
 $proofId = (int) ($body['proof_id'] ?? 0);
 $decision = $body['decision'] ?? null;
 $fraud = ($body['fraud'] ?? false) === true;
-$reason = trim((string) ($body['reason'] ?? ''));
+$reason = is_string($body['reason'] ?? null) ? trim($body['reason']) : '';
+if (mb_strlen($reason) > 300) {
+    error_response(422, 'reason_too_long', 'O motivo vai até 300 caracteres.', fields: ['reason' => 'até 300 caracteres']);
+}
 if ($proofId <= 0 || !in_array($decision, ['approve', 'reject'], true)) {
     error_response(422, 'invalid_request', 'Informe proof_id e decision (approve ou reject).');
 }
