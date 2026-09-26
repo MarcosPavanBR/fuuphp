@@ -125,8 +125,18 @@ DCODE=$(psql "$DATABASE_URL" -tAc "SELECT delivery_code FROM orders WHERE id=${O
 post "$COURIER" couriers/deliver.php "{\"order_id\":${ORDER_DONE},\"delivery_code\":\"${DCODE}\"}" >/dev/null
 [ "$(psql "$DATABASE_URL" -tAc "SELECT status FROM orders WHERE id=${ORDER_DONE}")" = "delivered" ] || fail "pedido não foi entregue"
 
-# Em rota (pra entrega, ocorrência, retirada e maquininha do entregador).
-ORDER=$(checkout cash ',"change_for":100') || fail "checkout"
+# A baixa de espécie do pedido entregue (dinheiro na mão do entregador): o
+# código sai só aqui, uma vez, como na tela.
+SETTLE=$(post "$COURIER" couriers/settle_intent.php "{\"restaurant_id\":\"${STORE}\",\"method\":\"in_person\"}")
+SETTLE_CODE=$(echo "$SETTLE" | jq -er '.code') || fail "baixa de espécie: $SETTLE"
+INTENT=$(echo "$SETTLE" | jq -er '.intent.id')
+
+# Em rota, na maquininha (pra entrega, ocorrência, retirada e venda na
+# maquininha), com a máquina da loja na mão do entregador.
+POS_ID=$(psql "$DATABASE_URL" -tAc "SELECT id FROM pos_devices WHERE restaurant_id='${STORE}'")
+TAKE=$(post "$COURIER" couriers/pos.php "{\"action\":\"take\",\"device_id\":\"${POS_ID}\"}")
+echo "$TAKE" | jq -e '.custody' >/dev/null || fail "retirar a maquininha: $TAKE"
+ORDER=$(checkout pos_machine ',"machine_kind":"credit"') || fail "checkout"
 OFFER=$(to_courier "$ORDER") || fail "corrida"
 post "$STAFF" orders/status.php "{\"order_id\":${ORDER},\"to\":\"delivering\"}" >/dev/null
 
@@ -144,8 +154,36 @@ SQL
 # Um carrinho aberto, pras rotas de item de carrinho.
 CART_ITEM=$(post "$CUST" cart/add_item.php "{\"restaurant_id\":\"${STORE}\",\"menu_item_id\":${ITEM},\"quantity\":1,\"variant_ids\":[${VARIANT}]}" | jq -er '.items[0].id') || fail "carrinho aberto"
 
+# Candidatura a entregador do próprio cliente, com os documentos (o envio
+# por arquivo é testado em smoke_growth.sh; aqui só importa estar completa).
+post "$CUST" couriers/apply.php "{\"full_name\":\"Cliente Fuzz Fundo\",\"cpf\":\"${CUST_CPF}\",\"phone\":\"${CUST_PHONE}\",\"vehicle\":\"bike\",\"pix_key\":\"${CUST_CPF}\"}" >/dev/null
+APPLICATION=$(psql "$DATABASE_URL" -tAc "SELECT id FROM courier_applications WHERE cpf='${CUST_CPF}'")
+[ -n "$APPLICATION" ] || fail "candidatura não criou"
+
 echo "== o que o cliente tem de seu, e o que o admin tem pra decidir =="
 PENDING_STORE="$(gen_uuid)"
+RIVAL_USER="$(gen_uuid)"; RIVAL="$(gen_uuid)"
+psql_run <<SQL
+INSERT INTO courier_documents (application_id, kind, storage_key, sha256)
+  SELECT '${APPLICATION}', k, 'docs/fdeep-' || k || '.jpg', repeat('b', 64)
+    FROM unnest(ARRAY['cnh', 'selfie', 'address_proof', 'crlv']) AS k;
+-- Um segundo entregador com baixa por Pix e comprovante esperando a loja
+-- (um entregador só tem uma baixa aberta por vez).
+INSERT INTO users (id, role, full_name, email) VALUES ('${RIVAL_USER}', 'courier', 'Rival Fuzz', 'rival-fdeep-${STAMP}@test.com');
+INSERT INTO couriers (id, user_id, city_ibge_code, active) VALUES ('${RIVAL}', '${RIVAL_USER}', '${CITY}', true);
+INSERT INTO cash_settlement_intents (courier_id, restaurant_id, amount, method, expires_at)
+  VALUES ('${RIVAL}', '${STORE}', 20.00, 'pix', now() + interval '1 hour');
+INSERT INTO settlement_proofs (intent_id, courier_id, restaurant_id, storage_key, sha256)
+  SELECT id, '${RIVAL}', '${STORE}', 'settle/fdeep.jpg', repeat('c', 64)
+    FROM cash_settlement_intents WHERE courier_id = '${RIVAL}';
+-- Pro admin decidir: disputa, ocorrência e erro do sistema em aberto.
+INSERT INTO disputes (order_id, kind, amount, courier_id, restaurant_id)
+  VALUES (${ORDER_DONE}, 'wrong_item', 10.00, '${COURIER_ID}', '${STORE}');
+INSERT INTO delivery_incidents (order_id, courier_id, kind, photo_key)
+  VALUES (${ORDER}, '${COURIER_ID}', 'bad_address', 'delivery/fdeep.jpg');
+INSERT INTO app_errors (source, fingerprint, message, route)
+  VALUES ('api', encode(sha256('fdeep-${STAMP}'::bytea), 'hex'), 'erro de teste do fuzz ${STAMP}', '/api/v1/fuzz');
+SQL
 psql_run <<SQL
 INSERT INTO saved_cards (user_id, mp_card_id, brand, last4, kind, exp_month, exp_year)
   VALUES ('${CUST_ID}', 'card-fdeep-${STAMP}', 'visa', '4242', 'credit', 12, 2035);
@@ -163,7 +201,7 @@ SQL
 # Ids pro admin: o registro mais novo de cada tabela (o admin enxerga tudo).
 last() { psql "$DATABASE_URL" -tAc "SELECT coalesce(max(id)::text, '1') FROM $1"; }
 export FUZZ_BASE="$BASE" FUZZ_LOG="$LOG" FUZZ_STORE="$STORE" FUZZ_ITEM="$ITEM" FUZZ_VARIANT="$VARIANT" \
-  FUZZ_ADDR="$ADDR" FUZZ_ADDR2="$ADDR2" FUZZ_ORDER="$ORDER" FUZZ_ORDER_DONE="$ORDER_DONE" FUZZ_ORDER_PAY="$ORDER_PAY" \
+  FUZZ_ADDR="$ADDR" FUZZ_ADDR2="$ADDR2" FUZZ_ORDER="$ORDER" FUZZ_ORDER_TOTAL="$(psql "$DATABASE_URL" -tAc "SELECT total FROM orders WHERE id=${ORDER}")" FUZZ_ORDER_DONE="$ORDER_DONE" FUZZ_ORDER_PAY="$ORDER_PAY" \
   FUZZ_OFFER="$OFFER" FUZZ_CART_ITEM="$CART_ITEM" FUZZ_CITY="$CITY" FUZZ_CPF="$CUST_CPF" FUZZ_PHONE="$CUST_PHONE" \
   FUZZ_CUST="$CUST" FUZZ_CUST_REFRESH="$CUST_REFRESH" FUZZ_STAFF="$STAFF" FUZZ_COURIER="$COURIER" FUZZ_ADMIN="$ADMIN" \
   FUZZ_CARD="$(psql "$DATABASE_URL" -tAc "SELECT id FROM saved_cards WHERE user_id='${CUST_ID}'")" \
@@ -174,9 +212,10 @@ export FUZZ_BASE="$BASE" FUZZ_LOG="$LOG" FUZZ_STORE="$STORE" FUZZ_ITEM="$ITEM" F
   FUZZ_PROOF="$(psql "$DATABASE_URL" -tAc "SELECT id FROM payment_proofs WHERE order_id=${ORDER_PIX}")" \
   FUZZ_REFUND="$(psql "$DATABASE_URL" -tAc "SELECT max(id) FROM refunds WHERE order_id=${ORDER_DONE}")" \
   FUZZ_BANNER="$(last promo_banners)" FUZZ_APP_ERROR="$(last app_errors)" FUZZ_OVERRIDE="$(last policy_overrides)" \
-  FUZZ_APPLICATION="$(psql "$DATABASE_URL" -tAc "SELECT id FROM courier_applications ORDER BY created_at DESC LIMIT 1")" \
+  FUZZ_APPLICATION="$APPLICATION" FUZZ_SETTLE_CODE="$SETTLE_CODE" FUZZ_INTENT="$INTENT" \
   FUZZ_DISPUTE="$(last disputes)" FUZZ_INCIDENT="$(last delivery_incidents)" FUZZ_PAYOUT="$(last payouts)" \
-  FUZZ_SETTLEMENT_PROOF="$(last settlement_proofs)" FUZZ_INTENT="$(last cash_settlement_intents)"
+  FUZZ_SETTLEMENT_PROOF="$(psql "$DATABASE_URL" -tAc "SELECT id FROM settlement_proofs WHERE courier_id='${RIVAL}'")" \
+  FUZZ_APP_ERROR_OPEN="$(psql "$DATABASE_URL" -tAc "SELECT id FROM app_errors WHERE message = 'erro de teste do fuzz ${STAMP}'")"
 
 echo "== cada campo de cada rota, um valor ruim por vez =="
 php "$ROOT/tests/support/fuzz_deep.php" || fail "alguma rota deu 5xx com entrada ruim (lista acima)"

@@ -309,6 +309,34 @@ RECON=$(curl -s "$BASE/restaurants/reconciliation.php?day=$(TZ=America/Sao_Paulo
 [ "$(echo "$RECON" | jq -r "[.rows[] | select(.order_id == ${O_POS})] | length")" = "0" ] \
   || fail "venda da máquina do entregador apareceu na conciliação da loja: $RECON"
 
+echo "== 9.6: retirar a máquina da loja com a política padrão ('shift_end') =="
+# O padrão da coluna (migração 003) é 'shift_end', e a rota mandava o texto
+# pra um ::interval: com a política padrão, toda retirada dava 500 (achado
+# no fuzz profundo). A política vigente aqui é a de cima, que não diz o prazo.
+[ "$(query "SELECT pos_return_deadline FROM platform_policies ORDER BY version DESC LIMIT 1")" = "shift_end" ] \
+  || fail "a política vigente deste teste devia usar o padrão shift_end"
+STORE_POS=$(query "INSERT INTO pos_devices (restaurant_id, label, acquirer) VALUES ('${RESTAURANT_ID}', 'TURNO-${STAMP}', 'stone') RETURNING id" | head -1)
+TAKE=$(curl -s -X POST "$BASE/couriers/pos.php" -H "Content-Type: application/json" "${COURIER_AUTH[@]}" \
+  -d "{\"action\":\"take\",\"device_id\":\"${STORE_POS}\"}")
+[ "$(echo "$TAKE" | jq -r '.custody.device_id')" = "${STORE_POS}" ] || fail "retirada com a política padrão falhou: $TAKE"
+# Loja sem horário cadastrado: "fim do turno" vira o prazo reserva de 6 h.
+[ "$(query "SELECT due_at BETWEEN now() + interval '5 hours 58 minutes' AND now() + interval '6 hours 1 minute' FROM pos_custody WHERE device_id='${STORE_POS}'")" = "t" ] \
+  || fail "prazo reserva de 6 h não foi aplicado"
+OUT=$(php -r '
+require $argv[1];
+$pdo = db();
+$pdo->prepare("INSERT INTO business_hours (restaurant_id, dow, shift, opens, closes, last_order)
+               SELECT :r, d, :s, :o, :c, :l FROM generate_series(0, 6) d")
+    ->execute(["r" => $argv[2], "s" => "dinner", "o" => "00:00", "c" => "23:59", "l" => "23:30"]);
+$due = strtotime(pos_due_at($pdo, $argv[2], "shift_end"));
+$pdo->prepare("DELETE FROM business_hours WHERE restaurant_id = :r")->execute(["r" => $argv[2]]);
+$tz = new DateTimeZone((string) $pdo->query("SELECT restaurant_timezone(\x27" . $argv[2] . "\x27)")->fetchColumn());
+$closeToday = (new DateTimeImmutable("today 23:59", $tz))->getTimestamp();
+// No último minuto do dia o turno já fechou (vale a reserva): não há o que conferir.
+$late = (new DateTimeImmutable("now", $tz))->format("H:i") >= "23:58";
+echo $late || abs($due - $closeToday) < 61 ? "ok" : "falhou: " . date("c", $due);' "$ROOT/lib/bootstrap.php" "$RESTAURANT_ID")
+[ "$OUT" = "ok" ] || fail "com horário cadastrado, 'fim do turno' devia ser o fechamento da loja ($OUT)"
+
 rm -f "$PHOTO"
 echo
 echo "smoke_money OK"

@@ -164,7 +164,7 @@ $routes = [
     ['loja', 'restaurants/pos_devices.php', ['action' => 'deactivate', 'device_id' => $env('POS')]],
     ['loja', 'restaurants/approve_pix.php', ['proof_id' => (int) $env('PROOF'), 'decision' => 'reject', 'counted_amount' => 10, 'reason' => 'valor não bate']],
     ['loja', 'restaurants/settlement_proofs.php', ['proof_id' => (int) $env('SETTLEMENT_PROOF'), 'decision' => 'reject', 'fraud' => false, 'reason' => 'ilegível']],
-    ['loja', 'restaurants/confirm_settlement.php', ['code' => '123456', 'counted_amount' => 10]],
+    ['loja', 'restaurants/confirm_settlement.php', ['code' => $env('SETTLE_CODE'), 'counted_amount' => 40]],
     ['cliente', 'orders/dispatch_action.php', ['order_id' => $orderPay, 'action' => 'boost', 'amount' => 2]],
 
     // ── entregador ──────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ $routes = [
     ['entregador', 'couriers/accept_offer.php', ['offer_id' => (int) $env('OFFER')]],
     ['entregador', 'couriers/pickup.php', ['order_id' => $order, 'event' => 'arrived_at_store']],
     ['entregador', 'couriers/incident.php', ['order_id' => $order, 'action' => 'arrive', 'kind' => 'unsafe_area', 'lat' => -23.56, 'lng' => -46.64, 'photo_storage_key' => 'nao-existe']],
-    ['entregador', 'couriers/pos.php', ['action' => 'sale', 'order_id' => $order, 'amount' => 40, 'nsu' => '123456', 'brand' => 'visa', 'acquirer' => 'stone', 'device_id' => $env('POS'), 'label' => 'POS', 'serial' => 'SN', 'own' => false]],
+    ['entregador', 'couriers/pos.php', ['action' => 'sale', 'order_id' => $order, 'amount' => (float) $env('ORDER_TOTAL'), 'nsu' => '123456', 'brand' => 'visa', 'acquirer' => 'stone', 'device_id' => $env('POS'), 'label' => 'POS', 'serial' => 'SN', 'own' => false]],
     ['entregador', 'couriers/settle_intent.php', ['restaurant_id' => $store, 'amount' => 10, 'method' => 'in_person']],
     ['entregador', 'couriers/deliver.php', ['order_id' => $order, 'delivery_code' => '0000', 'lat' => -23.56, 'lng' => -46.64, 'photo_storage_key' => 'nao-existe']],
     ['entregador', 'couriers/shift.php', ['action' => 'start']],
@@ -193,7 +193,7 @@ $routes = [
     // Cidade só do fuzz (Alta Floresta D'Oeste/RO): as trocas aceitas não
     // podem renomear a praça que as outras suítes usam.
     ['admin', 'admin/cities.php', ['ibge_code' => '1100015', 'name' => 'Alta Floresta Fuzz', 'uf' => 'RO', 'lat' => -11.93, 'lng' => -61.99, 'timezone' => 'America/Porto_Velho', 'neighborhoods' => ['Centro'], 'active' => false], ['nested' => ['neighborhoods.0']]],
-    ['admin', 'admin/couriers.php', ['application_id' => (int) $env('APPLICATION'), 'decision' => 'needs_fix', 'note' => 'foto ilegível', 'city_ibge_code' => $city]],
+    ['admin', 'admin/couriers.php', ['application_id' => $env('APPLICATION'), 'decision' => 'needs_fix', 'note' => 'foto ilegível', 'city_ibge_code' => $city]],
     ['admin', 'admin/disputes.php', ['dispute_id' => (int) $env('DISPUTE'), 'resolution' => 'conferido', 'charge' => 'platform']],
     ['admin', 'admin/incidents.php', ['incident_id' => (int) $env('INCIDENT'), 'resolution' => 'returned', 'refund' => false, 'refund_payer' => 'platform']],
     ['admin', 'admin/netting.php', ['action' => 'generate', 'start' => '2026-09-14', 'end' => '2026-09-20', 'payout_id' => (int) $env('PAYOUT'), 'provider_ref' => 'ref']],
@@ -202,7 +202,7 @@ $routes = [
     ['admin', 'admin/store_coupon_limits.php', ['restaurant_id' => $store, 'limit' => 100]],
     ['admin', 'admin/policy_overrides.php', ['scope' => 'restaurant', 'scope_id' => $store, 'patch' => ['delivery_base_fee' => 5], 'reason' => 'motivo do fuzz', 'ends_on' => '2030-01-01'], ['nested' => ['patch.delivery_base_fee']]],
     ['admin', 'admin/policy_overrides.php', ['action' => 'end', 'id' => (int) $env('OVERRIDE')]],
-    ['admin', 'admin/system_health.php', ['action' => 'resolve', 'id' => (int) $env('APP_ERROR')]],
+    ['admin', 'admin/system_health.php', ['action' => 'resolve', 'id' => (int) $env('APP_ERROR_OPEN')]],
     ['admin', 'admin/totp.php', ['action' => 'start']],
     ['admin', 'admin/totp.php', ['action' => 'confirm', 'code' => '000000']],
     ['admin', 'admin/partner_devices.php', ['partner_account_id' => $env('STAFF_ACCOUNT'), 'reason' => 'troca de aparelho']],

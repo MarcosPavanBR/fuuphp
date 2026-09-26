@@ -262,3 +262,61 @@ function pos_parse_statement(string $csv): array
 
     return [$lines, $errors];
 }
+
+/** Sem horário da loja pra olhar, "fim do turno" vira este prazo. */
+const POS_SHIFT_END_FALLBACK = '6 hours';
+
+/**
+ * Quando a maquininha retirada agora tem que voltar (pos_custody.due_at).
+ *
+ * `platform_policies.pos_return_deadline` é texto. O padrão da coluna
+ * (migração 003) é 'shift_end' -- "devolve no fim do turno" --, e a rota
+ * mandava o texto direto pra um ::interval: com a política padrão, TODA
+ * retirada dava 500 (achado no fuzz profundo; o teste da maquininha gravava
+ * '6 hours' e escondia o caso).
+ *
+ * - intervalo ('6 hours', '06:00:00'): a partir de agora;
+ * - 'shift_end': o fechamento do turno da LOJA em andamento (business_hours,
+ *   no relógio da cidade dela, inclusive turno que vira a madrugada). O
+ *   turno do entregador não tem hora marcada pra acabar; o da loja tem, e é
+ *   quando ela confere a devolução no balcão. Sem turno cadastrado em
+ *   andamento, POS_SHIFT_END_FALLBACK.
+ * - qualquer outro texto: POS_SHIFT_END_FALLBACK, em vez de 500.
+ *
+ * @return string timestamptz pro banco
+ */
+function pos_due_at(PDO $pdo, string $restaurantId, ?string $deadline): string
+{
+    // Só manda pro ::interval o que tem cara de intervalo: um CAST que falha
+    // dentro de transação abortaria a transação inteira.
+    if ($deadline !== null && preg_match('/^(\d{1,2}:\d{2}(:\d{2})?|\d{1,3} (hours?|minutes?))$/', $deadline) === 1) {
+        $stmt = $pdo->prepare('SELECT now() + CAST(:d AS interval)');
+        $stmt->execute(['d' => $deadline]);
+        return (string) $stmt->fetchColumn();
+    }
+    if ($deadline === 'shift_end') {
+        $stmt = $pdo->prepare(
+            "WITH t AS (SELECT restaurant_timezone(:r) AS tz),
+                  n AS (SELECT (now() AT TIME ZONE t.tz) AS ts, t.tz FROM t)
+             SELECT min(close_at) FROM (
+               -- turno de hoje (fecha hoje, ou amanhã se vira a madrugada)
+               SELECT ((n.ts::date + h.closes + CASE WHEN h.closes <= h.opens THEN interval '1 day' ELSE interval '0' END)
+                       AT TIME ZONE n.tz) AS close_at
+                 FROM business_hours h, n
+                WHERE h.restaurant_id = :r AND h.active AND h.dow = EXTRACT(dow FROM n.ts)
+               UNION ALL
+               -- turno de ontem que vira a madrugada e ainda não fechou
+               SELECT ((n.ts::date + h.closes) AT TIME ZONE n.tz)
+                 FROM business_hours h, n
+                WHERE h.restaurant_id = :r AND h.active AND h.closes <= h.opens
+                  AND h.dow = EXTRACT(dow FROM n.ts - interval '1 day')
+             ) x WHERE close_at > now()"
+        );
+        $stmt->execute(['r' => $restaurantId]);
+        $close = $stmt->fetchColumn();
+        if (is_string($close) && $close !== '') {
+            return $close;
+        }
+    }
+    return (string) $pdo->query("SELECT now() + interval '" . POS_SHIFT_END_FALLBACK . "'")->fetchColumn();
+}

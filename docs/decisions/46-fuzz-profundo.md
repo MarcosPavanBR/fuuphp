@@ -170,21 +170,47 @@ nunca ligava: o cliente ficava preso.
 Agora, sem bairro cadastrado, o app confirma só com a cidade, e a Home não
 mostra mais a vírgula sobrando. Achado no teste de navegador da ARQ-02.
 
-## O que ficou de fora (e por quê)
+## Maquininha: retirada dava 500 com a política padrão
 
-- **Rotas que o fuzz ainda não alcança fundo**, porque o corpo válido para
-  numa regra de estado antes (o teste mostra isso com `FUZZ_VERBOSE=1`):
-  - baixa de espécie (`settle_intent`, `confirm_settlement`,
-    `settlement_proofs`, `couriers/settlements`): precisa do entregador com
-    dinheiro na mão;
-  - venda na maquininha: precisa de pedido de maquininha em rota;
-  - envio da candidatura e a decisão do admin: precisam dos documentos
-    enviados;
-  - disputa, ocorrência e erro do sistema: o admin decide sobre o registro
-    mais novo do banco, que em geral já foi decidido.
+`platform_policies.pos_return_deadline` é texto, e o padrão da coluna
+(migração 003) é `'shift_end'`, "devolve no fim do turno". A rota de
+retirada mandava esse texto direto pra um `::interval`, e **toda** retirada
+de maquininha dava 500 com a política padrão, que é a que o
+`bootstrap_admin` cria. O teste da maquininha gravava `'6 hours'` e escondia
+o caso. O fuzz achou quando passou a retirar a máquina de verdade.
 
-  As entradas dessas rotas foram revisadas lendo o código (as conversões
-  numéricas passaram por `money_input`, os textos por `body_text`), mas não
-  por fuzz.
+**Correção:** `pos_due_at()` (`lib/ledger/pos.php`) interpreta a política.
+
+- Intervalo (`'6 hours'`, `'06:00:00'`): o prazo conta a partir de agora.
+- `'shift_end'`: o fechamento do turno **da loja** em andamento
+  (`business_hours`, no relógio da cidade, inclusive turno que vira a
+  madrugada). O turno do entregador não tem hora marcada pra acabar; o da
+  loja tem, e é quando ela confere a devolução no balcão.
+- Sem turno cadastrado, ou com texto que não é prazo: 6 horas.
+
+Essa leitura de "fim do turno" é uma **interpretação**: se o Marcos quiser
+outra, é trocar essa função. Teste em `smoke_money.sh`, com a política
+padrão.
+
+## Até onde o fuzz chega
+
+Com as sementes que ele cria (pedido entregue em dinheiro, pedido na
+maquininha em rota com a máquina na mão, baixa de espécie aberta,
+comprovante de baixa Pix de um segundo entregador, candidatura com
+documentos, disputa, ocorrência e erro em aberto), o corpo válido de quase
+toda rota passa, e as trocas testam a validação de verdade.
+
+As que ainda param antes, de propósito ou por regra de negócio:
+
+- **Idempotência:** trocar o método de pagamento pro mesmo método;
+- **Regra de estado:** turbo de pedido que não está esperando entregador;
+- **Proteção de segurança:** limite de cadastro de loja por IP e código de
+  login errado;
+- **Destrutivo de propósito:** excluir conta sem digitar EXCLUIR.
+
+`FUZZ_VERBOSE=1` mostra o status do corpo válido de cada rota.
+
+## Tetos
+
 - **Os tetos da tabela acima** são de sanidade. Se o Marcos quiser outros
   números, é trocar a constante.

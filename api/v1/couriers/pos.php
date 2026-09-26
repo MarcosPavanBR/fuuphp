@@ -89,9 +89,13 @@ $open = pos_custody_open($pdo, $courierId);
 
 // ── take: retirar a máquina da loja ────────────────────────────────────
 if ($action === 'take') {
-    $deviceId = (string) ($body['device_id'] ?? '');
+    $deviceId = is_string($body['device_id'] ?? null) ? $body['device_id'] : '';
     if ($deviceId === '') {
         error_response(422, 'device_required', 'Informe device_id.', fields: ['device_id' => 'obrigatório']);
+    }
+    // Id da máquina é uuid: texto qualquer chegava no banco e dava 500.
+    if (!is_valid_uuid($deviceId)) {
+        error_response(404, 'device_not_found', 'Máquina não encontrada.');
     }
     // "Atraso [...] bloqueia nova retirada": sair com a segunda máquina antes
     // de devolver a primeira é como equipamento some.
@@ -113,16 +117,17 @@ if ($action === 'take') {
         error_response(409, 'device_taken', 'Essa máquina ainda não foi conferida no balcão — a loja confirma a devolução antes de ela sair de novo.');
     }
 
-    // O prazo é política da plataforma, não combinação de balcão.
-    $deadline = is_string($policy['pos_return_deadline'] ?? null) ? $policy['pos_return_deadline'] : '06:00:00';
+    // O prazo é política da plataforma, não combinação de balcão
+    // (pos_due_at: intervalo, ou 'shift_end' = fechamento do turno da loja).
+    $dueAt = pos_due_at($pdo, (string) $device['restaurant_id'], is_string($policy['pos_return_deadline'] ?? null) ? $policy['pos_return_deadline'] : null);
 
     try {
         $stmt = $pdo->prepare(
             'INSERT INTO pos_custody (device_id, courier_id, due_at)
-             VALUES (:device, :courier, now() + :deadline::interval)
+             VALUES (:device, :courier, :due)
              RETURNING *'
         );
-        $stmt->execute(['device' => $deviceId, 'courier' => $courierId, 'deadline' => $deadline]);
+        $stmt->execute(['device' => $deviceId, 'courier' => $courierId, 'due' => $dueAt]);
     } catch (PDOException $e) {
         // `pos_one_holder` (migração 006): a máquina está com UMA pessoa.
         if (str_contains($e->getMessage(), 'pos_one_holder')) {
