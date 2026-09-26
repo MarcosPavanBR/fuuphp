@@ -186,7 +186,10 @@ try {
         'tip' => $tip,
         'payment_method' => $paymentMethod,
         'change_for' => $paymentMethod === 'cash' ? $changeFor : null,
-        'machine_kind' => $machineKind,
+        // Só pedido na maquininha tem tipo de máquina: o valor mandado junto
+        // de outra forma de pagamento não é conferido acima, e gravá-lo
+        // estourava o CHECK da coluna (500 -- achado no fuzz profundo).
+        'machine_kind' => $paymentMethod === 'pos_machine' ? $machineKind : null,
         'policy_snapshot' => json_encode($policy, JSON_UNESCAPED_UNICODE),
         'commission' => $commission,
         'scheduled_for' => $scheduledRange,

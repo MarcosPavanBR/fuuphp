@@ -208,7 +208,21 @@ As que ainda param antes, de propósito ou por regra de negócio:
   login errado;
 - **Destrutivo de propósito:** excluir conta sem digitar EXCLUIR.
 
-`FUZZ_VERBOSE=1` mostra o status do corpo válido de cada rota.
+Rota que muda de estado (conferir a baixa, validar o Pix, decidir a
+disputa, a ocorrência, o reembolso, a loja e a candidatura, entregar, vender
+na maquininha, fechar o pedido) volta ao estado de partida **antes de cada
+troca** (opção `reset` em `tests/support/fuzz_deep.php`). Sem isso, a
+primeira troca aceita fechava o registro, e as seguintes respondiam "já
+decidido" sem chegar na validação.
+
+`FUZZ_VERBOSE=1` mostra, por rota, o status do corpo válido e a contagem de
+respostas de todas as trocas: dá pra ver onde cada uma parou.
+
+Aprofundar assim achou mais um 500: fechar pedido em dinheiro com um
+`machine_kind` inválido. O tipo de maquininha só era conferido para
+pagamento na maquininha, mas era gravado para qualquer forma de pagamento,
+e o CHECK da coluna estourava. Agora ele só é gravado em pedido de
+maquininha.
 
 ## Tetos
 

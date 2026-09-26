@@ -85,8 +85,13 @@ $routes = [
     ['cliente', 'cart/apply_coupon.php', ['restaurant_id' => $store, 'code' => 'NAOEXISTE']],
     ['cliente', 'orders/checkout.php', [
         'restaurant_id' => $store, 'address_id' => $addr, 'payment_method' => 'cash', 'change_for' => 200,
-        'tip' => 0, 'coupon_code' => 'NAOEXISTE', 'machine_kind' => 'credit', 'slot' => '2030-01-01T12:00:00',
-    ], ['prep' => 'cart']],
+        'tip' => 0, 'coupon_code' => '', 'machine_kind' => 'credit', 'slot' => '2030-01-01T12:00:00',
+    ], ['prep' => 'cart', 'reset' => [
+        // Carrinho volta a ter um item só: sem isto ele crescia a cada troca e
+        // o troco (R$ 200) ficava menor que o subtotal lá pela quinta.
+        ["DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE user_id = :u AND restaurant_id = :r AND status = 'cart')",
+         ['u' => $env('CUST_ID'), 'r' => $store]],
+    ]]],
     ['cliente', 'orders/slots.php', ['restaurant_id' => $store], ['get' => true]],
     ['cliente', 'orders/show.php', ['id' => $order], ['get' => true]],
     ['cliente', 'orders/receipt.php', ['id' => $order], ['get' => true]],
@@ -116,7 +121,7 @@ $routes = [
     ['cliente', 'cards/update.php', ['id' => (int) $env('CARD'), 'is_default' => true]],
     ['cliente', 'auth/consent.php', ['kind' => 'marketing', 'version' => '2026-09']],
     ['cliente', 'couriers/apply.php', ['full_name' => 'Candidato Fuzz', 'cpf' => $cpf, 'phone' => $phone, 'vehicle' => 'moto', 'plate' => 'QQP1B34', 'pix_key' => $cpf]],
-    ['cliente', 'couriers/submit_application.php', ['accept_contract' => true]],
+    ['cliente', 'couriers/submit_application.php', ['accept_contract' => true], ['reset' => [["UPDATE courier_applications SET state = 'draft' WHERE id = :id", ['id' => $env('APPLICATION')]]]]],
     ['cliente', 'cart/remove_item.php', ['order_item_id' => (int) $env('CART_ITEM')]],
 
     // ── públicas ────────────────────────────────────────────────────────
@@ -162,9 +167,9 @@ $routes = [
     ['loja', 'restaurants/coupons.php', ['action' => 'create', 'code' => 'LOJA' . $stamp, 'kind' => 'fixed', 'value' => 5, 'min_order' => 20, 'budget_cap' => 50, 'days' => 30, 'audience' => 'all', 'dry_run' => true]],
     ['loja', 'restaurants/pos_devices.php', ['action' => 'register', 'label' => 'POS Fuzz', 'acquirer' => 'stone', 'serial' => 'SN-F' . $stamp]],
     ['loja', 'restaurants/pos_devices.php', ['action' => 'deactivate', 'device_id' => $env('POS')]],
-    ['loja', 'restaurants/approve_pix.php', ['proof_id' => (int) $env('PROOF'), 'decision' => 'reject', 'counted_amount' => 10, 'reason' => 'valor não bate']],
-    ['loja', 'restaurants/settlement_proofs.php', ['proof_id' => (int) $env('SETTLEMENT_PROOF'), 'decision' => 'reject', 'fraud' => false, 'reason' => 'ilegível']],
-    ['loja', 'restaurants/confirm_settlement.php', ['code' => $env('SETTLE_CODE'), 'counted_amount' => 40]],
+    ['loja', 'restaurants/approve_pix.php', ['proof_id' => (int) $env('PROOF'), 'decision' => 'reject', 'counted_amount' => 10, 'reason' => 'valor não bate'], ['reset' => [["UPDATE payment_proofs SET state = 'pending', counted_amount = NULL, reviewed_by = NULL, reviewed_at = NULL WHERE id = :id", ['id' => (int) $env('PROOF')]], ["UPDATE orders SET status = :s WHERE id = :o", ['s' => $env('ORDER_PIX_STATUS'), 'o' => (int) $env('ORDER_PIX')]]]]],
+    ['loja', 'restaurants/settlement_proofs.php', ['proof_id' => (int) $env('SETTLEMENT_PROOF'), 'decision' => 'reject', 'fraud' => false, 'reason' => 'ilegível'], ['reset' => [["UPDATE settlement_proofs SET state = 'pending', reject_reason = NULL, reviewed_by = NULL, reviewed_at = NULL WHERE id = :id", ['id' => (int) $env('SETTLEMENT_PROOF')]], ["UPDATE cash_settlement_intents SET state = 'open', counted_amount = NULL, confirmed_by = NULL, confirmed_at = NULL, expires_at = now() + interval '1 hour' WHERE id = (SELECT intent_id FROM settlement_proofs WHERE id = :id)", ['id' => (int) $env('SETTLEMENT_PROOF')]]]]],
+    ['loja', 'restaurants/confirm_settlement.php', ['code' => $env('SETTLE_CODE'), 'counted_amount' => 40], ['reset' => [["UPDATE cash_settlement_intents SET state = 'open', counted_amount = NULL, confirmed_by = NULL, confirmed_at = NULL, expires_at = now() + interval '1 hour' WHERE id = :id", ['id' => (int) $env('INTENT')]]]]],
     ['cliente', 'orders/dispatch_action.php', ['order_id' => $orderPay, 'action' => 'boost', 'amount' => 2]],
 
     // ── entregador ──────────────────────────────────────────────────────
@@ -175,9 +180,9 @@ $routes = [
     ['entregador', 'couriers/accept_offer.php', ['offer_id' => (int) $env('OFFER')]],
     ['entregador', 'couriers/pickup.php', ['order_id' => $order, 'event' => 'arrived_at_store']],
     ['entregador', 'couriers/incident.php', ['order_id' => $order, 'action' => 'arrive', 'kind' => 'unsafe_area', 'lat' => -23.56, 'lng' => -46.64, 'photo_storage_key' => 'nao-existe']],
-    ['entregador', 'couriers/pos.php', ['action' => 'sale', 'order_id' => $order, 'amount' => (float) $env('ORDER_TOTAL'), 'nsu' => '123456', 'brand' => 'visa', 'acquirer' => 'stone', 'device_id' => $env('POS'), 'label' => 'POS', 'serial' => 'SN', 'own' => false]],
+    ['entregador', 'couriers/pos.php', ['action' => 'sale', 'order_id' => $order, 'amount' => (float) $env('ORDER_TOTAL'), 'nsu' => $stamp, 'brand' => 'visa', 'acquirer' => 'stone', 'device_id' => $env('POS'), 'label' => 'POS', 'serial' => 'SN', 'own' => false], ['reset' => [['DELETE FROM card_transactions WHERE order_id = :o', ['o' => $order]]]]],
     ['entregador', 'couriers/settle_intent.php', ['restaurant_id' => $store, 'amount' => 10, 'method' => 'in_person']],
-    ['entregador', 'couriers/deliver.php', ['order_id' => $order, 'delivery_code' => '0000', 'lat' => -23.56, 'lng' => -46.64, 'photo_storage_key' => 'nao-existe']],
+    ['entregador', 'couriers/deliver.php', ['order_id' => $order, 'delivery_code' => $env('ORDER_CODE'), 'lat' => -23.56, 'lng' => -46.64, 'photo_storage_key' => 'nao-existe'], ['reset' => [['DELETE FROM delivery_proofs WHERE order_id = :o', ['o' => $order]], ["UPDATE orders SET status = 'delivering' WHERE id = :o", ['o' => $order]]]]],
     ['entregador', 'couriers/shift.php', ['action' => 'start']],
 
     // ── admin ───────────────────────────────────────────────────────────
@@ -193,16 +198,16 @@ $routes = [
     // Cidade só do fuzz (Alta Floresta D'Oeste/RO): as trocas aceitas não
     // podem renomear a praça que as outras suítes usam.
     ['admin', 'admin/cities.php', ['ibge_code' => '1100015', 'name' => 'Alta Floresta Fuzz', 'uf' => 'RO', 'lat' => -11.93, 'lng' => -61.99, 'timezone' => 'America/Porto_Velho', 'neighborhoods' => ['Centro'], 'active' => false], ['nested' => ['neighborhoods.0']]],
-    ['admin', 'admin/couriers.php', ['application_id' => $env('APPLICATION'), 'decision' => 'needs_fix', 'note' => 'foto ilegível', 'city_ibge_code' => $city]],
-    ['admin', 'admin/disputes.php', ['dispute_id' => (int) $env('DISPUTE'), 'resolution' => 'conferido', 'charge' => 'platform']],
-    ['admin', 'admin/incidents.php', ['incident_id' => (int) $env('INCIDENT'), 'resolution' => 'returned', 'refund' => false, 'refund_payer' => 'platform']],
+    ['admin', 'admin/couriers.php', ['application_id' => $env('APPLICATION'), 'decision' => 'needs_fix', 'note' => 'foto ilegível', 'city_ibge_code' => $city], ['reset' => [["UPDATE courier_applications SET state = 'review', reviewed_by = NULL WHERE id = :id", ['id' => $env('APPLICATION')]]]]],
+    ['admin', 'admin/disputes.php', ['dispute_id' => (int) $env('DISPUTE'), 'resolution' => 'conferido', 'charge' => 'platform'], ['reset' => [["UPDATE disputes SET state = 'open', resolution = NULL, decided_by = NULL WHERE id = :id", ['id' => (int) $env('DISPUTE')]]]]],
+    ['admin', 'admin/incidents.php', ['incident_id' => (int) $env('INCIDENT'), 'resolution' => 'returned', 'refund' => false, 'refund_payer' => 'platform'], ['reset' => [['UPDATE delivery_incidents SET resolution = NULL WHERE id = :i', ['i' => (int) $env('INCIDENT')]], ["UPDATE orders SET status = 'delivering' WHERE id = :o", ['o' => $order]]]]],
     ['admin', 'admin/netting.php', ['action' => 'generate', 'start' => '2026-09-14', 'end' => '2026-09-20', 'payout_id' => (int) $env('PAYOUT'), 'provider_ref' => 'ref']],
-    ['admin', 'admin/refunds.php', ['refund_id' => (int) $env('REFUND'), 'action' => 'refund', 'fee_adjustment' => 'keep', 'bonus' => 0, 'note' => 'fuzz', 'provider_ref' => 'ref']],
-    ['admin', 'admin/restaurants.php', ['restaurant_id' => $env('PENDING_STORE'), 'decision' => 'reject', 'reason' => 'documento ilegível']],
+    ['admin', 'admin/refunds.php', ['refund_id' => (int) $env('REFUND'), 'action' => 'refund', 'fee_adjustment' => 'keep', 'bonus' => 0, 'note' => 'fuzz', 'provider_ref' => 'ref'], ['reset' => [["UPDATE refunds SET state = 'pending', decided_by = NULL, decided_at = NULL WHERE id = :id", ['id' => (int) $env('REFUND')]]]]],
+    ['admin', 'admin/restaurants.php', ['restaurant_id' => $env('PENDING_STORE'), 'decision' => 'reject', 'reason' => 'documento ilegível'], ['reset' => [["UPDATE restaurants SET approved_at = NULL, rejected_at = NULL, rejection_reason = NULL WHERE id = :id", ['id' => $env('PENDING_STORE')]]]]],
     ['admin', 'admin/store_coupon_limits.php', ['restaurant_id' => $store, 'limit' => 100]],
     ['admin', 'admin/policy_overrides.php', ['scope' => 'restaurant', 'scope_id' => $store, 'patch' => ['delivery_base_fee' => 5], 'reason' => 'motivo do fuzz', 'ends_on' => '2030-01-01'], ['nested' => ['patch.delivery_base_fee']]],
     ['admin', 'admin/policy_overrides.php', ['action' => 'end', 'id' => (int) $env('OVERRIDE')]],
-    ['admin', 'admin/system_health.php', ['action' => 'resolve', 'id' => (int) $env('APP_ERROR_OPEN')]],
+    ['admin', 'admin/system_health.php', ['action' => 'resolve', 'id' => (int) $env('APP_ERROR_OPEN')], ['reset' => [["UPDATE app_errors SET resolved_at = NULL WHERE id = :id", ['id' => (int) $env('APP_ERROR_OPEN')]]]]],
     ['admin', 'admin/totp.php', ['action' => 'start']],
     ['admin', 'admin/totp.php', ['action' => 'confirm', 'code' => '000000']],
     ['admin', 'admin/partner_devices.php', ['partner_account_id' => $env('STAFF_ACCOUNT'), 'reason' => 'troca de aparelho']],
@@ -246,6 +251,16 @@ function set_path(array $data, string $path, mixed $value): array
     return $data;
 }
 
+// Conexão direta com o banco de teste, pra devolver o registro ao estado de
+// partida antes de cada troca (opção 'reset' das rotas abaixo).
+$u = parse_url((string) getenv('DATABASE_URL'));
+$db = new PDO(
+    sprintf('pgsql:host=%s;port=%d;dbname=%s', $u['host'] ?? 'localhost', $u['port'] ?? 5432, ltrim($u['path'] ?? '', '/')),
+    isset($u['user']) ? urldecode($u['user']) : null,
+    isset($u['pass']) ? urldecode($u['pass']) : null,
+    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+);
+
 $ch = curl_init();
 $send = static function (string $role, string $route, array $data, bool $get) use ($ch, $base, $tokens): array {
     $hex = bin2hex(random_bytes(16));
@@ -281,7 +296,13 @@ foreach ($routes as $r) {
         continue;
     }
     $get = !empty($opts['get']);
-    $prep = static function () use ($opts, $send, $store, $item): void {
+    $prep = static function () use ($opts, $send, $store, $item, $db): void {
+        // 'reset': SQL que devolve o registro ao estado de partida, pra rota
+        // que muda de estado (conferir a baixa, decidir a disputa...) não
+        // responder "já decidido" da segunda troca em diante.
+        foreach ($opts['reset'] ?? [] as [$sql, $params]) {
+            $db->prepare($sql)->execute($params);
+        }
         if (($opts['prep'] ?? null) === 'cart') {
             $send('cliente', 'cart/add_item.php', ['restaurant_id' => $store, 'menu_item_id' => $item, 'quantity' => 1], false);
         }
@@ -293,6 +314,7 @@ foreach ($routes as $r) {
         printf("  base %-36s %-10s %d %s\n", $route, $role, $status, substr($resp, 0, 90));
     }
 
+    $codes = [];
     $paths = array_merge(array_map('strval', array_keys($valid)), $opts['nested'] ?? []);
     foreach ($paths as $path) {
         foreach (BAD_VALUES as $label => $bad) {
@@ -307,11 +329,16 @@ foreach ($routes as $r) {
             $data = isset($opts['fresh']) ? array_merge($valid, array_diff_key($opts['fresh'](), [explode('.', $path)[0] => 1])) : $valid;
             [$status, $resp] = $send($role, $route, set_path($data, $path, $bad), $get);
             $calls++;
+            $codes[json_decode($resp, true)['code'] ?? (string) $status] = ($codes[json_decode($resp, true)['code'] ?? (string) $status] ?? 0) + 1;
             if ($status >= 500 || $status === 0) {
                 $trace = json_decode($resp, true)['trace_id'] ?? null;
                 $failures[] = [$role, $route, $path, $label, $status, $trace];
             }
         }
+    }
+    if ($verbose) {
+        arsort($codes);
+        printf("  trocas %-36s %s\n", $route, implode(' ', array_map(static fn ($k, $v) => "{$k}={$v}", array_keys($codes), $codes)));
     }
 }
 
