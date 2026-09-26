@@ -54,3 +54,4 @@ pra ele (ex.: o mapa do acompanhamento em 06 → 16).
 - [44 — Lote rápido da auditoria (SEG-01, SEG-03, INFRA-03)](44-lote-rapido-da-auditoria.md)
 - [45 — Correções da auditoria 360°](45-correcoes-da-auditoria.md)
 - [46 — Fuzz profundo: o que só aparece depois de achar o registro](46-fuzz-profundo.md)
+- [47 — Autorização provada, entrada sem aviso e app que atualiza](47-autorizacao-provada-e-entrada-tipada.md)

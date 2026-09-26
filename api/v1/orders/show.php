@@ -10,7 +10,7 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 require_method('GET');
 $claims = require_auth();
 
-$orderId = (int) ($_GET['id'] ?? 0);
+$orderId = positive_id($_GET['id'] ?? null) ?? 0;
 if ($orderId <= 0) {
     error_response(422, 'id_required', 'Informe ?id= com o número do pedido.');
 }

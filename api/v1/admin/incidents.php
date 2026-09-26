@@ -65,14 +65,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 require_method('POST');
 $body = read_json_body();
 
-$incidentId = (int) ($body['incident_id'] ?? 0);
-$resolution = (string) ($body['resolution'] ?? '');
+$incidentId = positive_id($body['incident_id'] ?? null) ?? 0;
+$resolution = input_str($body, 'resolution');
 if ($incidentId <= 0 || !array_key_exists($resolution, INCIDENT_RESOLUTIONS)) {
     error_response(422, 'invalid_request', 'Informe incident_id e resolution (returned, discarded ou delivered).');
 }
 
 $wantsRefund = ($body['refund'] ?? false) === true;
-$refundPayer = (string) ($body['refund_payer'] ?? '');
+$refundPayer = input_str($body, 'refund_payer');
 if ($wantsRefund && !in_array($refundPayer, ['store', 'platform', 'shared'], true)) {
     error_response(422, 'payer_required', 'Quem paga o reembolso desta ocorrência? (store, platform ou shared)', fields: ['refund_payer' => 'obrigatório']);
 }

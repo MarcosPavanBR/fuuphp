@@ -27,15 +27,15 @@ $pdo = db();
 
 const EXPORT_KINDS = ['ledger', 'orders', 'payouts'];
 
-$kind = (string) ($_GET['kind'] ?? '');
+$kind = input_str($_GET, 'kind');
 if (!in_array($kind, EXPORT_KINDS, true)) {
     error_response(422, 'invalid_kind', 'Informe kind: ledger, orders ou payouts.', fields: ['kind' => 'inválido']);
 }
 
 // Data que existe no calendário (2026-02-30 dava 500 no banco).
 $isDate = static fn ($v) => is_valid_date($v);
-$from = $isDate($_GET['from'] ?? null) ? (string) $_GET['from'] : date('Y-m-d', strtotime('-30 days'));
-$to = $isDate($_GET['to'] ?? null) ? (string) $_GET['to'] : date('Y-m-d');
+$from = $isDate($_GET['from'] ?? null) ? input_str($_GET, 'from') : date('Y-m-d', strtotime('-30 days'));
+$to = $isDate($_GET['to'] ?? null) ? input_str($_GET, 'to') : date('Y-m-d');
 if ($from > $to) {
     error_response(422, 'invalid_period', 'O início do período vem depois do fim.');
 }

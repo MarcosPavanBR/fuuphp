@@ -27,7 +27,7 @@ $courierId = require_courier($claims);
 $pdo = db();
 
 $body = $_SERVER['REQUEST_METHOD'] === 'POST' ? read_json_body() : [];
-$orderId = (int) ($_GET['order_id'] ?? $body['order_id'] ?? 0);
+$orderId = positive_id($_GET['order_id'] ?? $body['order_id'] ?? null) ?? 0;
 if ($orderId <= 0) {
     error_response(422, 'order_id_required', 'Informe order_id.', fields: ['order_id' => 'obrigatório']);
 }
@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 }
 
 require_method('POST');
-$action = (string) ($body['action'] ?? '');
+$action = input_str($body, 'action');
 
 if ($order['status'] !== 'delivering') {
     error_response(409, 'order_not_in_delivery', 'Esse pedido não está em rota de entrega.');
@@ -96,7 +96,7 @@ if ($existing !== false) {
     error_response(409, 'incident_already_open', 'Já existe uma ocorrência aberta neste pedido.');
 }
 
-$kind = (string) ($body['kind'] ?? '');
+$kind = input_str($body, 'kind');
 if (!array_key_exists($kind, INCIDENT_KINDS)) {
     error_response(422, 'invalid_kind', 'Escolha o que aconteceu.', fields: ['kind' => 'inválido']);
 }

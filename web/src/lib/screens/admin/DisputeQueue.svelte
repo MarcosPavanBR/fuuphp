@@ -92,7 +92,7 @@
         {#if openId === d.id}
           <label class="field">
             <span>O que foi decidido</span>
-            <textarea rows="2" placeholder="Ex.: faltou dinheiro na conferência" bind:value={resolution}></textarea>
+            <textarea maxlength="1000" rows="2" placeholder="Ex.: faltou dinheiro na conferência" bind:value={resolution}></textarea>
           </label>
           <label class="field">
             <span>Quem arca com {money(d.amount)}</span>

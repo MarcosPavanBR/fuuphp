@@ -89,8 +89,8 @@
         <div class="own"><i class="bi bi-credit-card"></i> <strong>{d.label}</strong> · {d.acquirer}</div>
       {:else}
         <div class="own-form">
-          <input placeholder="Apelido (minha-stone)" bind:value={ownForm.label} />
-          <input placeholder="Adquirente (sumup, stone…)" bind:value={ownForm.acquirer} />
+          <input maxlength="40" placeholder="Apelido (minha-stone)" bind:value={ownForm.label} />
+          <input maxlength="40" placeholder="Adquirente (sumup, stone…)" bind:value={ownForm.acquirer} />
           <button
             type="button"
             disabled={busy || !ownForm.label.trim() || !ownForm.acquirer.trim()}

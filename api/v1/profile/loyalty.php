@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 require_method('POST');
 $body = read_json_body();
-$rewardId = (int) ($body['reward_id'] ?? 0);
+$rewardId = positive_id($body['reward_id'] ?? null) ?? 0;
 if ($rewardId <= 0) {
     error_response(422, 'reward_id_required', 'Escolha uma troca.', fields: ['reward_id' => 'obrigatório']);
 }

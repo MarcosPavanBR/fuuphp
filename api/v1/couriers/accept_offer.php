@@ -18,7 +18,7 @@ $claims = require_auth();
 $courierId = require_courier($claims);
 $body = read_json_body();
 
-$offerId = (int) ($body['offer_id'] ?? 0);
+$offerId = positive_id($body['offer_id'] ?? null) ?? 0;
 if ($offerId <= 0) {
     error_response(422, 'offer_id_required', 'Informe offer_id.', fields: ['offer_id' => 'obrigatório']);
 }

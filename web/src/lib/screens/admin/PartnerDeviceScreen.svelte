@@ -118,7 +118,7 @@
             {#if releasing === account.id}
               <label class="reason">
                 <span>Motivo (fica na auditoria)</span>
-                <textarea rows="2" placeholder="Ex.: tablet quebrou; dono confirmou por telefone" bind:value={reason}></textarea>
+                <textarea maxlength="300" rows="2" placeholder="Ex.: tablet quebrou; dono confirmou por telefone" bind:value={reason}></textarea>
               </label>
               <div class="actions">
                 <button type="button" class="btn-fuu-primary" disabled={busy} onclick={() => release(account)}>

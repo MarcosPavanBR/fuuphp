@@ -19,7 +19,7 @@ if (($claims['role'] ?? null) !== 'restaurant_staff') {
 }
 $body = read_json_body();
 
-$proofId = (int) ($body['proof_id'] ?? 0);
+$proofId = positive_id($body['proof_id'] ?? null) ?? 0;
 $decision = $body['decision'] ?? null;
 if ($proofId <= 0) {
     error_response(422, 'proof_id_required', 'Informe proof_id.', fields: ['proof_id' => 'obrigatório']);

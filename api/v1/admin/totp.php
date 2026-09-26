@@ -38,7 +38,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
 require_method('POST');
 $body = read_json_body();
 $action = $body['action'] ?? null;
-$code = isset($body['code']) && is_scalar($body['code']) ? only_digits((string) $body['code']) : '';
+$code = isset($body['code']) && is_scalar($body['code']) ? only_digits(input_str($body, 'code')) : '';
 
 $audit = static function (string $what) use ($pdo, $adminId): void {
     $pdo->prepare(

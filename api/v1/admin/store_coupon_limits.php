@@ -21,7 +21,7 @@ $adminId = require_admin($claims);
 $pdo = db();
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
-    $q = trim((string) ($_GET['q'] ?? ''));
+    $q = trim(input_str($_GET, 'q'));
     $digits = only_digits($q);
     $stmt = $pdo->prepare(
         "SELECT r.id, r.name, r.cnpj, r.coupon_budget_limit
@@ -32,7 +32,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
           ORDER BY r.name
           LIMIT 30"
     );
-    $stmt->execute(['q' => $q, 'q2' => $q, 'digits' => strlen($digits) >= 3 ? $digits : '', 'digits2' => $digits]);
+    $stmt->execute(['q' => $q, 'q2' => like_escape(mb_substr($q, 0, 100)), 'digits' => strlen($digits) >= 3 ? $digits : '', 'digits2' => $digits]);
     $stores = array_map(
         static fn (array $r): array => $r + ['budget' => store_coupon_budget($pdo, $r['id'])],
         $stmt->fetchAll()
@@ -43,7 +43,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
 
 require_method('POST');
 $body = read_json_body();
-$restaurantId = (string) ($body['restaurant_id'] ?? '');
+$restaurantId = input_str($body, 'restaurant_id');
 $limit = $body['limit'] ?? null;
 // Teto de sanidade (R$ 1 milhão): 1e30 passava no is_numeric e estourava a
 // coluna numeric no banco.

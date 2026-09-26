@@ -20,7 +20,7 @@ $claims = require_auth();
 $courierId = require_courier($claims);
 $body = read_json_body();
 
-$orderId = (int) ($body['order_id'] ?? 0);
+$orderId = positive_id($body['order_id'] ?? null) ?? 0;
 $event = $body['event'] ?? null;
 if ($orderId <= 0 || !in_array($event, ['arrived_at_store', 'picked_up'], true)) {
     error_response(422, 'invalid_request', 'Informe order_id e event (arrived_at_store ou picked_up).');

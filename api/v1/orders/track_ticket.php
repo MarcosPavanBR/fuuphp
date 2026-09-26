@@ -16,9 +16,7 @@ require_method('POST');
 $claims = require_auth();
 $body = read_json_body();
 
-$orderId = is_int($body['order_id'] ?? null) || ctype_digit((string) ($body['order_id'] ?? ''))
-    ? (int) $body['order_id']
-    : 0;
+$orderId = positive_id($body['order_id'] ?? null) ?? 0;
 if ($orderId <= 0) {
     error_response(422, 'order_id_required', 'Informe order_id.', fields: ['order_id' => 'obrigatório']);
 }

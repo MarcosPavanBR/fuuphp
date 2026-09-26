@@ -88,9 +88,9 @@
     <button type="button" class="link-btn" onclick={() => (creating = true)}>+ Usar outro endereço</button>
   {:else}
     <h2 class="fuu-display">Novo endereço</h2>
-    <input type="text" placeholder="Rua" bind:value={street} />
-    <input type="text" placeholder="Número" bind:value={number} />
-    <input type="text" placeholder="Bairro" bind:value={neighborhood} />
+    <input maxlength="200" type="text" placeholder="Rua" bind:value={street} />
+    <input maxlength="20" type="text" placeholder="Número" bind:value={number} />
+    <input maxlength="100" type="text" placeholder="Bairro" bind:value={neighborhood} />
     <input type="text" inputmode="numeric" placeholder="CEP" bind:value={postalCode} />
     <button type="button" class="btn-fuu-primary w-100" disabled={busy} onclick={createAddress}>
       {busy ? 'Salvando…' : 'Salvar e continuar'}

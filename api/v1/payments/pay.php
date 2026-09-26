@@ -22,7 +22,7 @@ if (($claims['role'] ?? null) !== 'customer') {
 $idempotencyKey = require_idempotency_key();
 $body = read_json_body();
 
-$orderId = (int) ($body['order_id'] ?? 0);
+$orderId = positive_id($body['order_id'] ?? null) ?? 0;
 if ($orderId <= 0) {
     error_response(422, 'order_id_required', 'Informe order_id.', fields: ['order_id' => 'obrigatório']);
 }
@@ -69,7 +69,7 @@ function pay_with_card(PDO $pdo, array $order, array $body, array $claims, strin
     if ($installments < 1 || $installments > 12) {
         error_response(422, 'invalid_installments', 'Parcelas inválidas.', fields: ['installments' => 'inválido']);
     }
-    $payerCpf = isset($body['payer_cpf']) ? only_digits((string) $body['payer_cpf']) : null;
+    $payerCpf = isset($body['payer_cpf']) ? only_digits(input_str($body, 'payer_cpf')) : null;
     if ($payerCpf !== null && !is_valid_cpf($payerCpf)) {
         error_response(422, 'invalid_payer_cpf', 'CPF do titular inválido.', fields: ['payer_cpf' => 'inválido']);
     }
@@ -89,7 +89,7 @@ function pay_with_card(PDO $pdo, array $order, array $body, array $claims, strin
     $savedCard = null;
     if (isset($body['saved_card_id'])) {
         $cardStmt = $pdo->prepare('SELECT * FROM saved_cards WHERE id = :id AND user_id = :user');
-        $cardStmt->execute(['id' => (int) $body['saved_card_id'], 'user' => $claims['sub']]);
+        $cardStmt->execute(['id' => (positive_id($body['saved_card_id']) ?? 0), 'user' => $claims['sub']]);
         $savedCard = $cardStmt->fetch();
         if ($savedCard === false) {
             error_response(404, 'card_not_found', 'Cartão salvo não encontrado.');

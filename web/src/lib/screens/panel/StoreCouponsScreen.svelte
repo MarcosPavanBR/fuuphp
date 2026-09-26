@@ -160,7 +160,7 @@
         <p class="section-label">NOVO CUPOM</p>
         <label class="field">
           <span>Código</span>
-          <input type="text" class="fuu-mono" placeholder="VOLTA10" bind:value={form.code} />
+          <input maxlength="20" type="text" class="fuu-mono" placeholder="VOLTA10" bind:value={form.code} />
         </label>
         <p class="field-label">Desconto</p>
         <div class="pills">

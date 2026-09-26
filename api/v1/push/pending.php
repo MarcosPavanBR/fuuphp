@@ -17,7 +17,7 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 
 require_method('POST');
 $body = read_json_body();
-$endpoint = (string) ($body['endpoint'] ?? '');
+$endpoint = input_str($body, 'endpoint');
 if ($endpoint === '') {
     error_response(422, 'endpoint_required', 'Informe o endpoint da assinatura.');
 }

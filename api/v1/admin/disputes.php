@@ -53,7 +53,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
 require_method('POST');
 $body = read_json_body();
 
-$disputeId = (int) ($body['dispute_id'] ?? 0);
+$disputeId = positive_id($body['dispute_id'] ?? null) ?? 0;
 $resolution = body_text($body, 'resolution', 1000) ?? '';
 $charge = $body['charge'] ?? null; // 'courier' | 'store' | 'platform' | null
 

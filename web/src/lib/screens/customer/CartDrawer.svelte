@@ -11,6 +11,9 @@
   let cart = $derived(cartState());
   let coupon = $state('');
   let appliedCoupon = $state(null);
+  // O cupom que o servidor guarda no carrinho (migração 044) vale mesmo com a
+  // gaveta reaberta: antes o código sumia da tela ao reabrir.
+  let couponCode = $derived(appliedCoupon?.code ?? cart.order?.coupon_code ?? null);
   let couponBusy = $state(false);
   let busyItemId = $state(null);
 
@@ -74,7 +77,7 @@
   }
 
   function goToPayment() {
-    onCheckout(appliedCoupon?.code ?? null);
+    onCheckout(couponCode);
   }
 </script>
 
@@ -132,7 +135,7 @@
       </div>
       {#if Number(cart.order.discount) > 0}
         <div class="kv">
-          <span>Desconto{appliedCoupon ? ` (${appliedCoupon.code})` : ''}</span>
+          <span>Desconto{couponCode ? ` (${couponCode})` : ''}</span>
           <span class="fuu-mono discount">− {money(cart.order.discount)}</span>
         </div>
       {/if}

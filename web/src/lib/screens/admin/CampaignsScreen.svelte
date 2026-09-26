@@ -191,7 +191,7 @@
 
       <label class="field">
         <span>Código</span>
-        <input type="text" class="fuu-mono" placeholder="SEXTAPIZZA" bind:value={form.code} />
+        <input maxlength="20" type="text" class="fuu-mono" placeholder="SEXTAPIZZA" bind:value={form.code} />
       </label>
 
       <p class="field-label">Desconto</p>

@@ -106,7 +106,7 @@ try {
 
     // A cidade vem do corpo: a candidatura não tem coluna de cidade (Parte
     // II), e é o revisor que sabe onde essa pessoa vai rodar.
-    $city = only_digits((string) ($body['city_ibge_code'] ?? ''));
+    $city = only_digits(input_str($body, 'city_ibge_code'));
     if (strlen($city) !== 7) {
         $pdo->rollBack();
         error_response(422, 'city_required', 'Informe a praça (city_ibge_code) onde essa pessoa vai rodar.', fields: ['city_ibge_code' => 'obrigatório']);

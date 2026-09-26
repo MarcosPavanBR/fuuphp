@@ -22,13 +22,14 @@ if ($restaurantId !== null && (!is_string($restaurantId) || !is_valid_uuid($rest
 $pdo = db();
 if ($restaurantId !== null) {
     $stmt = $pdo->prepare(
-        "SELECT * FROM orders WHERE user_id = :user_id AND restaurant_id = :restaurant_id AND status = 'cart'"
+        "SELECT o.*, (SELECT c.code FROM coupons c WHERE c.id = o.coupon_id) AS coupon_code
+           FROM orders o WHERE o.user_id = :user_id AND o.restaurant_id = :restaurant_id AND o.status = 'cart'"
     );
     $stmt->execute(['user_id' => $claims['sub'], 'restaurant_id' => $restaurantId]);
 } else {
     // Só carrinho com item: carrinho vazio não é "o seu carrinho".
     $stmt = $pdo->prepare(
-        "SELECT o.* FROM orders o
+        "SELECT o.*, (SELECT c.code FROM coupons c WHERE c.id = o.coupon_id) AS coupon_code FROM orders o
           WHERE o.user_id = :user_id AND o.status = 'cart'
             AND EXISTS (SELECT 1 FROM order_items i WHERE i.order_id = o.id)
           ORDER BY (SELECT max(i.id) FROM order_items i WHERE i.order_id = o.id) DESC

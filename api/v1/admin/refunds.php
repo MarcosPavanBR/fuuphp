@@ -85,9 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 require_method('POST');
 $body = read_json_body();
 
-$refundId = (int) ($body['refund_id'] ?? 0);
-$action = (string) ($body['action'] ?? 'refund');
-$adjustment = (string) ($body['fee_adjustment'] ?? 'keep');
+$refundId = positive_id($body['refund_id'] ?? null) ?? 0;
+$action = input_str($body, 'action', 'refund');
+$adjustment = input_str($body, 'fee_adjustment', 'keep');
 $note = body_text($body, 'note', 500);
 
 if ($refundId <= 0 || !in_array($action, ['refund', 'wallet_offer', 'execute', 'confirm_manual'], true)) {

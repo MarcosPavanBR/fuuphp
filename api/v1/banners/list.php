@@ -15,7 +15,7 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 
 require_method('GET');
 
-$city = only_digits((string) ($_GET['city_ibge_code'] ?? ''));
+$city = only_digits(input_str($_GET, 'city_ibge_code'));
 if (strlen($city) !== 7) {
     error_response(422, 'city_ibge_code_required', 'Informe ?city_ibge_code=.');
 }

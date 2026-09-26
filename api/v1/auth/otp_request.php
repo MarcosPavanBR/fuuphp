@@ -17,7 +17,7 @@ if (!in_array($purpose, ['login', 'signup', 'phone_verify'], true)) {
     error_response(422, 'invalid_purpose', 'Informe purpose: login, signup ou phone_verify.', fields: ['purpose' => 'obrigatório']);
 }
 
-$phone = isset($body['phone']) ? only_digits((string) $body['phone']) : null;
+$phone = isset($body['phone']) ? only_digits(input_str($body, 'phone')) : null;
 $email = body_text($body, 'email', 254);
 
 if ($phone === null && $email === null) {
@@ -37,7 +37,7 @@ if ($email !== null && !is_valid_email($email)) {
 // canal, e inventar valor de enum pra caber numa tela é a ordem errada.
 $channel = $phone !== null ? 'sms' : 'email';
 if ($phone !== null && isset($body['channel'])) {
-    $channel = (string) $body['channel'];
+    $channel = input_str($body, 'channel');
     if (!in_array($channel, ['sms', 'whatsapp'], true)) {
         error_response(422, 'invalid_channel', 'Canal precisa ser sms ou whatsapp.', fields: ['channel' => 'inválido']);
     }

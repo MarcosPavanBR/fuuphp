@@ -16,7 +16,7 @@ $claims = require_auth();
 $restaurantId = require_store_staff($claims);
 $body = read_json_body();
 
-$itemId = (int) ($body['menu_item_id'] ?? 0);
+$itemId = positive_id($body['menu_item_id'] ?? null) ?? 0;
 $available = $body['available'] ?? null;
 if ($itemId <= 0 || !is_bool($available)) {
     error_response(422, 'invalid_request', 'Informe menu_item_id e available (true/false).');

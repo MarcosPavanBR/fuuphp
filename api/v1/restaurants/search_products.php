@@ -10,13 +10,18 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 require_method('GET');
 
 $cityIbge = $_GET['city_ibge_code'] ?? null;
-$query = trim((string) ($_GET['q'] ?? ''));
+$query = trim(input_str($_GET, 'q'));
 
 if (!is_string($cityIbge) || $cityIbge === '') {
     error_response(422, 'city_ibge_code_required', 'Informe ?city_ibge_code=.');
 }
 if (mb_strlen($query) < 2) {
     error_response(422, 'query_too_short', 'Digite ao menos 2 caracteres para buscar.');
+}
+// Nome de prato não passa de 80 letras; o texto vai dentro de um ILIKE, com
+// % e _ escapados (like_escape) pra valerem como letra.
+if (mb_strlen($query) > 80) {
+    error_response(422, 'query_too_long', 'Busca longa demais (até 80 caracteres).');
 }
 
 $pdo = db();
@@ -38,7 +43,7 @@ $stmt = $pdo->prepare(
      ORDER BY mi.name
      LIMIT 50"
 );
-$stmt->execute(['city_ibge_code' => $cityIbge, 'query' => $query]);
+$stmt->execute(['city_ibge_code' => $cityIbge, 'query' => like_escape($query)]);
 $products = $stmt->fetchAll();
 
 // Os filtros da tela 2.2 (Entrega grátis / Até 30 min / 4,5+) são sobre a

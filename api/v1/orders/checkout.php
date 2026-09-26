@@ -110,8 +110,8 @@ if (isset($body['slot']) && is_array($body['slot'])) {
     if ((int) $restaurant['slot_capacity'] <= 0) {
         error_response(409, 'scheduling_disabled', 'Essa loja não aceita pedido agendado.');
     }
-    $slotStart = (string) ($body['slot']['start'] ?? '');
-    $slotEnd = (string) ($body['slot']['end'] ?? '');
+    $slotStart = input_str($body['slot'], 'start');
+    $slotEnd = input_str($body['slot'], 'end');
     if (strtotime($slotStart) === false || strtotime($slotEnd) === false) {
         error_response(422, 'invalid_slot', 'Faixa inválida.', fields: ['slot' => 'inválida']);
     }

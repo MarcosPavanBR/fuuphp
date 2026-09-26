@@ -36,7 +36,7 @@ $body = read_json_body();
 
 $cnpj = $pdo->prepare('SELECT cnpj FROM restaurants WHERE id = :r');
 $cnpj->execute(['r' => $restaurantId]);
-$check = store_pix_key_check((string) ($body['pix_key'] ?? ''), (string) $cnpj->fetchColumn());
+$check = store_pix_key_check(input_str($body, 'pix_key'), (string) $cnpj->fetchColumn());
 if (!$check['ok']) {
     error_response(422, 'invalid_pix_key', $check['error'], fields: ['pix_key' => $check['error']]);
 }

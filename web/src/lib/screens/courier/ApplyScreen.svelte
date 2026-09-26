@@ -195,7 +195,7 @@
         {#if !otpSent}
           <label class="field">
             <span>Seu nome</span>
-            <input type="text" bind:value={fullName} />
+            <input maxlength="120" type="text" bind:value={fullName} />
           </label>
           <label class="field">
             <span>Telefone com DDD</span>
@@ -233,7 +233,7 @@
       <div class="card">
         <label class="field">
           <span>Nome completo</span>
-          <input type="text" bind:value={form.full_name} />
+          <input maxlength="120" type="text" bind:value={form.full_name} />
         </label>
         <div class="field-row">
           <label class="field">
@@ -262,7 +262,7 @@
         {#if form.vehicle === 'moto' || form.vehicle === 'car'}
           <label class="field">
             <span>Placa</span>
-            <input type="text" class="fuu-mono" placeholder="QQP1B34" bind:value={form.plate} />
+            <input maxlength="10" type="text" class="fuu-mono" placeholder="QQP1B34" bind:value={form.plate} />
           </label>
         {/if}
       </div>
@@ -271,7 +271,7 @@
       <div class="card">
         <label class="field">
           <span>Chave Pix (precisa ser sua)</span>
-          <input type="text" class="fuu-mono" bind:value={form.pix_key} />
+          <input maxlength="140" type="text" class="fuu-mono" bind:value={form.pix_key} />
         </label>
         <p class="pix-note">
           <i class="bi bi-shield-check"></i>

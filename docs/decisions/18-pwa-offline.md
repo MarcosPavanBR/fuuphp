@@ -13,10 +13,18 @@ há, e o que ele faz é limitado de propósito.
 - **Requisição com `Authorization` não entra em cache nem em rota pública**,
   porque o header muda o que o servidor devolve e o cache do service worker
   não varia por header.
-- **Duas estratégias, por motivo diferente.** App shell (HTML/JS/CSS/ícones):
-  cache primeiro -- é o que faz abrir rápido e abrir offline. Cardápio e
-  listas: rede primeiro com cópia no cache -- preço velho é pior que espera,
-  então a rede ganha sempre que existe, e o cache é o plano B.
+- **Três estratégias, por motivo diferente.**
+  - Arquivos com hash no nome (`/assets/`): cache primeiro. O nome muda a
+    cada build, então o que está guardado nunca fica velho.
+  - A página e o resto do app (HTML, manifest, ícones): rede primeiro, com
+    cópia pro offline. Até a decisão 47 era cache primeiro, e isso prendia o
+    cliente na versão antiga depois de cada deploy (conferido no
+    navegador).
+  - Cardápio e listas: rede primeiro com cópia no cache. Preço velho é pior
+    que espera, então a rede ganha sempre que existe, e o cache é o plano B.
+  - O resto da API nunca passa pelo cache, com ou sem `Authorization`. O
+    acompanhamento ao vivo autentica por ticket na URL, e health e config
+    mudam: antes, todo GET da API sem o cabeçalho ficava guardado.
 - **A praça escolhida passou a ser salva.** Não era: todo reload mandava o
   cliente refazer a Fase 1. Offline isso seria fatal -- quem reabre o app no
   metrô quer o cardápio salvo, não a tela "onde você está". Foi um achado do

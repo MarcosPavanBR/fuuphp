@@ -126,7 +126,7 @@
         {#if rejecting === store.id}
           <label class="reason">
             <span>Motivo da recusa (a loja lê isto)</span>
-            <textarea rows="2" placeholder="Ex.: contrato social ilegível" bind:value={reason}></textarea>
+            <textarea maxlength="500" rows="2" placeholder="Ex.: contrato social ilegível" bind:value={reason}></textarea>
           </label>
           <div class="actions">
             <button type="button" class="btn-fuu-danger-outline" disabled={busy} onclick={() => decide(store, 'reject')}>

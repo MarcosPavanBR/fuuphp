@@ -40,8 +40,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 require_method('POST');
 $body = read_json_body();
 
-$creditId = (int) ($body['credit_id'] ?? 0);
-$decision = (string) ($body['decision'] ?? '');
+$creditId = positive_id($body['credit_id'] ?? null) ?? 0;
+$decision = input_str($body, 'decision');
 if ($creditId <= 0 || !in_array($decision, ['accept', 'decline'], true)) {
     error_response(422, 'invalid_request', 'Informe credit_id e decision (accept ou decline).');
 }

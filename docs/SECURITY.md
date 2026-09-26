@@ -36,6 +36,15 @@ no CI. Se uma proteção não tem teste, ela está na seção "Limites conhecido
 - **Admin não tem senha.** Entra pelo mesmo código do cliente e, com o
   segundo fator ligado, também pelo código de um app autenticador (seção
   abaixo). O admin fundador é criado por `bin/bootstrap_admin.php`, uma vez.
+- **Teste de autorização** (`smoke_authz.sh`, decisão 47):
+  - toda rota é chamada sem login e por cada papel que não é o dela. A
+    lista de rotas sai do código (`require_admin`, `require_store_staff`,
+    `require_courier`), então rota nova entra sozinha;
+  - um segundo cliente, loja e entregador tentam ler e mexer no que é do
+    primeiro, em 55 casos (pedido, endereço, cartão, carrinho, carteira,
+    Pix, baixa, maquininha, cardápio, cupom, entrega com o código certo);
+  - depois, o teste confere no banco que nada do primeiro mudou;
+  - foi validado estragando um filtro de dono de propósito: o teste pegou.
 
 ## Segundo fator do admin (autenticador)
 
@@ -190,9 +199,17 @@ migração 042
   marcado.
 - **Validadores comuns** ficam em `lib/core/validation.php`:
   - `body_text` (texto com tipo e tamanho);
+  - `input_str` (texto lido sem conversão cega: lista vira vazio, não
+    `"Array"`);
   - `money_input` e `coord_input`;
   - `is_valid_date` e `is_valid_time`;
-  - `is_int_between` e `positive_id`.
+  - `is_int_between` e `positive_id` (id que não é inteiro positivo vira
+    0; antes, `(int)` de uma lista dava 1 e a rota agia sobre o registro 1).
+- **Aviso do PHP reprova o teste.** Os dois fuzz falham se o log do
+  servidor tiver `PHP Warning`, `Notice` ou `Deprecated`, e varrem o banco
+  atrás de `"Array"` gravado em texto, lista ou jsonb.
+- **Busca:** `%` e `_` digitados são letra, não curinga do `LIKE`
+  (`like_escape`), e o texto tem tamanho máximo.
 - **Caractere nulo** é recusado pra todas as rotas de uma vez, no corpo e
   na query (`read_json_body`, `reject_nul_in_query`).
 
@@ -261,6 +278,13 @@ migração 042
 - **Webhook do Mercado Pago:** assinatura HMAC conferida (sem segredo em
   produção, recusa). Mesmo assim ele não confia no corpo: busca o pagamento
   na API do Mercado Pago, então repetir uma notificação não aprova nada.
+  É por isso que a falta de janela de tempo na assinatura não é furo: um
+  aviso reenviado só relê o status real.
+- **Service worker** (`web/public/sw.js`): da API, guarda só as listas
+  públicas (cidades, lojas, cardápio, busca e fotos). Nada com
+  `Authorization`, nada do acompanhamento ao vivo (o ticket vai na URL) e
+  nada de outro domínio entra no cache. A página é "rede primeiro", então
+  deploy novo chega no próximo carregamento (decisão 47).
 - **IP do cliente:** o PHP usa só `REMOTE_ADDR`, que o Nginx acerta a partir
   de `CF-Connecting-IP` **só** pras faixas do Cloudflare. Ninguém forja o IP
   gravado na prova de consentimento.

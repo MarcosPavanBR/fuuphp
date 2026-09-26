@@ -28,8 +28,10 @@ if ($user === false) {
 }
 
 $fullName = (body_text($body, 'full_name', 120) ?? trim((string) ($user['full_name'] ?? '')));
-$cpf = only_digits((string) ($body['cpf'] ?? $user['cpf'] ?? ''));
-$phone = only_digits((string) ($body['phone'] ?? $user['phone'] ?? ''));
+// Sem o campo, vale o do cadastro; campo que não é texto fica vazio (e o
+// CPF/telefone inválido é recusado logo abaixo).
+$cpf = only_digits(input_str($body, 'cpf', (string) ($user['cpf'] ?? '')));
+$phone = only_digits(input_str($body, 'phone', (string) ($user['phone'] ?? '')));
 $vehicle = $body['vehicle'] ?? '';
 $plate = isset($body['plate']) ? strtoupper(body_text($body, 'plate', 10) ?? '') : null;
 $pixKey = body_text($body, 'pix_key', 140) ?? '';

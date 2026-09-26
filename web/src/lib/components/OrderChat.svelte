@@ -140,6 +140,7 @@
     <div class="composer">
       <input
         type="text"
+        maxlength="1000"
         placeholder="Escreva para a loja e o entregador…"
         bind:value={text}
         onkeydown={(e) => e.key === 'Enter' && send()}

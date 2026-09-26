@@ -82,7 +82,7 @@
   {:else}
     <label class="field">
       <span>Nome completo</span>
-      <input type="text" autocomplete="name" bind:value={fullName} />
+      <input maxlength="120" type="text" autocomplete="name" bind:value={fullName} />
     </label>
 
     <label class="field">
@@ -93,7 +93,7 @@
 
     <label class="field">
       <span>E-mail</span>
-      <input type="email" autocomplete="email" bind:value={email} placeholder="opcional" />
+      <input maxlength="254" type="email" autocomplete="email" bind:value={email} placeholder="opcional" />
     </label>
 
     <label class="field">

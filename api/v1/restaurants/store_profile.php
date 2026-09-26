@@ -25,7 +25,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
 
 require_method('POST');
 $body = read_json_body();
-$category = (string) ($body['category'] ?? '');
+$category = input_str($body, 'category');
 if (!in_array($category, STORE_CATEGORIES, true)) {
     error_response(422, 'invalid_category', 'Escolha uma das categorias da lista.', fields: ['category' => 'categoria inválida']);
 }

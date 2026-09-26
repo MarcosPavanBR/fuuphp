@@ -100,4 +100,12 @@ done
 [ -z "$BAD" ] || fail "rota respondeu 5xx pra entrada ruim:$(echo -e "$BAD" | sed -E 's/\(com login[^)]*\)/(com login)/')"
 echo "   $COUNT chamadas, nenhum 5xx"
 
+echo "== nenhum aviso do PHP no log do servidor =="
+# Aviso ("Array to string conversion", "Undefined array key") é entrada mal
+# tratada que não chegou a dar 500 -- e um robô enchia o log de produção com
+# ele. Cada rota tem que recusar a entrada ruim antes de o PHP reclamar.
+WARN=$(grep -a "PHP Warning\|PHP Notice\|PHP Deprecated" "/tmp/smoke-fuzz-server.log" | sed -E 's/^.*PHP (Warning|Notice|Deprecated): +//' | sort | uniq -c | sort -rn | head -20 || true)
+[ -z "$WARN" ] || fail "o PHP reclamou de entrada ruim:
+$WARN"
+
 echo "OK: entrada ruim não derruba rota nenhuma"

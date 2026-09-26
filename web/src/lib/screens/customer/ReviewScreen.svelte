@@ -120,7 +120,7 @@
   {/if}
 
   <p class="section-label">COMENTÁRIO (OPCIONAL)</p>
-  <textarea placeholder="Conte como foi…" rows="3" bind:value={comment}></textarea>
+  <textarea maxlength="1000" placeholder="Conte como foi…" rows="3" bind:value={comment}></textarea>
 
   <div class="footer">
     <button type="button" class="btn-fuu-primary w-100" disabled={busy || rating < 1} onclick={submit}>

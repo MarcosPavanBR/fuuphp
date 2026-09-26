@@ -10,7 +10,7 @@ require_method('POST');
 $claims = require_auth();
 $body = read_json_body();
 
-$orderItemId = (int) ($body['order_item_id'] ?? 0);
+$orderItemId = positive_id($body['order_item_id'] ?? null) ?? 0;
 if ($orderItemId <= 0) {
     error_response(422, 'order_item_id_required', 'Informe order_item_id.');
 }

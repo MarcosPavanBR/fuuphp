@@ -20,7 +20,7 @@ $action = $body['action'] ?? 'save';
 $pdo = db();
 
 if ($action === 'remove') {
-    $id = (int) ($body['id'] ?? 0);
+    $id = positive_id($body['id'] ?? null) ?? 0;
     if ($id <= 0) {
         error_response(422, 'id_required', 'Informe o id do feriado.', fields: ['id' => 'obrigatório']);
     }

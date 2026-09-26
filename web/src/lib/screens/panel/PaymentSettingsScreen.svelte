@@ -190,8 +190,8 @@
     {/each}
 
     <div class="add">
-      <input placeholder="Apelido (POS-03)" bind:value={newDevice.label} />
-      <input placeholder="Adquirente (stone, cielo…)" bind:value={newDevice.acquirer} />
+      <input maxlength="40" placeholder="Apelido (POS-03)" bind:value={newDevice.label} />
+      <input maxlength="40" placeholder="Adquirente (stone, cielo…)" bind:value={newDevice.acquirer} />
       <button
         type="button"
         class="ghost"

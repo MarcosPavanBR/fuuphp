@@ -16,12 +16,12 @@ if (!in_array($purpose, ['login', 'signup', 'phone_verify'], true)) {
     error_response(422, 'invalid_purpose', 'Informe purpose: login, signup ou phone_verify.');
 }
 
-$code = isset($body['code']) ? only_digits((string) $body['code']) : '';
+$code = isset($body['code']) ? only_digits(input_str($body, 'code')) : '';
 if (strlen($code) !== 6) {
     error_response(422, 'invalid_code', 'Código deve ter 6 dígitos.', fields: ['code' => 'inválido']);
 }
 
-$phone = isset($body['phone']) ? only_digits((string) $body['phone']) : null;
+$phone = isset($body['phone']) ? only_digits(input_str($body, 'phone')) : null;
 $email = body_text($body, 'email', 254);
 if ($phone === null && $email === null) {
     error_response(422, 'contact_required', 'Informe phone ou email.');
@@ -74,7 +74,7 @@ if ($user['role'] === 'admin') {
     $totpStmt->execute(['u' => $user['id']]);
     $totp = $totpStmt->fetch();
     if ($totp !== false) {
-        $totpCode = isset($body['totp']) && is_scalar($body['totp']) ? only_digits((string) $body['totp']) : '';
+        $totpCode = isset($body['totp']) && is_scalar($body['totp']) ? only_digits(input_str($body, 'totp')) : '';
         if ($totpCode === '') {
             error_response(401, 'totp_required', 'Digite também o código do app autenticador.');
         }

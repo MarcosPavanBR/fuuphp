@@ -30,7 +30,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
 require_method('POST');
 $body = read_json_body();
 
-$ibge = only_digits((string) ($body['ibge_code'] ?? ''));
+$ibge = only_digits(input_str($body, 'ibge_code'));
 $name = body_text($body, 'name', 100) ?? '';
 $uf = strtoupper(body_text($body, 'uf', 2) ?? '');
 $lat = $body['lat'] ?? null;

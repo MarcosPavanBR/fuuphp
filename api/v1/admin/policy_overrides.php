@@ -91,7 +91,7 @@ $body = read_json_body();
 
 // ── encerrar ─────────────────────────────────────────────────────────────
 if (($body['action'] ?? null) === 'end') {
-    $id = (int) ($body['id'] ?? 0);
+    $id = positive_id($body['id'] ?? null) ?? 0;
     $stmt = $pdo->prepare(
         'UPDATE policy_overrides SET expires_at = now()
           WHERE id = :id AND (expires_at IS NULL OR expires_at > now())
@@ -106,7 +106,7 @@ if (($body['action'] ?? null) === 'end') {
 }
 
 // ── criar ────────────────────────────────────────────────────────────────
-$scope = (string) ($body['scope'] ?? '');
+$scope = input_str($body, 'scope');
 $scopeId = body_text($body, 'scope_id', 40) ?? '';
 $reason = body_text($body, 'reason', 200) ?? '';
 $endsOn = body_text($body, 'ends_on', 10) ?? '';

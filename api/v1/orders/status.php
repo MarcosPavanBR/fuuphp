@@ -13,7 +13,7 @@ require_method('POST');
 $claims = require_auth();
 $body = read_json_body();
 
-$orderId = (int) ($body['order_id'] ?? 0);
+$orderId = positive_id($body['order_id'] ?? null) ?? 0;
 $to = $body['to'] ?? null;
 // O motivo aparece pro cliente e vai pro histórico do pedido: texto curto.
 $reason = body_text($body, 'reason', 300);

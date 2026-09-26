@@ -173,7 +173,7 @@
             </button>
           {:else}
             <span class="manual">
-              <input placeholder="E2E / protocolo" bind:value={refs[r.id]} />
+              <input maxlength="100" placeholder="E2E / protocolo" bind:value={refs[r.id]} />
               <button type="button" class="mini" disabled={busy || !refs[r.id]} onclick={() => confirmManual(r)}>Confirmar</button>
             </span>
           {/if}
@@ -213,7 +213,7 @@
 
       <label class="note">
         <span>Motivo da decisão (fica gravado)</span>
-        <textarea bind:value={note} rows="2" placeholder="Ex.: a loja anunciou 25 min e estava com 41."></textarea>
+        <textarea maxlength="500" bind:value={note} rows="2" placeholder="Ex.: a loja anunciou 25 min e estava com 41."></textarea>
       </label>
 
       <button type="button" class="btn-fuu-primary w-100" disabled={busy} onclick={() => decide('refund')}>

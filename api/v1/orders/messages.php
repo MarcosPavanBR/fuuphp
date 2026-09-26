@@ -18,10 +18,10 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 $claims = require_auth();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
-$orderId = (int) ($_GET['id'] ?? 0);
+$orderId = positive_id($_GET['id'] ?? null) ?? 0;
 if ($method === 'POST') {
     $body = read_json_body();
-    $orderId = (int) ($body['order_id'] ?? 0);
+    $orderId = positive_id($body['order_id'] ?? null) ?? 0;
 }
 if ($orderId <= 0) {
     error_response(422, 'id_required', 'Informe o pedido.', fields: ['id' => 'obrigatório']);

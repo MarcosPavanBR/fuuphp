@@ -26,7 +26,7 @@ $pdo = db();
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['image'])) {
     $stmt = $pdo->prepare('SELECT storage_key FROM settlement_proofs WHERE id = :id AND restaurant_id = :r');
-    $stmt->execute(['id' => (int) $_GET['image'], 'r' => $restaurantId]);
+    $stmt->execute(['id' => (positive_id($_GET['image']) ?? 0), 'r' => $restaurantId]);
     $key = $stmt->fetchColumn();
     $path = $key === false ? null : app_path(rtrim((string) env('PROOF_STORAGE_DIR', 'storage/proofs'), '/') . '/settlements/' . basename((string) $key));
     if ($path === null || !is_file($path)) {
@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 require_method('POST');
 $body = read_json_body();
-$proofId = (int) ($body['proof_id'] ?? 0);
+$proofId = positive_id($body['proof_id'] ?? null) ?? 0;
 $decision = $body['decision'] ?? null;
 $fraud = ($body['fraud'] ?? false) === true;
 $reason = is_string($body['reason'] ?? null) ? trim($body['reason']) : '';

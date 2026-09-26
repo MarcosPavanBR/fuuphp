@@ -43,7 +43,7 @@ if (array_key_exists('email', $body)) {
 }
 
 if (array_key_exists('cpf', $body)) {
-    $cpf = $body['cpf'] === null ? null : only_digits((string) $body['cpf']);
+    $cpf = $body['cpf'] === null ? null : only_digits(input_str($body, 'cpf'));
     if ($cpf !== null && !is_valid_cpf($cpf)) {
         error_response(422, 'invalid_cpf', 'CPF inválido.', fields: ['cpf' => 'inválido']);
     }
@@ -51,7 +51,7 @@ if (array_key_exists('cpf', $body)) {
 }
 
 if (array_key_exists('birth_date', $body)) {
-    $birthDate = $body['birth_date'] === null || $body['birth_date'] === '' ? null : (string) $body['birth_date'];
+    $birthDate = $body['birth_date'] === null || $body['birth_date'] === '' ? null : input_str($body, 'birth_date');
     if ($birthDate !== null) {
         $parsed = \DateTimeImmutable::createFromFormat('!Y-m-d', $birthDate);
         if ($parsed === false || $parsed->format('Y-m-d') !== $birthDate) {

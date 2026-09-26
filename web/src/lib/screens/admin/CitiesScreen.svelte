@@ -123,7 +123,7 @@
       </label>
       <label class="wide" class:bad={errors.name}>
         <span>Cidade</span>
-        <input placeholder="Campinas" bind:value={form.name} />
+        <input maxlength="100" placeholder="Campinas" bind:value={form.name} />
         {#if errors.name}<small>{errors.name}</small>{/if}
       </label>
       <label class:bad={errors.uf}>

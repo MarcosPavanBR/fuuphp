@@ -18,7 +18,7 @@ $pdo = db();
 
 require_method('POST');
 $body = read_json_body();
-$action = (string) ($body['action'] ?? '');
+$action = input_str($body, 'action');
 
 if ($action === 'register') {
     $str = static fn (string $k): string => is_string($body[$k] ?? null) ? trim($body[$k]) : '';

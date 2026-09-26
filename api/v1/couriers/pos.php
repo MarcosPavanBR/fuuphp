@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 require_method('POST');
 $body = read_json_body();
-$action = (string) ($body['action'] ?? '');
+$action = input_str($body, 'action');
 $open = pos_custody_open($pdo, $courierId);
 
 // ── take: retirar a máquina da loja ────────────────────────────────────
@@ -177,8 +177,8 @@ if ($action === 'register_own') {
 
 // ── sale: informar NSU e valor ─────────────────────────────────────────
 if ($action === 'sale') {
-    $orderId = (int) ($body['order_id'] ?? 0);
-    $nsu = is_string($body['nsu'] ?? null) || is_int($body['nsu'] ?? null) ? substr(only_digits((string) $body['nsu']), 0, 20) : '';
+    $orderId = positive_id($body['order_id'] ?? null) ?? 0;
+    $nsu = is_string($body['nsu'] ?? null) || is_int($body['nsu'] ?? null) ? substr(only_digits(input_str($body, 'nsu')), 0, 20) : '';
     $amount = money_input($body['amount'] ?? null, 0.01, 100000);
     if ($orderId <= 0 || $amount === null) {
         error_response(422, 'invalid_request', 'Informe order_id e o valor cobrado.', fields: ['amount' => 'obrigatório']);

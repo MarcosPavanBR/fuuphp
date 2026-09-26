@@ -107,6 +107,13 @@ echo "== busca com menos de 2 caracteres é barrada =="
 SHORT_CODE=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/restaurants/search_products.php?city_ibge_code=${CITY}&q=a")
 [ "$SHORT_CODE" = "422" ] || fail "busca curta não foi barrada (veio $SHORT_CODE)"
 
+echo "== busca: % e _ valem como letra, não como curinga =="
+# Sem escape, "%%" virava ILIKE '%%%%' e devolvia o cardápio inteiro da cidade.
+WILD=$(curl -s "$BASE/restaurants/search_products.php?city_ibge_code=${CITY}&q=%25%25")
+[ "$(echo "$WILD" | jq '.products | length')" = "0" ] || fail "busca por %% trouxe produto (curinga não escapado): $WILD"
+LONG_CODE=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/restaurants/search_products.php?city_ibge_code=${CITY}&q=$(printf 'a%.0s' $(seq 81))")
+[ "$LONG_CODE" = "422" ] || fail "busca de 81 letras não foi recusada: $LONG_CODE"
+
 echo "== perfil autenticado devolve estatísticas reais =="
 PHONE="119$(( (RANDOM << 15 | RANDOM) % 90000000 + 10000000 ))"
 CODE=$(curl -s -X POST "$BASE/auth/otp_request.php" -H "Content-Type: application/json" \

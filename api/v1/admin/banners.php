@@ -63,8 +63,8 @@ require_method('POST');
 // ── JSON: ligar/desligar, ordem, apagar ──────────────────────────────────
 if (str_starts_with((string) ($_SERVER['CONTENT_TYPE'] ?? ''), 'application/json')) {
     $body = read_json_body();
-    $id = (int) ($body['id'] ?? 0);
-    $action = (string) ($body['action'] ?? '');
+    $id = positive_id($body['id'] ?? null) ?? 0;
+    $action = input_str($body, 'action');
     $stmt = $pdo->prepare('SELECT id, title, active, position FROM promo_banners WHERE id = :id');
     $stmt->execute(['id' => $id]);
     $banner = $stmt->fetch();

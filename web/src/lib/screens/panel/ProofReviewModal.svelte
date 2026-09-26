@@ -240,7 +240,7 @@
       {#if rejecting}
         <label class="reason-field">
           <span>Motivo da recusa (o cliente lê isto)</span>
-          <textarea rows="2" placeholder="Ex.: valor divergente — recebemos R$ 68,40" bind:value={reason}></textarea>
+          <textarea maxlength="300" rows="2" placeholder="Ex.: valor divergente — recebemos R$ 68,40" bind:value={reason}></textarea>
         </label>
       {:else}
         <label class="counted-field">

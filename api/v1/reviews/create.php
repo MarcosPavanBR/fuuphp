@@ -29,7 +29,7 @@ if (($claims['role'] ?? null) !== 'customer') {
 }
 $body = read_json_body();
 
-$orderId = (int) ($body['order_id'] ?? 0);
+$orderId = positive_id($body['order_id'] ?? null) ?? 0;
 $rating = (int) ($body['rating'] ?? 0);
 if ($orderId <= 0) {
     error_response(422, 'order_id_required', 'Informe order_id.', fields: ['order_id' => 'obrigatório']);

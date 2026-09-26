@@ -119,7 +119,7 @@
     <p class="block-label">OBRIGATÓRIO PARA ENTREGAR</p>
 
     <p class="label">Nome completo</p>
-    <input type="text" bind:value={fullName} placeholder="Seu nome" />
+    <input maxlength="120" type="text" bind:value={fullName} placeholder="Seu nome" />
 
     {#if phoneLabel}
       <p class="label">Telefone <span class="ok">· verificado</span></p>
@@ -130,7 +130,7 @@
     {/if}
 
     <p class="label">E-mail</p>
-    <input type="email" bind:value={email} placeholder="voce@email.com" />
+    <input maxlength="254" type="email" bind:value={email} placeholder="voce@email.com" />
 
     <p class="block-label">EXIGIDO POR LEI NA NOTA FISCAL</p>
     <p class="label">CPF</p>

@@ -16,7 +16,7 @@ require_method('GET');
 $claims = require_auth();
 require_admin($claims);
 
-$incidentId = (int) ($_GET['id'] ?? 0);
+$incidentId = positive_id($_GET['id'] ?? null) ?? 0;
 if ($incidentId <= 0) {
     error_response(422, 'id_required', 'Informe ?id= da ocorrência.');
 }

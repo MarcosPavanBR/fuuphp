@@ -6,13 +6,18 @@
 // sessão (perfil, pedidos, carrinho), porque servir dado de conta de outra
 // pessoa que usou o mesmo aparelho seria pior que ficar sem dado.
 //
-// Duas estratégias:
-//   - app shell (HTML, JS, CSS, ícones): cache primeiro, rede depois. É o
-//     que faz abrir rápido e abrir offline.
-//   - cardápio e listas públicas: rede primeiro com cópia no cache. Preço
-//     velho é pior que espera, então a rede sempre ganha quando existe --
-//     o cache é o plano B, e a tela avisa que está mostrando o que salvou.
-const VERSION = 'fuu-v6';
+// Três estratégias:
+//   - arquivos com hash no nome (/assets/): cache primeiro. O nome muda a
+//     cada build, então o que está no cache nunca fica velho.
+//   - a página e o resto do app (HTML, manifest, ícones): rede primeiro,
+//     cópia no cache pro offline. Era cache primeiro, e isso prendia o
+//     cliente na versão antiga depois de cada deploy até alguém lembrar de
+//     trocar VERSION aqui (conferido no navegador, decisão 47).
+//   - cardápio e listas públicas da API: rede primeiro com cópia no cache.
+//     Preço velho é pior que espera, então a rede sempre ganha quando
+//     existe -- o cache é o plano B, e a tela avisa que está mostrando o que
+//     salvou. O resto da API nunca passa pelo cache.
+const VERSION = 'fuu-v7';
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 
@@ -57,33 +62,48 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
+  // Outro domínio (Mercado Pago, mapa, fontes) segue direto pra rede.
+  if (url.origin !== self.location.origin) return;
 
   // Requisição autenticada não entra em cache mesmo em rota pública: o
   // header Authorization muda o que o servidor devolve, e o cache do SW não
   // varia por header.
   if (request.headers.has('Authorization')) return;
 
-  if (CACHEABLE_API.some((path) => url.pathname === path)) {
-    event.respondWith(networkFirst(request));
+  if (url.pathname.startsWith('/api/')) {
+    // Da API, só a lista pública acima. Sem Authorization NÃO quer dizer
+    // público: o acompanhamento ao vivo autentica por ticket na URL (e é um
+    // stream sem fim), e health/config mudam -- antes, qualquer GET da API
+    // sem o header ia pro cache "primeiro do cache" e ficava lá pra sempre.
+    if (CACHEABLE_API.includes(url.pathname)) event.respondWith(networkFirst(request, DATA));
     return;
   }
 
-  if (url.origin === self.location.origin) {
+  if (url.pathname.startsWith('/assets/')) {
     event.respondWith(cacheFirst(request));
+    return;
   }
+
+  event.respondWith(networkFirst(request, SHELL));
 });
 
-async function networkFirst(request) {
+async function networkFirst(request, cacheName) {
   try {
     const response = await fetch(request);
     if (response.ok) {
-      const cache = await caches.open(DATA);
+      const cache = await caches.open(cacheName);
       cache.put(request, response.clone());
     }
     return response;
   } catch (err) {
     const cached = await caches.match(request);
     if (cached) return cached;
+    // Navegação offline sem cópia da página: devolve a raiz, que é a mesma
+    // SPA.
+    if (request.mode === 'navigate') {
+      const shell = await caches.match('/index.html');
+      if (shell) return shell;
+    }
     throw err;
   }
 }
@@ -91,22 +111,12 @@ async function networkFirst(request) {
 async function cacheFirst(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
-  try {
-    const response = await fetch(request);
-    if (response.ok && request.url.startsWith(self.location.origin)) {
-      const cache = await caches.open(SHELL);
-      cache.put(request, response.clone());
-    }
-    return response;
-  } catch (err) {
-    // Navegação offline sem cache da página: devolve a raiz, que é a
-    // mesma SPA.
-    if (request.mode === 'navigate') {
-      const shell = await caches.match('/index.html');
-      if (shell) return shell;
-    }
-    throw err;
+  const response = await fetch(request);
+  if (response.ok) {
+    const cache = await caches.open(SHELL);
+    cache.put(request, response.clone());
   }
+  return response;
 }
 
 // ── Tela 7.2 — notificações push ─────────────────────────────────────────

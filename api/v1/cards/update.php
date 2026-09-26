@@ -12,7 +12,7 @@ require_method('POST');
 $claims = require_auth();
 $body = read_json_body();
 
-$cardId = (int) ($body['id'] ?? 0);
+$cardId = positive_id($body['id'] ?? null) ?? 0;
 if ($cardId <= 0) {
     error_response(422, 'id_required', 'Informe id.', fields: ['id' => 'obrigatório']);
 }

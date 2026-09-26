@@ -173,12 +173,50 @@ function body_text(array $body, string $key, int $max): ?string
     if (is_int($value)) {
         $value = (string) $value;
     }
+    // A mensagem é pra pessoa (o app mostra ela); o nome técnico do campo vai
+    // só em `fields`, que é o que a tela usa pra marcar o campo.
     if (!is_string($value)) {
-        error_response(422, 'invalid_text', "O campo {$key} precisa ser texto.", fields: [$key => 'texto']);
+        error_response(422, 'invalid_text', 'Esse campo precisa ser um texto.', fields: [$key => 'texto']);
     }
     $value = trim($value);
     if (mb_strlen($value) > $max) {
-        error_response(422, 'text_too_long', "O campo {$key} vai até {$max} caracteres.", fields: [$key => "até {$max} caracteres"]);
+        error_response(422, 'text_too_long', "Texto longo demais: vai até {$max} caracteres.", fields: [$key => "até {$max} caracteres"]);
     }
     return $value;
+}
+
+/**
+ * Texto curto de uma entrada (corpo JSON, query, sub-objeto) pra comparar
+ * com lista fechada, extrair dígitos ou buscar: código de ação, tipo,
+ * chave, id em texto.
+ *
+ * - campo ausente (ou null) → $default;
+ * - texto → ele mesmo; número → o número em texto;
+ * - lista, objeto ou booleano → '' (inválido: não bate com lista fechada
+ *   nenhuma, e NÃO vira o $default -- mandar {"action": []} não pode
+ *   executar a ação padrão).
+ *
+ * Substitui o `(string) $body[...]`, que transformava lista em "Array" e
+ * deixava um aviso no log a cada requisição de robô.
+ */
+function input_str(mixed $source, string $key, string $default = ''): string
+{
+    if (!is_array($source) || !array_key_exists($key, $source) || $source[$key] === null) {
+        return $default;
+    }
+    $value = $source[$key];
+    if (is_string($value)) {
+        return $value;
+    }
+    return is_int($value) || is_float($value) ? (string) $value : '';
+}
+
+/**
+ * Texto digitado numa busca, pronto pra ir dentro de LIKE/ILIKE: %, _ e \
+ * viram literais (senão "%" casava com tudo e "_" com qualquer letra).
+ * O \ é o caractere de escape padrão do LIKE no PostgreSQL.
+ */
+function like_escape(string $text): string
+{
+    return strtr($text, ['\\' => '\\\\', '%' => '\\%', '_' => '\\_']);
 }

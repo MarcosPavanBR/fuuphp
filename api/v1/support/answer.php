@@ -28,7 +28,7 @@ $pdo = db();
 // continua sendo checada.
 $order = null;
 if (isset($_GET['order_id'])) {
-    $order = fetch_order($pdo, (int) $_GET['order_id']);
+    $order = fetch_order($pdo, (positive_id($_GET['order_id']) ?? 0));
     if ($order === null) {
         error_response(404, 'order_not_found', 'Pedido não encontrado.');
     }

@@ -38,7 +38,7 @@ $balances = [
 
 if (isset($_GET['intent_id'])) {
     $stmt = $pdo->prepare('SELECT id, state, method, amount, expires_at FROM cash_settlement_intents WHERE id = :id AND courier_id = :c');
-    $stmt->execute(['id' => (int) $_GET['intent_id'], 'c' => $courierId]);
+    $stmt->execute(['id' => (positive_id($_GET['intent_id']) ?? 0), 'c' => $courierId]);
     $intent = $stmt->fetch();
     if ($intent === false) {
         error_response(404, 'intent_not_found', 'Baixa não encontrada.');

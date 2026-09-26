@@ -63,7 +63,7 @@ $body = read_json_body();
 $action = $body['action'] ?? '';
 
 if ($action === 'deactivate') {
-    $couponId = (int) ($body['coupon_id'] ?? 0);
+    $couponId = positive_id($body['coupon_id'] ?? null) ?? 0;
     $stmt = $pdo->prepare(
         "UPDATE coupons SET active = false
           WHERE id = :id AND restaurant_id = :rid AND created_by_store AND active

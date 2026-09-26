@@ -359,6 +359,11 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
         run: bash tests/smoke_fuzz_deep.sh
 
+      - name: "Smoke test -- autorização: papel errado e dono errado (outro cliente, loja ou entregador) nunca passam"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+        run: bash tests/smoke_authz.sh
+
       - name: "Papéis do banco: RLS por loja, livro só de inserção, app_rw sem DDL (go-live)"
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery

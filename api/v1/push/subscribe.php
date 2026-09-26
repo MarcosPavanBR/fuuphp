@@ -19,10 +19,12 @@ $claims = require_auth();
 $body = read_json_body();
 $pdo = db();
 
-$action = (string) ($body['action'] ?? 'subscribe');
+$action = input_str($body, 'action', 'subscribe');
 $sub = $body['subscription'] ?? [];
-$endpoint = is_array($sub) ? (string) ($sub['endpoint'] ?? '') : '';
-if ($endpoint === '' || !str_starts_with($endpoint, 'https://')) {
+$endpoint = input_str($sub, 'endpoint');
+// Endpoint de push real tem uns 200 caracteres; 2.000 é folga, não limite
+// de negócio -- sem teto, 10 mil letras iam pro banco a cada assinatura.
+if ($endpoint === '' || !str_starts_with($endpoint, 'https://') || strlen($endpoint) > 2000) {
     error_response(422, 'invalid_subscription', 'Assinatura de push inválida (endpoint https obrigatório).', fields: ['subscription' => 'inválida']);
 }
 
@@ -49,9 +51,9 @@ if ($action === 'prefs') {
     json_response(200, ['subscription' => $row]);
 }
 
-$p256dh = (string) ($sub['keys']['p256dh'] ?? '');
-$auth = (string) ($sub['keys']['auth'] ?? '');
-if ($p256dh === '' || $auth === '') {
+$p256dh = input_str($sub['keys'] ?? null, 'p256dh');
+$auth = input_str($sub['keys'] ?? null, 'auth');
+if ($p256dh === '' || $auth === '' || strlen($p256dh) > 200 || strlen($auth) > 100) {
     error_response(422, 'invalid_subscription', 'Assinatura sem as chaves do navegador.', fields: ['subscription' => 'sem keys']);
 }
 

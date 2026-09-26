@@ -30,7 +30,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
 
 require_method('POST');
 $body = read_json_body();
-$restaurantId = (string) ($body['restaurant_id'] ?? '');
+$restaurantId = input_str($body, 'restaurant_id');
 $favorite = $body['favorite'] ?? null;
 if (!is_valid_uuid($restaurantId) || !is_bool($favorite)) {
     error_response(422, 'invalid_request', 'Informe restaurant_id e favorite (true ou false).');

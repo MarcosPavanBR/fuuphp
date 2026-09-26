@@ -10,4 +10,4 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 // GET ?key=<sha256>.jpg
 
 require_method('GET');
-public_image_serve((string) ($_GET['key'] ?? ''), PROMO_BANNER_SUBDIR);
+public_image_serve(input_str($_GET, 'key'), PROMO_BANNER_SUBDIR);

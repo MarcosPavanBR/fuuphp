@@ -66,8 +66,8 @@ function print_belongs_to(PDO $pdo, string $kind, int $refId, string $restaurant
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (isset($_GET['kind'])) {
-        $kind = (string) $_GET['kind'];
-        $refId = (int) ($_GET['ref_id'] ?? 0);
+        $kind = input_str($_GET, 'kind');
+        $refId = positive_id($_GET['ref_id'] ?? null) ?? 0;
         if (!in_array($kind, ['order_ticket', 'settlement_receipt'], true) || !print_belongs_to($pdo, $kind, $refId, $restaurantId)) {
             error_response(404, 'document_not_found', 'Documento não encontrado.');
         }
@@ -103,8 +103,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 require_method('POST');
 $body = read_json_body();
-$kind = (string) ($body['kind'] ?? '');
-$refId = (int) ($body['ref_id'] ?? 0);
+$kind = input_str($body, 'kind');
+$refId = positive_id($body['ref_id'] ?? null) ?? 0;
 $reprint = ($body['reprint'] ?? false) === true;
 if (!in_array($kind, ['order_ticket', 'settlement_receipt'], true) || !print_belongs_to($pdo, $kind, $refId, $restaurantId)) {
     error_response(404, 'document_not_found', 'Documento não encontrado.');

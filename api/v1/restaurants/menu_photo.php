@@ -21,7 +21,7 @@ require_once __DIR__ . '/../../../lib/bootstrap.php';
 const MENU_PHOTO_MAX_PX = 900;
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    public_image_serve((string) ($_GET['key'] ?? ''));
+    public_image_serve(input_str($_GET, 'key'));
 }
 
 require_method('POST');

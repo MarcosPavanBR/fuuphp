@@ -44,7 +44,11 @@ function call_advance_order(PDO $pdo, int $orderId, string $to, ?string $actorId
  */
 function fetch_order(PDO $pdo, int $orderId): ?array
 {
-    $stmt = $pdo->prepare('SELECT * FROM orders WHERE id = :id');
+    // coupon_code: o código do cupom que o carrinho guarda (migração 044),
+    // pra tela mostrar "Desconto (CÓDIGO)" mesmo depois de reabrir.
+    $stmt = $pdo->prepare(
+        'SELECT o.*, c.code AS coupon_code FROM orders o LEFT JOIN coupons c ON c.id = o.coupon_id WHERE o.id = :id'
+    );
     $stmt->execute(['id' => $orderId]);
     $order = $stmt->fetch();
     return $order === false ? null : $order;

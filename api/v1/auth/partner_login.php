@@ -25,8 +25,8 @@ if (!in_array($kind, ['restaurant', 'courier'], true)) {
     error_response(422, 'invalid_kind', 'Informe kind: restaurant ou courier.');
 }
 
-$loginCode = isset($body['login_code']) ? only_digits((string) $body['login_code']) : '';
-$secret = (string) ($body['secret'] ?? '');
+$loginCode = isset($body['login_code']) ? only_digits(input_str($body, 'login_code')) : '';
+$secret = input_str($body, 'secret');
 $deviceId = body_text($body, 'device_id', 100);
 
 if ($kind === 'restaurant' && !is_valid_cnpj($loginCode)) {

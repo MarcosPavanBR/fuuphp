@@ -40,7 +40,7 @@ if ($restaurantId === null) {
     error_response(403, 'forbidden', 'Esse login não está vinculado a uma loja.');
 }
 
-$code = is_string($body['code'] ?? null) || is_int($body['code'] ?? null) ? only_digits((string) $body['code']) : '';
+$code = is_string($body['code'] ?? null) || is_int($body['code'] ?? null) ? only_digits(input_str($body, 'code')) : '';
 // O que a loja contou na mão: número de R$ 0 a R$ 100.000 ("x" virava 0 e
 // 1e30 estourava a coluna).
 $counted = money_input($body['counted_amount'] ?? null, 0, 100000);

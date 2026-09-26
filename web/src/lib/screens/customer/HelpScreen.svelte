@@ -221,7 +221,7 @@
         <p class="field-label">
           {topic.answer.resolved ? 'AINDA PRECISA DE GENTE?' : 'CONTA O QUE ACONTECEU'}
         </p>
-        <textarea rows="3" bind:value={message} placeholder="Descreva em uma frase"></textarea>
+        <textarea maxlength="1000" rows="3" bind:value={message} placeholder="Descreva em uma frase"></textarea>
         <p class="sla">
           Prazo de resposta pra esse assunto: <strong>{slaLabel(topic.sla_minutes)}</strong>.
         </p>

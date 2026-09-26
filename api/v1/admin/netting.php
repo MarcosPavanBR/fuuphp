@@ -81,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 require_method('POST');
 $body = read_json_body();
-$action = (string) ($body['action'] ?? '');
+$action = input_str($body, 'action');
 $start = $body['start'] ?? $start;
 $end = $body['end'] ?? $end;
 // Data que existe no calendário, e começo antes do fim: o texto ia direto
@@ -131,7 +131,7 @@ if ($action !== 'settle') {
     error_response(422, 'invalid_action', 'Ação inválida: generate, send_batch ou settle.', fields: ['action' => 'inválida']);
 }
 
-$payoutId = (int) ($body['payout_id'] ?? 0);
+$payoutId = positive_id($body['payout_id'] ?? null) ?? 0;
 if ($payoutId <= 0) {
     error_response(422, 'payout_required', 'Informe payout_id.', fields: ['payout_id' => 'obrigatório']);
 }

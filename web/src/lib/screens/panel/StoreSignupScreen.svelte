@@ -163,7 +163,7 @@
     <p class="hint">Sua cidade não está na lista? O FUU ainda não chegou aí — fale com a gente.</p>
     <label class="field" class:bad={errors.address}>
       <span>Endereço</span>
-      <input type="text" placeholder="Rua, número, bairro" bind:value={form.address} />
+      <input maxlength="300" type="text" placeholder="Rua, número, bairro" bind:value={form.address} />
       {#if errors.address}<small>{errors.address}</small>{/if}
     </label>
     <button type="button" class="locate" class:done={location} disabled={locating} onclick={locate}>
@@ -175,7 +175,7 @@
     <p class="section">QUEM RESPONDE PELA LOJA</p>
     <label class="field" class:bad={errors.contact_name}>
       <span>Nome</span>
-      <input type="text" bind:value={form.contact_name} />
+      <input maxlength="120" type="text" bind:value={form.contact_name} />
       {#if errors.contact_name}<small>{errors.contact_name}</small>{/if}
     </label>
     <div class="two">
@@ -186,7 +186,7 @@
       </label>
       <label class="field" class:bad={errors.email}>
         <span>E-mail</span>
-        <input type="email" bind:value={form.email} />
+        <input maxlength="254" type="email" bind:value={form.email} />
         {#if errors.email}<small>{errors.email}</small>{/if}
       </label>
     </div>
@@ -199,7 +199,7 @@
     </label>
     <label class="field" class:bad={errors.pix_key}>
       <span>Chave Pix da loja (opcional agora)</span>
-      <input type="text" placeholder="CNPJ, e-mail, telefone ou chave aleatória" bind:value={form.pix_key} />
+      <input maxlength="140" type="text" placeholder="CNPJ, e-mail, telefone ou chave aleatória" bind:value={form.pix_key} />
       {#if errors.pix_key}<small>{errors.pix_key}</small>{/if}
     </label>
     <p class="hint">É pra onde vai o Pix que o cliente paga direto pra loja. Chave CNPJ tem que ser o desta loja.</p>

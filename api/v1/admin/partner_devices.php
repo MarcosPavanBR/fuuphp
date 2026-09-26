@@ -26,7 +26,7 @@ $adminId = require_admin($claims);
 $pdo = db();
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
-    $q = trim((string) ($_GET['q'] ?? ''));
+    $q = trim(input_str($_GET, 'q'));
     if (mb_strlen($q) < 3) {
         error_response(422, 'query_too_short', 'Digite pelo menos 3 caracteres (CNPJ, CPF ou nome).');
     }
@@ -45,14 +45,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
           ORDER BY name
           LIMIT 20"
     );
-    $stmt->execute(['digits' => strlen($digits) >= 3 ? $digits : '', 'q' => $q]);
+    $stmt->execute(['digits' => strlen($digits) >= 3 ? $digits : '', 'q' => like_escape(mb_substr($q, 0, 100))]);
 
     json_response(200, ['accounts' => $stmt->fetchAll()]);
 }
 
 require_method('POST');
 $body = read_json_body();
-$accountId = (string) ($body['partner_account_id'] ?? '');
+$accountId = input_str($body, 'partner_account_id');
 $reason = body_text($body, 'reason', 300) ?? '';
 if (!is_valid_uuid($accountId)) {
     error_response(422, 'invalid_request', 'Informe partner_account_id.');

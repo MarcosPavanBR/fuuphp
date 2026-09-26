@@ -20,8 +20,8 @@ $xSignature = $_SERVER['HTTP_X_SIGNATURE'] ?? '';
 $xRequestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? '';
 $body = read_json_body();
 
-$dataId = (string) ($body['data']['id'] ?? '');
-$topic = (string) ($body['type'] ?? $body['topic'] ?? '');
+$dataId = input_str($body['data'] ?? null, 'id');
+$topic = input_str($body, 'type', input_str($body, 'topic'));
 
 if ($dataId === '' || $topic !== 'payment') {
     // Outros tópicos (merchant_order, etc.) não interessam a este projeto.
@@ -37,7 +37,7 @@ $pdo = db();
 if (mp_mode() === 'fake') {
     // Sem conta real, não há um /v1/payments/{id} de verdade pra consultar.
     // O corpo do webhook, neste modo, já carrega o status simulado direto.
-    $status = (string) ($body['status'] ?? 'approved');
+    $status = input_str($body, 'status', 'approved');
     $statusDetail = $body['status_detail'] ?? null;
 } else {
     $resp = mp_request('GET', "/v1/payments/{$dataId}", []);

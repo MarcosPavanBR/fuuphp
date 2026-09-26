@@ -26,7 +26,7 @@ $courierId = require_courier($claims);
 $key = require_idempotency_key();
 $body = read_json_body();
 
-$orderId = (int) ($body['order_id'] ?? 0);
+$orderId = positive_id($body['order_id'] ?? null) ?? 0;
 if ($orderId <= 0) {
     error_response(422, 'order_id_required', 'Informe order_id.', fields: ['order_id' => 'obrigatório']);
 }
@@ -48,7 +48,7 @@ idempotent_response($pdo, 'POST /v1/couriers/deliver', $key, $body, function () 
 
     // Prova de entrega: código do cliente OU foto. Sem uma das duas não
     // fecha -- é o que sustenta disputa depois (Fase 14).
-    $code = isset($body['delivery_code']) && is_scalar($body['delivery_code']) ? only_digits((string) $body['delivery_code']) : '';
+    $code = isset($body['delivery_code']) && is_scalar($body['delivery_code']) ? only_digits(input_str($body, 'delivery_code')) : '';
     $hasPhoto = isset($body['photo_storage_key']) && $body['photo_storage_key'] !== '';
 
     if ($code === '' && !$hasPhoto) {

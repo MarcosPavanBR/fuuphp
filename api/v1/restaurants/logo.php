@@ -18,7 +18,7 @@ const LOGO_MAX_PX = 400;
 const LOGO_SUBDIR = 'logos';
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    public_image_serve((string) ($_GET['key'] ?? ''), LOGO_SUBDIR);
+    public_image_serve(input_str($_GET, 'key'), LOGO_SUBDIR);
 }
 
 require_method('POST');

@@ -21,7 +21,7 @@ if (($claims['role'] ?? null) !== 'restaurant_staff') {
     error_response(403, 'forbidden', 'Só a equipe da loja vê comprovante.');
 }
 
-$proofId = (int) ($_GET['id'] ?? 0);
+$proofId = positive_id($_GET['id'] ?? null) ?? 0;
 if ($proofId <= 0) {
     error_response(422, 'id_required', 'Informe ?id= do comprovante.');
 }
