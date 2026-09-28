@@ -1,0 +1,49 @@
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/../../../lib/bootstrap.php';
+
+// Tela 3.1 — os dados públicos de uma loja: horário, tempo de preparo em
+// vigor e as formas de pagamento que ela aceita agora.
+
+require_method('GET');
+$id = $_GET['id'] ?? '';
+if (!is_string($id) || !is_valid_uuid($id)) {
+    error_response(422, 'id_required', 'Informe um ?id= válido.');
+}
+
+$pdo = db();
+$stmt = $pdo->prepare('SELECT id, name, cnpj, city_ibge_code, category, logo_key, is_open, pause_until, approved_at, prep_minutes FROM restaurants WHERE id = :id');
+$stmt->execute(['id' => $id]);
+$restaurant = $stmt->fetch();
+
+if ($restaurant === false) {
+    error_response(404, 'restaurant_not_found', 'Loja não encontrada.');
+}
+
+$hoursStmt = $pdo->prepare('SELECT dow, shift, opens, closes, last_order, active FROM business_hours WHERE restaurant_id = :id ORDER BY dow, shift');
+$hoursStmt->execute(['id' => $id]);
+
+// Tela 11.2 -> 5.3: a previsão que o cliente lê passa a ser o tempo que a
+// loja informou, já com o acréscimo da fila quando ela ligou isso. Antes era
+// uma janela fixa escrita no front, que ninguém na loja podia corrigir.
+$prep = effective_prep_minutes($pdo, (string) $restaurant['id'], $restaurant);
+
+// Tela 4.1: a seleção de método mostra o que ESTA loja aceita agora
+// (plataforma ∩ loja, já com o "somente online" de repasse atrasado) --
+// antes o app oferecia os cinco e o checkout recusava com 422 depois.
+// null quando ainda não há política cadastrada: o app mostra tudo e o
+// checkout decide, como antes.
+try {
+    $paymentMethods = resolve_policy($pdo, (string) $restaurant['id'])['enabled_methods'];
+} catch (RuntimeException) {
+    $paymentMethods = null;
+}
+
+json_response(200, [
+    'restaurant' => $restaurant,
+    'prep' => $prep,
+    'payment_methods' => $paymentMethods,
+    'business_hours' => $hoursStmt->fetchAll(),
+]);

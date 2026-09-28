@@ -1,0 +1,202 @@
+<?php
+declare(strict_types=1);
+
+// Trava de produção: "produção falha fechado".
+//
+// Em APP_ENV=production (e staging, com uma exceção), a API NÃO sobe se alguma
+// integração estiver em modo simulado ou sem segredo. Antes desta trava o
+// código fazia o contrário -- sem token do Mercado Pago caía em modo fake,
+// sem segredo do webhook aceitava qualquer notificação, sem provedor de OTP
+// "enviava" o código só pro log. Em produção, isso é cobrar de mentira e
+// deixar qualquer um aprovar pagamento.
+//
+// Chamada no fim de lib/bootstrap.php, então vale pra toda rota da API e todo
+// script de bin/ (que começam pelo bootstrap). Falhou:
+//   HTTP → 503 {code: service_unavailable} sem detalhe nenhum pro cliente; os
+//          motivos vão pro log do servidor, com trace_id;
+//   CLI  → lista os motivos no stderr e sai com código 1.
+//
+// Scripts que precisam rodar ANTES de tudo estar pronto (gerar a chave VAPID,
+// criar o admin fundador, gerar documentação) definem
+// FUU_SKIP_PRODUCTION_GUARD antes do bootstrap.
+//
+// staging = homologação com o sandbox do Mercado Pago: tudo igual à produção,
+// menos o token, que PODE ser de teste (TEST-...).
+
+const PRODUCTION_LIKE_ENVS = ['production', 'staging'];
+
+// O segredo de exemplo do .env.example: se chegou em produção, ninguém trocou.
+const JWT_SECRET_EXAMPLE = 'troque-por-um-segredo-de-verdade-no-vault';
+
+// Tudo que o .env de produção configura (deploy/env/fuuphp.env.example).
+const PRODUCTION_SETTINGS = [
+    'DATABASE_URL', 'JWT_SECRET', 'ALLOWED_ORIGIN',
+    'MERCADOPAGO_MODE', 'MERCADOPAGO_ACCESS_TOKEN', 'MERCADOPAGO_PUBLIC_KEY', 'MERCADOPAGO_WEBHOOK_SECRET',
+    'OTP_SENDER', 'TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM', 'TWILIO_MESSAGING_SERVICE_SID',
+    'TWILIO_WHATSAPP_FROM', 'PUSH_MODE', 'VAPID_PRIVATE_KEY_FILE', 'VAPID_SUBJECT',
+    'PROOF_STORAGE_DIR', 'MENU_PHOTO_DIR', 'COURIER_DOC_DIR', 'PUBLIC_ORIGIN',
+    'DATA_ENCRYPTION_KEY',
+];
+
+// Os quatro ambientes que existem. Qualquer outro valor não é um deles.
+const KNOWN_ENVS = ['development', 'testing', 'staging', 'production'];
+
+/**
+ * O ambiente (APP_ENV): development, testing, staging ou production.
+ *
+ * Falha fechado: sem APP_ENV, ou com um valor que não é um dos quatro
+ * ("prod", "dev", "Produção"), vale production -- a trava confere tudo e
+ * recusa subir dizendo por quê. Antes o padrão era development, e um .env
+ * de produção que perdesse a linha (ou a digitasse errado) passava a
+ * devolver o código de login na resposta e a aceitar webhook sem assinatura.
+ */
+function app_env(): string
+{
+    $env = strtolower(trim((string) env('APP_ENV', '')));
+
+    return in_array($env, KNOWN_ENVS, true) ? $env : 'production';
+}
+
+/**
+ * Production ou staging: onde a trava de produção vale.
+ */
+function is_production_like(): bool
+{
+    return in_array(app_env(), PRODUCTION_LIKE_ENVS, true);
+}
+
+/**
+ * Tudo que impede subir em produção/staging. Lista vazia = pode subir.
+ *
+ * @return list<string>
+ */
+function production_problems(): array
+{
+    if (!is_production_like()) {
+        return [];
+    }
+    $problems = [];
+    $env = app_env();
+
+    // Sem APP_ENV (ou com valor inventado) caiu em production pelo padrão:
+    // quem configurou precisa dizer, com todas as letras, onde está.
+    $declared = strtolower(trim((string) env('APP_ENV', '')));
+    if (!in_array($declared, KNOWN_ENVS, true)) {
+        $problems[] = $declared === ''
+            ? 'APP_ENV ausente: vale production por segurança (declare development, testing, staging ou production)'
+            : "APP_ENV '{$declared}' não existe: vale production por segurança (use development, testing, staging ou production)";
+    }
+
+    // O modelo de produção (deploy/env/fuuphp.env.example) marca o que falta
+    // preencher com <...>. Um marcador que sobrou não é vazio -- passaria nas
+    // conferências abaixo -- então é recusado aqui, pelo nome.
+    foreach (PRODUCTION_SETTINGS as $key) {
+        if (preg_match('/<[^<>]+>/', (string) env($key, '')) === 1) {
+            $problems[] = "{$key} ainda com o marcador do modelo (<...>)";
+        }
+    }
+
+    $jwt = (string) env('JWT_SECRET', '');
+    if ($jwt === '' || strlen($jwt) < 32 || $jwt === JWT_SECRET_EXAMPLE) {
+        $problems[] = 'JWT_SECRET vazio, curto (< 32) ou igual ao do .env.example';
+    }
+    // Documento de entregador cifrado em disco (lib/core/file_crypto.php).
+    if (file_crypto_key() === null) {
+        $problems[] = 'DATA_ENCRYPTION_KEY vazia ou inválida (32 bytes em base64)';
+    }
+
+    if (mp_mode() !== 'live') {
+        $problems[] = 'Mercado Pago não está em modo live (MERCADOPAGO_MODE / MERCADOPAGO_ACCESS_TOKEN)';
+    }
+    foreach (['MERCADOPAGO_ACCESS_TOKEN', 'MERCADOPAGO_WEBHOOK_SECRET', 'MERCADOPAGO_PUBLIC_KEY'] as $key) {
+        if ((string) env($key, '') === '') {
+            $problems[] = "{$key} vazio";
+        }
+    }
+    if ($env === 'production' && str_starts_with((string) env('MERCADOPAGO_ACCESS_TOKEN', ''), 'TEST-')) {
+        $problems[] = 'MERCADOPAGO_ACCESS_TOKEN de sandbox (TEST-) em produção';
+    }
+
+    if (push_mode() !== 'live') {
+        $problems[] = 'PUSH_MODE não é live';
+    }
+    if (!is_readable(push_key_path())) {
+        $problems[] = 'chave VAPID ausente ou ilegível (' . push_key_path() . ') -- rode php bin/generate_vapid_keys.php';
+    }
+
+    // Avatar no Supabase Storage: URL sem chave é configuração pela metade.
+    $avatarProblem = avatar_config_problem();
+    if ($avatarProblem !== null) {
+        $problems[] = $avatarProblem;
+    }
+
+    $otpProblem = otp_sender_problem();
+    if ($otpProblem !== null) {
+        $problems[] = $otpProblem;
+    }
+
+    // Vazio é válido (mesmo domínio, sem CORS); AUSENTE não: o padrão de
+    // desenvolvimento liberaria http://localhost:5173.
+    if (getenv('ALLOWED_ORIGIN') === false) {
+        $problems[] = 'ALLOWED_ORIGIN não definida (defina vazia se PWA e API estão no mesmo domínio)';
+    }
+
+    foreach (production_storage_dirs() as $label => $dir) {
+        $real = realpath($dir);
+        if ($real === false || !is_dir($real)) {
+            $problems[] = "pasta de {$label} não existe: {$dir}";
+            continue;
+        }
+        if (!is_writable($real)) {
+            $problems[] = "pasta de {$label} sem permissão de escrita: {$real}";
+        }
+        // Arquivo enviado não mora dentro do projeto: lá ele fica a um erro de
+        // configuração do servidor web de ser servido direto.
+        if (str_starts_with($real . '/', realpath(APP_ROOT) . '/')) {
+            $problems[] = "pasta de {$label} dentro do projeto ({$real}); use um caminho absoluto fora dele, ex.: /var/fuuphp/storage";
+        }
+    }
+
+    return $problems;
+}
+
+/** As pastas de arquivo que precisam existir, graváveis e fora do projeto. */
+function production_storage_dirs(): array
+{
+    return [
+        'comprovantes' => app_path(rtrim((string) env('PROOF_STORAGE_DIR', 'storage/proofs'), '/')),
+        'fotos do cardápio' => app_path(rtrim((string) env('MENU_PHOTO_DIR', 'storage/menu'), '/')),
+        'documentos de entregador' => app_path(rtrim((string) env('COURIER_DOC_DIR', 'storage/courier_docs'), '/')),
+    ];
+}
+
+/** Aplica a trava: em produção/staging com problema, não segue. */
+function enforce_production_guard(): void
+{
+    if (defined('FUU_SKIP_PRODUCTION_GUARD')) {
+        return;
+    }
+    $problems = production_problems();
+    if ($problems === []) {
+        return;
+    }
+
+    if (PHP_SAPI === 'cli') {
+        fwrite(STDERR, 'APP_ENV=' . app_env() . " recusado -- configuração incompleta:\n  - " . implode("\n  - ", $problems) . "\n");
+        exit(1);
+    }
+
+    $trace = trace_id();
+    foreach ($problems as $problem) {
+        error_log("[{$trace}] production_guard: {$problem}");
+    }
+    http_response_code(503);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Retry-After: 300');
+    echo json_encode([
+        'code' => 'service_unavailable',
+        'message' => 'Serviço temporariamente indisponível.',
+        'trace_id' => $trace,
+    ]);
+    exit;
+}

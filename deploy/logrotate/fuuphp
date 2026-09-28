@@ -1,0 +1,19 @@
+# Rotação dos logs do FUUdelivery (go-live, passo 7).
+# Instalar: copie para /etc/logrotate.d/fuuphp.
+#
+# 30 dias de histórico. Os logs não trazem código de OTP nem segredo (o
+# envio de OTP nunca registra o código; a trava de produção registra só o
+# nome do que falta), mas trazem IP e trace_id: não guardar mais que o
+# necessário é regra de LGPD.
+
+/var/log/fuuphp/*.log {
+    daily
+    rotate 30
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    su fuuphp fuuphp
+    create 0640 fuuphp fuuphp
+}

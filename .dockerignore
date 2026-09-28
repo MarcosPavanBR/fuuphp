@@ -1,0 +1,15 @@
+# O que NÃO vai pro contexto do build da imagem (Dockerfile).
+# Segredo nunca: o .env local fica de fora, e storage/ (arquivos de
+# desenvolvimento) também. O resto é peso morto pra imagem de produção.
+.env
+.env.*
+!.env.example
+.git
+.github
+storage
+tests
+docs
+web/node_modules
+web/dist
+docker-compose.yml
+**/*.log

@@ -1,0 +1,496 @@
+name: ci
+
+# ADR-002 (Especificacao FUUDelivery, Parte I): migracoes versionadas rodam
+# no CI, nunca no cPanel. Este workflow aplica todas as migracoes do zero,
+# reverte tudo e aplica de novo contra um PostgreSQL 16 real com pg_cron, e
+# depois roda o smoke test de cada modulo PHP sobre esse banco migrado.
+
+on:
+  push:
+    paths:
+      - "db/**"
+      - "api/**"
+      - "lib/**"
+      - "tests/**"
+      - "web/**"
+      - "bin/**"
+      - "deploy/**"
+      - "Dockerfile"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "db/**"
+      - "api/**"
+      - "lib/**"
+      - "tests/**"
+      - "web/**"
+      - "bin/**"
+      - "deploy/**"
+      - "Dockerfile"
+      - ".github/workflows/ci.yml"
+
+# O token do GITHUB_TOKEN só lê o repositório: o CI não publica, não comenta
+# e não escreve nada -- se um passo (ou uma ação de terceiro) for
+# comprometido, não tem o que estragar.
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    # Uma suíte presa (servidor que não sobe, psql esperando) não segura o
+    # runner por 6 horas.
+    timeout-minutes: 30
+    # Como em produção: a API das suítes conecta como app_rw (sem ser dona das
+    # tabelas, sujeita à RLS); o semeio dos testes usa o dono (DATABASE_URL).
+    env:
+      API_DATABASE_URL: postgres://app_rw:app-rw-ci@localhost:5432/fuudelivery
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Build imagem Postgres 16 + pg_cron
+        run: docker build -t fuudelivery-db ./db
+
+      - name: Subir o banco
+        run: |
+          docker run -d --name fuudelivery-db \
+            -e POSTGRES_DB=fuudelivery \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -p 5432:5432 \
+            fuudelivery-db \
+            postgres -c shared_preload_libraries=pg_cron -c cron.database_name=fuudelivery -c cron.use_background_workers=on -c max_worker_processes=20
+
+      - name: Esperar o banco aceitar conexao
+        run: |
+          for i in $(seq 1 30); do
+            docker exec fuudelivery-db pg_isready -U postgres -d fuudelivery && break
+            sleep 2
+          done
+
+      - name: Aplicar todas as migracoes (up)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          bash db/migrate.sh up
+
+      - name: "Reverter tudo e aplicar de novo (down N, up) -- prova de que o round-trip fecha"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+        run: |
+          # N = quantas migrações existem: número fixo aqui quebrava a cada migração nova.
+          bash db/migrate.sh down "$(ls db/migrations/*.up.sql | wc -l)"
+          bash db/migrate.sh up
+
+      - name: "Senha do role app_rw (a API das suítes conecta com ele)"
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d fuudelivery -c "ALTER ROLE app_rw PASSWORD 'app-rw-ci'"
+
+      - name: Conferir que as tabelas do esquema existem
+        env:
+          PGPASSWORD: postgres
+        run: |
+          count=$(psql -h localhost -U postgres -d fuudelivery -tAc \
+            "SELECT count(*) FROM pg_tables WHERE schemaname='public'")
+          echo "tabelas criadas: $count"
+          test "$count" -ge 40
+
+      - name: Instalar PHP 8.4 + pdo_pgsql
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: "8.4"
+          extensions: pdo_pgsql, pgsql, gd, fileinfo, curl
+          # Sem xdebug/pcov: não medimos cobertura, e a extensão de cobertura
+          # desliga o JIT com um aviso no início de todo processo PHP, que
+          # os testes de "nenhum aviso no log" contavam como defeito.
+          coverage: none
+
+      - name: Lint de sintaxe em todos os arquivos PHP
+        run: |
+          find lib api bin -name "*.php" -print0 | xargs -0 -n1 php -l
+
+      - name: "Documentação gerada em dia (catálogo da API e mapa do banco)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+        run: |
+          php bin/generate_api_catalog.php --check
+          php bin/generate_api_catalog.php --missing || { echo "rota sem comentário de cabeçalho (acima)"; exit 1; }
+          php bin/generate_db_map.php --check
+
+      - name: "Primeiro deploy: admin fundador e política v1 (bin/bootstrap_admin.php) -- roda antes de tudo, no banco vazio"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+        run: bash tests/smoke_bootstrap_admin.sh
+
+      - name: "Trava de produção: produção falha fechado"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+        run: bash tests/smoke_production_guard.sh
+
+      - name: "OTP por SMS pela Twilio (contra uma Twilio falsa local; o curl é o de produção)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+        run: bash tests/smoke_otp_twilio.sh
+
+      - name: Smoke test -- módulo identity
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+        run: bash tests/smoke_identity.sh
+
+      - name: Smoke test -- módulo catalog+ordering+checkout
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+        run: bash tests/smoke_ordering.sh
+
+      - name: Smoke test -- módulo de descoberta (restaurants/list, search, profile)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+        run: bash tests/smoke_discovery.sh
+
+      - name: Smoke test -- carrinho incremental (Fase 3)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+        run: bash tests/smoke_cart.sh
+
+      - name: Smoke test -- pagamentos (Fase 4 + validação humana do Pix, Fase 7.3)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_payments.sh
+
+      - name: "Smoke test -- acompanhamento pós-pedido (Fase 5: timeline, SSE, avaliação)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+        run: bash tests/smoke_tracking.sh
+
+      - name: "Smoke test -- conta (Fase 6: endereços e cartões salvos)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_account.sh
+
+      - name: "Smoke test -- painel da loja (Fase 7.3 + 11.1: fila de Pix e KDS)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_panel.sh
+
+      - name: "Smoke test -- caminho do erro (Fase 13: cancelamento, recusa, reembolso)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_cancel.sh
+
+      - name: Smoke test -- entregador e caixa (Fase 8 + 9)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_courier.sh
+
+      - name: Smoke test -- chat do pedido e cupons (Fase 14.2 + migração 008)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_support.sh
+
+      - name: Smoke test -- painel da plataforma (Fase 12 + política da 10.5)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_admin.sh
+
+      - name: "Smoke test -- suporte libera troca de aparelho de loja/entregador"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+        run: bash tests/smoke_partner_device.sh
+
+      - name: Smoke test -- pedido sem entregador (Fase 15.1 + migração 017)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_dispatch.sh
+
+      - name: Smoke test -- loja operando a si mesma (Fase 11.2 a 11.4 + migração 018)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_store.sh
+
+      - name: Smoke test -- central de ajuda (Fase 14.1)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_help.sh
+
+      - name: Smoke test -- endereço, área e frete no servidor (Fase 14.3 + migração 019)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_address.sh
+
+      - name: Smoke test -- pedido agendado (Fase 14.4 + migração 020)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_schedule.sh
+
+      - name: Smoke test -- entrada de entregador e campanhas (Fase 15.2 e 15.3)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_growth.sh
+
+      - name: "Smoke test -- ocorrencia de entrega e console de reembolso (13.3 e 13.4)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_incident.sh
+
+      - name: "Smoke test -- maquininha, conciliacao e netting semanal (9.6, 9.7, 10.4, 10.6)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_machine.sh
+
+      - name: "Smoke test -- executor de estornos, CSV contabil, livro do pedido e maquininha propria"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_money.sh
+
+      - name: "Smoke test -- rodadas do despacho, raio crescente e surge (Fase 15)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_rounds.sh
+
+      - name: "Smoke test -- fila de upload offline e push (Fase 7.1 e 7.2 + migração 024)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_push.sh
+
+      - name: "Smoke test -- troca de método, gorjeta, Pix único, somente-online, card da loja e mapa (migração 025)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_payment_changes.sh
+
+      - name: "Smoke test -- LGPD (exportar/excluir), recibo e repetir pedido (migração 026)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_privacy.sh
+
+      - name: "Smoke test -- fidelidade: pontos, trocas e cupom pessoal (Fase 2.3 + migração 029)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_loyalty.sh
+
+      - name: "Smoke test -- cupom criado pela própria loja dentro do teto (tela 15.3 + migração 031)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_store_coupons.sh
+
+      - name: "Smoke test -- cadastro de loja pela própria loja e chave Pix no painel (migração 033)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_store_signup.sh
+
+      - name: "Smoke test -- cidades atendidas: onboarding e aba Cidades (migração 036)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_cities.sh
+
+      - name: "Smoke test -- vitrine da Home: logo, categoria, banners, favoritas, queridinhos (migração 037)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_showcase.sh
+
+      - name: "Smoke test -- fuso por cidade: loja de MS no relógio de MS (migração 038)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+          JWT_SECRET: ci-test-secret
+          MERCADOPAGO_MODE: fake
+        run: bash tests/smoke_timezone.sh
+
+      - name: "Smoke test -- entrada ruim em todas as rotas, por todos os papéis: nenhum 5xx"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+        run: bash tests/smoke_fuzz.sh
+
+      - name: "Smoke test -- fuzz profundo: corpo válido com um campo ruim por vez, em registros que existem: nenhum 5xx"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+        run: bash tests/smoke_fuzz_deep.sh
+
+      - name: "Smoke test -- autorização: papel errado e dono errado (outro cliente, loja ou entregador) nunca passam"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+        run: bash tests/smoke_authz.sh
+
+      - name: "Smoke test -- dinheiro fora de hora: cartão em análise, pagamento depois do cancelamento, aviso em dobro e cobrança simultânea (decisão 48)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+        run: bash tests/smoke_late_payment.sh
+
+      - name: "Foto de perfil: só o dono troca, imagem recodificada, chave sem travessia (048)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+        run: bash tests/smoke_avatar.sh
+
+      - name: "Papéis do banco: RLS por loja, livro só de inserção, app_rw sem DDL (go-live)"
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fuudelivery
+        run: bash tests/smoke_db_roles.sh
+
+      - name: "Arquivos da VPS (deploy/): scripts sem erro de sintaxe e Nginx aceito pelo nginx -t"
+        run: |
+          for f in deploy/*.sh deploy/backup/*.sh db/migrate.sh; do bash -n "$f"; done
+          # O Nginx só entrega ao PHP ^/api/v1/<área>/<ação>.php$: rota fora
+          # desse formato passa no php -S dos testes e dá 404 em produção.
+          fora=$(find api -name '*.php' | grep -vE '^api/v1/[a-z_]+/[a-z_]+\.php$' || true)
+          [ -z "$fora" ] || { echo "rotas que o Nginx não serve: $fora"; exit 1; }
+          sudo apt-get install -y -qq nginx-core > /dev/null
+          D="$RUNNER_TEMP/ngx" && mkdir -p "$D"
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout "$D/k.key" -out "$D/c.pem" -days 1 -subj /CN=ci 2> /dev/null
+          sed -e "s#/etc/ssl/cloudflare/DOMINIO.pem#$D/c.pem#; s#/etc/ssl/cloudflare/DOMINIO.key#$D/k.key#; s#DOMINIO#ci.test#g" \
+            deploy/nginx/fuuphp.conf > "$D/site.conf"
+          [ -e /proc/net/if_inet6 ] || sed -i '/\[::\]/d' "$D/site.conf"   # runner sem IPv6
+          printf 'events{}\nhttp{\ninclude /etc/nginx/mime.types;\ninclude %s/site.conf;\n}\n' "$D" > "$D/nginx.conf"
+          cp /etc/nginx/fastcgi_params "$D/"
+          sudo nginx -t -c "$D/nginx.conf"
+
+      - name: Instalar Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build do front-end (web/)
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      # Testes do front sem navegador (node:test, nada instalado a mais): a
+      # renovação da sessão, que passou despercebida até a auditoria.
+      - name: "Front: testes da sessão (npm test)"
+        working-directory: web
+        run: npm test
+
+      - name: "Contrato front x back: toda rota que o front chama existe"
+        run: php bin/check_front_routes.php
+
+      # Falha grave conhecida numa dependência do front que vai pro usuário
+      # (as de desenvolvimento, só de build, ficam de fora) segura o merge.
+      - name: "Dependências do front sem vulnerabilidade alta (npm audit)"
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=high
+
+  # Imagem do Render (Dockerfile, docs/SUPABASE_RENDER.md): constrói e sobe
+  # em modo PRODUÇÃO contra um banco migrado, como app_rw. Prova que a imagem
+  # compila as extensões, passa na trava de produção e serve só o que deve.
+  render-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Banco (Postgres 16 + pg_cron) com as migrações
+        run: |
+          docker build -t fuudelivery-db ./db
+          docker run -d --name db -e POSTGRES_DB=fuudelivery -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+            -p 5432:5432 fuudelivery-db postgres -c shared_preload_libraries=pg_cron \
+            -c cron.database_name=fuudelivery -c cron.use_background_workers=on -c max_worker_processes=20
+          for i in $(seq 1 30); do docker exec db pg_isready -U postgres -d fuudelivery && break; sleep 2; done
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          DATABASE_URL=postgres://postgres:postgres@localhost:5432/fuudelivery bash db/migrate.sh up > /dev/null
+          # Senha com caractere especial: prova a decodificação da URL.
+          psql postgres://postgres:postgres@localhost:5432/fuudelivery -c "ALTER ROLE app_rw PASSWORD 'rw p@ss'"
+          sleep 65  # o pg_cron precisa ter terminado uma tarefa (cron_healthy)
+
+      - name: Construir a imagem
+        run: docker build --build-arg PUBLIC_ORIGIN=https://exemplo.com.br -t fuuphp .
+
+      - name: Sem disco montado, recusa subir
+        run: |
+          if docker run --rm --network host -e APP_ENV=production fuuphp; then
+            echo "::error::subiu sem disco"; exit 1; fi
+
+      - name: Subir em modo produção e conferir
+        run: |
+          cat > prod.env <<ENV
+          APP_ENV=production
+          DATABASE_URL=postgres://app_rw:rw%20p%40ss@127.0.0.1:5432/fuudelivery?sslmode=disable
+          JWT_SECRET=$(openssl rand -hex 40)
+          ALLOWED_ORIGIN=
+          PUBLIC_ORIGIN=https://exemplo.com.br
+          MERCADOPAGO_MODE=live
+          MERCADOPAGO_ACCESS_TOKEN=APP_USR-ci
+          MERCADOPAGO_PUBLIC_KEY=APP_USR-ci
+          MERCADOPAGO_WEBHOOK_SECRET=ci
+          OTP_SENDER=twilio
+          TWILIO_ACCOUNT_SID=AC00000000000000000000000000000000
+          TWILIO_AUTH_TOKEN=ci
+          TWILIO_FROM=+5567999999999
+          PUSH_MODE=live
+          VAPID_SUBJECT=mailto:ci@exemplo.com.br
+          DATA_ENCRYPTION_KEY=$(openssl rand -base64 32)
+          ENV
+          sed -i 's/^ *//' prod.env
+          docker run -d --name app --network host --env-file prod.env -v storage:/var/fuuphp/storage fuuphp
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:10000/api/v1/system/health.php && break; sleep 2; done
+          docker logs app 2>&1 | tail -20
+          check() { got=$(curl -s -o /dev/null -w '%{http_code}' --path-as-is "http://127.0.0.1:10000$1"); \
+            [ "$got" = "$2" ] || { echo "::error::$1 deu $got (esperado $2)"; exit 1; }; }
+          check /api/v1/system/health.php 200
+          check / 200
+          check /.env 404
+          check /api/v1/nao/existe.php 404
+          check /api/v1/cities/list.php 200
+          curl -s http://127.0.0.1:10000/lib/bootstrap.php | grep -q '<!doctype html>'
+          curl -sI http://127.0.0.1:10000/ | grep -qi 'content-security-policy'
+          docker logs app 2>&1 | grep -q 'banco como app_rw'

@@ -1,0 +1,137 @@
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/../../../lib/bootstrap.php';
+
+// Tela 10.1/10.2 — pede o código de 6 dígitos (OTP) por telefone ou e-mail,
+// pra entrar (`login`), criar conta (`signup`) ou confirmar um telefone
+// (`phone_verify`). Em desenvolvimento o código volta em `dev_code`; em
+// produção só vai pelo canal.
+
+require_method('POST');
+$body = read_json_body();
+
+$purpose = $body['purpose'] ?? null;
+if (!in_array($purpose, ['login', 'signup', 'phone_verify'], true)) {
+    error_response(422, 'invalid_purpose', 'Informe purpose: login, signup ou phone_verify.', fields: ['purpose' => 'obrigatório']);
+}
+
+$phone = isset($body['phone']) ? only_digits(input_str($body, 'phone')) : null;
+$email = body_text($body, 'email', 254);
+
+if ($phone === null && $email === null) {
+    error_response(422, 'contact_required', 'Informe phone ou email.', fields: ['phone' => 'obrigatório (ou email)']);
+}
+if ($phone !== null && !is_valid_phone($phone)) {
+    error_response(422, 'invalid_phone', 'Telefone inválido.', fields: ['phone' => 'inválido']);
+}
+if ($email !== null && !is_valid_email($email)) {
+    error_response(422, 'invalid_email', 'E-mail inválido.', fields: ['email' => 'inválido']);
+}
+
+// A tela 10.2 oferece "receber por WhatsApp" quando o SMS não chega. Quem
+// entrou por telefone escolhe entre os dois; quem entrou por e-mail não
+// escolhe nada -- só existe um canal possível. A "ligação automática" que o
+// mock também cita ficou de fora: o enum de otp_codes.channel não prevê esse
+// canal, e inventar valor de enum pra caber numa tela é a ordem errada.
+$channel = $phone !== null ? 'sms' : 'email';
+if ($phone !== null && isset($body['channel'])) {
+    $channel = input_str($body, 'channel');
+    if (!in_array($channel, ['sms', 'whatsapp'], true)) {
+        error_response(422, 'invalid_channel', 'Canal precisa ser sms ou whatsapp.', fields: ['channel' => 'inválido']);
+    }
+}
+// Antes de criar conta ou código: o provedor configurado entrega por esse
+// canal? (Twilio manda SMS; e-mail não.) Sem isso, um cadastro por e-mail
+// criaria o usuário e só então falharia no envio.
+if (!in_array($channel, otp_sender_channels(), true)) {
+    error_response(422, 'channel_unavailable', match ($channel) {
+        'email' => 'Entrar por e-mail não está disponível. Use o seu celular.',
+        'whatsapp' => 'O código por WhatsApp não está disponível. Receba por SMS.',
+        default => 'Envio de código indisponível agora. Tente de novo em instantes.',
+    }, fields: ['channel' => 'indisponível']);
+}
+
+$pdo = db();
+
+if ($phone !== null) {
+    $stmt = $pdo->prepare('SELECT id FROM users WHERE phone = :phone');
+    $stmt->execute(['phone' => $phone]);
+} else {
+    $stmt = $pdo->prepare('SELECT id FROM users WHERE email = :email');
+    $stmt->execute(['email' => $email]);
+}
+$existingUserId = $stmt->fetchColumn();
+
+if ($purpose === 'login') {
+    if ($existingUserId === false) {
+        // Erro sempre com saída (Especificação I.6): a ação possível é ir para o cadastro.
+        error_response(404, 'user_not_found', 'Não encontramos essa conta. Cadastre-se para continuar.', detail: 'use purpose=signup');
+    }
+    $userId = (string) $existingUserId;
+} else {
+    // signup / phone_verify: cria o usuário agora, se ainda não existir.
+    // full_name é obrigatório no esquema (LGPD: dado necessário para o cadastro).
+    if ($existingUserId !== false) {
+        $userId = (string) $existingUserId;
+    } else {
+        $fullName = body_text($body, 'full_name', 120) ?? '';
+        if ($fullName === '') {
+            error_response(422, 'full_name_required', 'Nome completo é obrigatório para cadastro.', fields: ['full_name' => 'obrigatório']);
+        }
+        $userId = uuid_v4();
+        $pdo->prepare(
+            'INSERT INTO users (id, role, full_name, phone, email) VALUES (:id, :role, :full_name, :phone, :email)'
+        )->execute([
+            'id' => $userId,
+            'role' => 'customer',
+            'full_name' => $fullName,
+            'phone' => $phone,
+            'email' => $email,
+        ]);
+    }
+}
+
+if (otp_requests_in_window($pdo, $userId, $purpose) >= OTP_MAX_REQUESTS_PER_WINDOW) {
+    error_response(429, 'otp_rate_limited', 'Muitos pedidos de código. Aguarde alguns minutos e tente de novo.');
+}
+
+$code = generate_otp_code();
+
+$insertOtp = $pdo->prepare(
+    'INSERT INTO otp_codes (user_id, channel, code_hash, purpose, expires_at)
+     VALUES (:user_id, :channel, :code_hash, :purpose, now() + (:ttl || \' seconds\')::interval)
+     RETURNING id'
+);
+$insertOtp->execute([
+    'user_id' => $userId,
+    'channel' => $channel,
+    'code_hash' => hash_otp($code),
+    'purpose' => $purpose,
+    'ttl' => OTP_TTL_SECONDS,
+]);
+
+$otpId = (int) $insertOtp->fetchColumn();
+
+// Envio pelo provedor configurado (lib/messaging/otp_sender.php). Se não
+// saiu, o código é apagado: não conta como enviado (nem no limite de pedidos)
+// e a pessoa pode pedir de novo.
+if (!send_otp($channel, (string) ($phone ?? $email), $code)) {
+    $pdo->prepare('DELETE FROM otp_codes WHERE id = :id')->execute(['id' => $otpId]);
+    error_response(502, 'otp_send_failed', 'Não conseguimos enviar o código agora. Tente de novo em instantes.');
+}
+
+$response = [
+    'sent' => true,
+    'channel' => $channel,
+    'expires_in' => OTP_TTL_SECONDS,
+];
+
+// Só em development/testing: sem isso, testar o fluxo localmente exigiria ler
+// o banco a cada chamada. Staging também NÃO recebe: lá o OTP é real.
+if (in_array(app_env(), OTP_DEV_ENVS, true)) {
+    $response['dev_code'] = $code;
+}
+
+json_response(201, $response);

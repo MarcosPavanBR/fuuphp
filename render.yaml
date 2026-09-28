@@ -1,0 +1,67 @@
+# Blueprint do Render (docs/SUPABASE_RENDER.md). No painel do Render:
+# New > Blueprint > este repositório. Cria o serviço web com o disco; os
+# segredos (sync: false) o painel pede na criação -- nunca ficam no git.
+services:
+  - type: web
+    name: fuuphp
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # Virgínia, ao lado do Supabase (us-east-1): cada consulta ao banco
+    # atravessa só alguns milissegundos.
+    region: virginia
+    # Disco persistente exige plano pago (Starter pra cima).
+    plan: starter
+    healthCheckPath: /api/v1/system/health.php
+    disk:
+      name: fuuphp-storage
+      mountPath: /var/fuuphp/storage
+      sizeGB: 5
+    envVars:
+      - key: APP_ENV
+        value: production
+      # PWA e API no mesmo domínio: vazia, mas precisa existir.
+      - key: ALLOWED_ORIGIN
+        value: ""
+      - key: PUBLIC_ORIGIN
+        sync: false
+      # app_rw pelo pooler de sessão do Supabase (porta 5432, IPv4, com
+      # LISTEN/NOTIFY): postgres://app_rw.<ref>:<senha>@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATA_ENCRYPTION_KEY
+        sync: false
+      - key: MERCADOPAGO_MODE
+        value: live
+      - key: MERCADOPAGO_ACCESS_TOKEN
+        sync: false
+      - key: MERCADOPAGO_PUBLIC_KEY
+        sync: false
+      - key: MERCADOPAGO_WEBHOOK_SECRET
+        sync: false
+      - key: OTP_SENDER
+        value: twilio
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM
+        sync: false
+      - key: PUSH_MODE
+        value: live
+      - key: VAPID_SUBJECT
+        sync: false
+      # Foto de perfil no Supabase Storage (bucket avatars).
+      - key: SUPABASE_URL
+        value: https://vhkhwvbjhyawoocisuux.supabase.co
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: PROOF_STORAGE_DIR
+        value: /var/fuuphp/storage/proofs
+      - key: MENU_PHOTO_DIR
+        value: /var/fuuphp/storage/menu
+      - key: COURIER_DOC_DIR
+        value: /var/fuuphp/storage/courier_docs
+      - key: VAPID_PRIVATE_KEY_FILE
+        value: /var/fuuphp/storage/vapid/private.pem
