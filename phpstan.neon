@@ -1,0 +1,13 @@
+# PHPStan (análise estática), rodado no CI com o phar de versão fixa e
+# checksum conferido (.github/workflows/ci.yml) -- nada entra no projeto.
+# Nível 5 (tipos de argumento). phpstan-baseline.neon guarda os achados já
+# revisados em 29/09/2026: comparações defensivas e o PDO do PostgreSQL
+# devolvendo bool (o PHPStan supõe int|string|false). Código novo passa limpo.
+includes:
+  - phpstan-baseline.neon
+parameters:
+  level: 5
+  paths: [api, lib, bin]
+  phpVersion: 80400
+  bootstrapFiles:
+    - lib/core/env.php

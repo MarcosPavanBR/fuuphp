@@ -1,0 +1,9 @@
+# gitleaks (procura segredo commitado), rodado no CI com binário de versão
+# fixa e checksum conferido. Regras padrão + exceções dos valores FALSOS que
+# os testes usam de propósito (token inválido, senha de teste).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "valores de teste, não segredos"
+paths = ['''^tests/''']

@@ -1,0 +1,85 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Strict comparison using \!\=\= between non\-empty\-string\|null and '''' will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: api/v1/cart/add_item.php
+
+		-
+			message: '#^Result of && is always false\.$#'
+			identifier: booleanAnd.alwaysFalse
+			count: 1
+			path: api/v1/couriers/accept_offer.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between int\|string\|false\|null and true will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: api/v1/couriers/accept_offer.php
+
+		-
+			message: '#^If condition is always false\.$#'
+			identifier: if.alwaysFalse
+			count: 1
+			path: api/v1/orders/messages.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between int\|string\|false\|null and true will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: api/v1/orders/messages.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between array\{0\: ''cron''\|''db'', 1\?\: ''cron''\} and array\{\} will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 2
+			path: api/v1/system/health.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between int\|string\|false\|null and true will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: api/v1/system/health.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between array\{0\: non\-falsy\-string, 1\?\: non\-falsy\-string\} and array\{\} will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: bin/check_production.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: bin/check_production.php
+
+		-
+			message: '#^Parameter \#1 \$array \(non\-empty\-list\<string\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: lib/catalog/store.php
+
+		-
+			message: '#^Function rotate_refresh_token\(\) has never in PHPDoc @throws tag but it''s not thrown\.$#'
+			identifier: throws.unusedType
+			count: 1
+			path: lib/core/sessions.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between non\-empty\-list\<string\|null\> and array\{\} will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: lib/ledger/pos.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between ''twilio'' and ''twilio'' will always evaluate to true\.$#'
+			identifier: identical.alwaysTrue
+			count: 1
+			path: lib/messaging/otp_sender.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between int\|string\|false\|null and true will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: lib/ordering/coupons.php

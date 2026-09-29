@@ -19,3 +19,10 @@ aplicação no Render, via Docker (`Dockerfile`, `deploy/render/`,
 Supabase Storage, leitura pública e escrita só pelo servidor (chave secreta
 no ambiente). Sem SUPABASE_URL (dev/VPS) a foto fica no disco. A CSP libera
 `https://*.supabase.co` só em img-src. Teste: tests/smoke_avatar.sh.
+
+**Qualidade no CI (29/09/2026):** job `static` com testes unitários das
+regras de dinheiro (`tests/unit/money_test.php`, runner próprio, 49
+verificações), PHPStan 2.1.30 nível 5 (`phpstan.neon` + baseline dos 15
+achados defensivos revisados) e gitleaks 8.28.0 (`.gitleaks.toml`, testes
+com valores falsos liberados). Ferramentas em versão fixa com sha256
+conferido; nada entra no projeto nem na imagem.

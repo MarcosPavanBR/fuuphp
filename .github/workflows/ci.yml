@@ -16,6 +16,8 @@ on:
       - "bin/**"
       - "deploy/**"
       - "Dockerfile"
+      - "phpstan*.neon"
+      - ".gitleaks.toml"
       - ".github/workflows/ci.yml"
   pull_request:
     paths:
@@ -27,6 +29,8 @@ on:
       - "bin/**"
       - "deploy/**"
       - "Dockerfile"
+      - "phpstan*.neon"
+      - ".gitleaks.toml"
       - ".github/workflows/ci.yml"
 
 # O token do GITHUB_TOKEN só lê o repositório: o CI não publica, não comenta
@@ -494,3 +498,36 @@ jobs:
           curl -s http://127.0.0.1:10000/lib/bootstrap.php | grep -q '<!doctype html>'
           curl -sI http://127.0.0.1:10000/ | grep -qi 'content-security-policy'
           docker logs app 2>&1 | grep -q 'banco como app_rw'
+
+  # Qualidade sem banco: testes unitários do dinheiro, análise estática e
+  # procura de segredo. Ferramentas baixadas em versão fixa com checksum
+  # conferido -- se o arquivo mudar, o passo falha (não roda o que não foi
+  # revisado). Nada disso entra no projeto nem na imagem.
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: "8.4"
+          coverage: none
+
+      - name: "Testes unitários das regras de dinheiro (centavos, cupom, estorno)"
+        run: php -d error_reporting=E_ALL tests/unit/money_test.php
+
+      - name: "PHPStan 2.1.30 (nível 5, baseline revisada)"
+        run: |
+          curl -sSL -o /tmp/phpstan.phar https://github.com/phpstan/phpstan/releases/download/2.1.30/phpstan.phar
+          echo "9b75057f287c127c257ae0cdfce36b82b5fe75f40114de9ed8f2e6a0b03e8100  /tmp/phpstan.phar" | sha256sum -c -
+          php -d memory_limit=1G /tmp/phpstan.phar analyse --no-progress --error-format=github
+
+      - name: "gitleaks 8.28.0 (segredo commitado)"
+        run: |
+          curl -sSL -o /tmp/gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz
+          echo "a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb  /tmp/gitleaks.tgz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          /tmp/gitleaks git --no-banner --redact --config .gitleaks.toml .
