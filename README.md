@@ -67,6 +67,7 @@ Começo rápido: [docs/README.md](docs/README.md) diz qual documento ler pra cad
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | subir, configurar, cron, migrar, testar |
 | [docs/GO_LIVE.md](docs/GO_LIVE.md) | do simulado ao real: VPS, credenciais, validação antes de abrir |
 | [docs/SUPABASE_RENDER.md](docs/SUPABASE_RENDER.md) | alternativa à VPS: banco no Supabase, app no Render (Docker) |
+| [docs/RESUMO_PARA_IA.pdf](docs/RESUMO_PARA_IA.pdf) | passagem de bastão: regras do Marcos, o que foi feito, o que falta (28/09/2026) |
 | [docs/MANUAL.md](docs/MANUAL.md) | como cada público usa o sistema: cliente, loja, entregador, plataforma |
 | [docs/SECURITY.md](docs/SECURITY.md) | o que protege o sistema, onde, e com qual teste |
 | [docs/BRAND.md](docs/BRAND.md) | a marca: logo, símbolo, slogan, arquivos e regras de uso |
